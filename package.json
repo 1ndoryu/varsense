@@ -1,0 +1,261 @@
+{
+    "name": "varsense",
+    "displayName": "VarSense",
+    "description": "Extensión de VS Code para validación y gestión de variables CSS. Detecta errores, sugiere variables y mejora el flujo de trabajo con CSS custom properties.",
+    "version": "1.0.0",
+    "publisher": "1ndoryu",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/1ndoryu/varsense"
+    },
+    "engines": {
+        "vscode": "^1.85.0"
+    },
+    "categories": [
+        "Linters",
+        "Other"
+    ],
+    "keywords": [
+        "css",
+        "variables",
+        "custom properties",
+        "validator",
+        "linter"
+    ],
+    "activationEvents": [
+        "onLanguage:css",
+        "onLanguage:scss",
+        "onLanguage:vue"
+    ],
+    "main": "./dist/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "cssVarsValidator.refreshVariables",
+                "title": "CSS Vars: Refrescar Variables"
+            },
+            {
+                "command": "cssVarsValidator.showAllVariables",
+                "title": "CSS Vars: Mostrar Todas las Variables"
+            },
+            {
+                "command": "cssVarsValidator.goToDefinition",
+                "title": "CSS Vars: Ir a Definición"
+            }
+        ],
+        "configuration": {
+            "title": "CSS Variables Validator",
+            "properties": {
+                "cssVarsValidator.enable": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Habilitar/deshabilitar la extensión"
+                },
+                "cssVarsValidator.variableFiles": {
+                    "type": "array",
+                    "default": [
+                        "**/variables.css",
+                        "**/vars.css",
+                        "**/_variables.scss",
+                        "**/tokens.css"
+                    ],
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Patrones glob para archivos que contienen definiciones de variables CSS"
+                },
+                "cssVarsValidator.hardcodedDetection.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Detectar valores hardcodeados que deberían usar variables"
+                },
+                "cssVarsValidator.hardcodedDetection.severity": {
+                    "type": "string",
+                    "default": "warning",
+                    "enum": [
+                        "error",
+                        "warning",
+                        "information",
+                        "hint"
+                    ],
+                    "description": "Severidad para valores hardcodeados detectados"
+                },
+                "cssVarsValidator.hardcodedDetection.properties": {
+                    "type": "object",
+                    "default": {
+                        "font-size": true,
+                        "color": true,
+                        "background-color": true,
+                        "background": true,
+                        "border-color": true,
+                        "margin": false,
+                        "padding": false,
+                        "gap": false,
+                        "border-radius": false
+                    },
+                    "description": "Propiedades CSS a verificar por valores hardcodeados"
+                },
+                "cssVarsValidator.hardcodedDetection.allowedValues": {
+                    "type": "array",
+                    "default": [
+                        "0",
+                        "auto",
+                        "inherit",
+                        "initial",
+                        "unset",
+                        "none",
+                        "100%",
+                        "50%",
+                        "transparent",
+                        "currentColor"
+                    ],
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Valores permitidos que no serán marcados como hardcodeados"
+                },
+                "cssVarsValidator.contextualSuggestions": {
+                    "type": "object",
+                    "default": {
+                        "font-size": [
+                            "font",
+                            "size",
+                            "fs",
+                            "text",
+                            "tipo"
+                        ],
+                        "font-family": [
+                            "font",
+                            "family",
+                            "tipo"
+                        ],
+                        "font-weight": [
+                            "font",
+                            "weight",
+                            "fw"
+                        ],
+                        "line-height": [
+                            "line",
+                            "height",
+                            "lh"
+                        ],
+                        "color": [
+                            "color",
+                            "clr",
+                            "text",
+                            "primary",
+                            "secondary"
+                        ],
+                        "background-color": [
+                            "bg",
+                            "background",
+                            "fondo"
+                        ],
+                        "background": [
+                            "bg",
+                            "background",
+                            "fondo"
+                        ],
+                        "border-color": [
+                            "border",
+                            "borde",
+                            "color"
+                        ],
+                        "border-radius": [
+                            "radius",
+                            "round",
+                            "borde"
+                        ],
+                        "gap": [
+                            "space",
+                            "gap",
+                            "espacio"
+                        ],
+                        "margin": [
+                            "space",
+                            "margin",
+                            "espacio"
+                        ],
+                        "padding": [
+                            "space",
+                            "padding",
+                            "espacio"
+                        ],
+                        "width": [
+                            "width",
+                            "size",
+                            "ancho"
+                        ],
+                        "height": [
+                            "height",
+                            "size",
+                            "alto"
+                        ],
+                        "box-shadow": [
+                            "shadow",
+                            "sombra"
+                        ],
+                        "z-index": [
+                            "z",
+                            "index",
+                            "layer"
+                        ],
+                        "transition": [
+                            "transition",
+                            "duration",
+                            "ease"
+                        ],
+                        "opacity": [
+                            "opacity",
+                            "alpha"
+                        ]
+                    },
+                    "description": "Mapeo de propiedades CSS a palabras clave para sugerencias contextuales"
+                },
+                "cssVarsValidator.excludePatterns": {
+                    "type": "array",
+                    "default": [
+                        "**/node_modules/**",
+                        "**/vendor/**",
+                        "**/*.min.css",
+                        "**/dist/**",
+                        "**/build/**"
+                    ],
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Patrones glob para excluir de la validación"
+                },
+                "cssVarsValidator.scanAllFiles": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Escanear todos los archivos CSS en busca de variables (más lento)"
+                }
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+        "compile:tests": "tsc -p ./tsconfig.json",
+        "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+        "pretest": "npm run compile && npm run compile:tests && npm run lint",
+        "lint": "eslint src --ext ts",
+        "lint:fix": "eslint src --ext ts --fix",
+        "test": "node ./dist/test/runTest.js",
+        "package": "vsce package"
+    },
+    "devDependencies": {
+        "@types/glob": "^8.1.0",
+        "@types/mocha": "^10.0.10",
+        "@types/node": "^20.19.30",
+        "@types/vscode": "^1.85.0",
+        "@typescript-eslint/eslint-plugin": "^6.0.0",
+        "@typescript-eslint/parser": "^6.0.0",
+        "@vscode/test-electron": "^2.3.0",
+        "esbuild": "^0.19.12",
+        "eslint": "^8.56.0",
+        "mocha": "^10.2.0",
+        "typescript": "^5.3.0"
+    }
+}

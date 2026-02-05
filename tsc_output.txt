@@ -1,0 +1,37 @@
+src/parsers/cssParser.ts(14,5): error TS6133: 'ParseError' is declared but its value is never read.
+src/parsers/cssParser.ts(21,5): error TS6133: 'tieneFallbackHardcodeado' is declared but its value is never read.
+src/parsers/cssParser.ts(50,13): error TS6133: '_mapaOffsets' is declared but its value is never read.
+src/providers/completionProvider.ts(8,10): error TS6133: 'CssVariable' is declared but its value is never read.
+src/providers/completionProvider.ts(13,24): error TS6133: 'generarPreviewColor' is declared but its value is never read.
+src/providers/completionProvider.ts(69,18): error TS2339: Property 'data' does not exist on type 'CompletionItem'.
+src/providers/completionProvider.ts(69,38): error TS2339: Property 'data' does not exist on type 'CompletionItem'.
+src/providers/completionProvider.ts(70,41): error TS2339: Property 'data' does not exist on type 'CompletionItem'.
+src/providers/completionProvider.ts(166,18): error TS2339: Property 'data' does not exist on type 'CompletionItem'.
+src/providers/completionProvider.ts(299,14): error TS2339: Property 'data' does not exist on type 'CompletionItem'.
+src/providers/diagnosticProvider.ts(10,25): error TS6133: 'CssDiagnostic' is declared but its value is never read.
+src/providers/diagnosticProvider.ts(10,40): error TS6133: 'VariableUsage' is declared but its value is never read.
+src/providers/diagnosticProvider.ts(10,55): error TS6133: 'HardcodedValue' is declared but its value is never read.
+src/providers/diagnosticProvider.ts(48,46): error TS2345: Argument of type '(doc: vscode.TextDocument) => void' is not assignable to parameter of type '(...args: unknown[]) => void'.
+  Types of parameters 'doc' and 'args' are incompatible.
+    Type 'unknown' is not assignable to type 'TextDocument'.
+src/providers/diagnosticProvider.ts(209,28): error TS2339: Property 'data' does not exist on type 'Diagnostic'.
+src/providers/diagnosticProvider.ts(263,63): error TS6133: 'rango' is declared but its value is never read.
+src/providers/diagnosticProvider.ts(292,33): error TS2339: Property 'data' does not exist on type 'Diagnostic'.
+src/providers/hoverProvider.ts(11,46): error TS6133: 'generarPreviewColor' is declared but its value is never read.
+src/providers/hoverProvider.ts(104,15): error TS6133: 'args' is declared but its value is never read.
+src/services/variableResolver.ts(6,1): error TS6133: 'vscode' is declared but its value is never read.
+src/services/variableResolver.ts(8,26): error TS6133: 'existeVariable' is declared but its value is never read.
+src/services/variableScanner.ts(8,50): error TS6133: 'ScannerOptions' is declared but its value is never read.
+src/services/variableScanner.ts(9,26): error TS6133: 'leerArchivo' is declared but its value is never read.
+src/services/variableScanner.ts(186,13): error TS2345: Argument of type '(uri: vscode.Uri) => void' is not assignable to parameter of type '(...args: unknown[]) => void'.
+  Types of parameters 'uri' and 'args' are incompatible.
+    Type 'unknown' is not assignable to type 'Uri'.
+src/test/suite/extension.test.ts(127,26): error TS6133: 'parsearColor' is declared but its value is never read.
+src/test/suite/index.ts(10,23): error TS2351: This expression is not constructable.
+  Type 'typeof Mocha' has no construct signatures.
+src/test/suite/index.ts(19,9): error TS2349: This expression is not callable.
+  Type 'typeof G' has no call signatures.
+src/test/suite/index.ts(19,52): error TS7006: Parameter 'err' implicitly has an 'any' type.
+src/test/suite/index.ts(19,57): error TS7006: Parameter 'files' implicitly has an 'any' type.
+src/test/suite/index.ts(25,27): error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/test/suite/index.ts(29,27): error TS7006: Parameter 'failures' implicitly has an 'any' type.
