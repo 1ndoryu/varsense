@@ -9,8 +9,6 @@ Extensión de VS Code para validación y gestión de variables CSS. Detecta erro
 - Marca los errores directamente en el editor
 - Sugiere variables similares como quick fix
 
-![Variable no definida](images/undefined-variable.png)
-
 ### ⚠️ Detección de Valores Hardcodeados
 - Identifica valores literales que deberían usar variables CSS
 - Configurable por propiedad (color, font-size, etc.)

@@ -7,9 +7,9 @@
  */
 
 import * as vscode from 'vscode';
-import { DiagnosticType } from '../types';
-import {buscarUsosVariables} from '../parsers/cssParser';
-import {esValorHardcodeado} from '../parsers/valueParser';
+import {DiagnosticType} from '../types';
+import {ParseResult, DuplicateClass} from '../types';
+import {parsearDocumento} from '../parsers/cssParser';
 import {existeVariable, obtenerScanner} from '../services/variableScanner';
 import {obtenerConfigService} from '../services/configService';
 import {esLenguajeSoportado, debounce} from '../utils/fileUtils';
@@ -103,15 +103,40 @@ export class DiagnosticProvider {
             return;
         }
 
+        /* Asegurar que el índice de variables global esté actualizado */
+        await obtenerScanner().escanear();
+
+        /* Parsear documento actual */
+        const resultadoParse = parsearDocumento(documento);
         const diagnosticos: vscode.Diagnostic[] = [];
 
-        /* Detectar variables no definidas */
-        const diagnosticosVariables = await this.detectarVariablesNoDefinidas(documento);
+        /* 1. Detectar variables no definidas */
+        const diagnosticosVariables = this.detectarVariablesNoDefinidas(resultadoParse);
         diagnosticos.push(...diagnosticosVariables);
 
-        /* Detectar valores hardcodeados */
-        const diagnosticosHardcoded = this.detectarValoresHardcodeados(documento);
-        diagnosticos.push(...diagnosticosHardcoded);
+        /* 2. Detectar valores hardcodeados */
+        // Usamos los detectados por el parser directamente
+        for (const hardcoded of resultadoParse.valoresHardcoded) {
+            const severidad = configService.obtenerConfigHardcoded().severidad;
+            const diagnostic = new vscode.Diagnostic(hardcoded.rango, `Valor hardcodeado '${hardcoded.valor}' en '${hardcoded.propiedad}' - considera usar una variable CSS`, severidad);
+            diagnostic.code = DiagnosticType.ValorHardcoded;
+            diagnostic.source = 'CSS Vars Validator';
+
+            diagnosticMetadataMap.set(diagnostic, {
+                propiedad: hardcoded.propiedad,
+                valor: hardcoded.valor
+            });
+
+            diagnosticos.push(diagnostic);
+        }
+
+        /* 3. Detectar clases duplicadas */
+        for (const duplicada of resultadoParse.clasesDuplicadas) {
+            const diagnostic = new vscode.Diagnostic(duplicada.rango, `Clase duplicada '${duplicada.nombre}'. Esta clase ya está definida en este archivo.`, vscode.DiagnosticSeverity.Warning);
+            diagnostic.code = DiagnosticType.ClaseDuplicada;
+            diagnostic.source = 'CSS Vars Validator';
+            diagnosticos.push(diagnostic);
+        }
 
         /* Establecer diagnósticos */
         this._coleccion.set(documento.uri, diagnosticos);
@@ -120,18 +145,16 @@ export class DiagnosticProvider {
     /*
      * Detecta usos de variables CSS que no están definidas
      */
-    private async detectarVariablesNoDefinidas(documento: vscode.TextDocument): Promise<vscode.Diagnostic[]> {
+    private detectarVariablesNoDefinidas(resultadoParse: ParseResult): vscode.Diagnostic[] {
         const diagnosticos: vscode.Diagnostic[] = [];
+        const scanner = obtenerScanner();
 
-        /* Asegurar que el índice de variables esté actualizado */
-        await obtenerScanner().escanear();
+        /* Crear Set de variables locales para búsqueda rápida */
+        const variablesLocales = new Set(resultadoParse.variablesDefinidas.map(v => v.nombre));
 
-        /* Buscar todos los usos de var() en el documento */
-        const usos = buscarUsosVariables(documento);
-
-        for (const uso of usos) {
-            /* Verificar si la variable existe */
-            if (!existeVariable(uso.nombreVariable)) {
+        for (const uso of resultadoParse.usosVariables) {
+            /* Verificar si la variable existe (Globalmente O Localmente) */
+            if (!scanner.existeVariable(uso.nombreVariable) && !variablesLocales.has(uso.nombreVariable)) {
                 const diagnostic = new vscode.Diagnostic(uso.rango, `Variable '${uso.nombreVariable}' no está definida`, vscode.DiagnosticSeverity.Error);
 
                 diagnostic.code = DiagnosticType.VariableNoDefinida;
@@ -141,97 +164,17 @@ export class DiagnosticProvider {
             }
 
             /* Verificar fallback hardcodeado */
-            if (uso.fallback && esValorHardcodeado(uso.fallback)) {
-                const configService = obtenerConfigService();
-
-                /* Verificar si el valor está permitido */
-                if (!configService.esValorPermitido(uso.fallback)) {
-                    const severidad = configService.obtenerConfigHardcoded().severidad;
-
-                    const diagnostic = new vscode.Diagnostic(uso.rango, `Fallback hardcodeado '${uso.fallback}' - considera usar una variable CSS`, severidad);
-
-                    diagnostic.code = DiagnosticType.FallbackHardcoded;
-                    diagnostic.source = 'CSS Vars Validator';
-
-                    diagnosticos.push(diagnostic);
-                }
-            }
-        }
-
-        return diagnosticos;
-    }
-
-    /*
-     * Detecta valores hardcodeados en propiedades configuradas
-     */
-    private detectarValoresHardcodeados(documento: vscode.TextDocument): vscode.Diagnostic[] {
-        const diagnosticos: vscode.Diagnostic[] = [];
-        const configService = obtenerConfigService();
-
-        /* Verificar si la detección de hardcoded está habilitada */
-        if (!configService.obtenerConfigHardcoded().habilitado) {
-            return diagnosticos;
-        }
-
-        const texto = documento.getText();
-
-        /*
-         * Regex mejorada para detectar declaraciones CSS
-         * Soporta múltiples declaraciones por línea y estilos minificados
-         * Captura: propiedad y valor (sin el ;)
-         */
-        const declaracionRegex = /([a-zA-Z-]+)\s*:\s*([^;{}]+?)\s*(?:;|(?=}))/g;
-
-        let match: RegExpExecArray | null;
-        while ((match = declaracionRegex.exec(texto)) !== null) {
-            const propiedad = match[1].trim();
-            const valor = match[2].trim();
-            const matchIndex = match.index;
-
-            /* Verificar si la propiedad debe ser chequeada */
-            if (!configService.deberiVerificarPropiedad(propiedad)) {
-                continue;
-            }
-
-            /* Ignorar si contiene var() */
-            if (valor.includes('var(')) {
-                continue;
-            }
-
-            /* Verificar si el valor está permitido */
-            if (configService.esValorPermitido(valor)) {
-                continue;
-            }
-
-            /* Verificar si es hardcodeado */
-            if (esValorHardcodeado(valor)) {
-                /* Encontrar posición exacta del valor en el texto */
-                const inicioValorOffset = matchIndex + match[0].indexOf(match[2]);
-                const finValorOffset = inicioValorOffset + valor.length;
-
-                const posInicio = documento.positionAt(inicioValorOffset);
-                const posFin = documento.positionAt(finValorOffset);
-                const rango = new vscode.Range(posInicio, posFin);
-
-                const severidad = configService.obtenerConfigHardcoded().severidad;
-
-                const diagnostic = new vscode.Diagnostic(
-                    rango, 
-                    `Valor hardcodeado '${valor}' en '${propiedad}' - considera usar una variable CSS`, 
-                    severidad
-                );
-
-                diagnostic.code = DiagnosticType.ValorHardcoded;
-                diagnostic.source = 'CSS Vars Validator';
-
-                /* Almacenar metadatos usando WeakMap en lugar de propiedad .data */
-                diagnosticMetadataMap.set(diagnostic, {
-                    propiedad,
-                    valor
-                });
-
-                diagnosticos.push(diagnostic);
-            }
+            // Esto ya podría venir en valoresHardcoded si el parser lo detectara así,
+            // pero el parser actual separa 'usosVariables' de 'valoresHardcodeados'.
+            /* Nota: Si el parser ya detectó fallbacks hardcodeados en valoresHardcoded, esto podría duplicar?
+               Revisando cssParser.ts:
+               for (const uso of declaracion.variablesUsadas) {
+                   if (uso.fallback && esValorHardcodeado(uso.fallback)) {
+                       resultado.valoresHardcoded.push(...)
+               }
+               ¡Sí, el parser YA agrega fallbacks hardcodeados a result.valoresHardcoded!
+               Por lo tanto, NO necesitamos verificar fallbacks aquí de nuevo.
+            */
         }
 
         return diagnosticos;
@@ -308,7 +251,7 @@ export class DiagnosticCodeActionProvider implements vscode.CodeActionProvider {
      */
     private crearAccionesHardcoded(documento: vscode.TextDocument, diagnostic: vscode.Diagnostic): vscode.CodeAction[] {
         const acciones: vscode.CodeAction[] = [];
-        
+
         /* Obtener metadatos desde WeakMap */
         const data = diagnosticMetadataMap.get(diagnostic);
 

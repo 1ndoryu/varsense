@@ -67,12 +67,24 @@ export interface HardcodedValue {
 export interface ParseResult {
     /* Variables definidas en el archivo */
     variablesDefinidas: CssVariable[];
+    /* Clases duplicadas detectadas */
+    clasesDuplicadas: DuplicateClass[];
     /* Usos de variables encontrados */
     usosVariables: VariableUsage[];
     /* Valores hardcodeados detectados */
     valoresHardcoded: HardcodedValue[];
     /* Errores de parsing si los hay */
     errores: ParseError[];
+}
+
+/*
+ * Clase duplicada detectada
+ */
+export interface DuplicateClass {
+    nombre: string;
+    rango: vscode.Range;
+    linea: number;
+    columna: number;
 }
 
 /*
@@ -150,7 +162,8 @@ export interface CssDiagnostic {
 export enum DiagnosticType {
     VariableNoDefinida = 'variableNoDefinida',
     ValorHardcoded = 'valorHardcoded',
-    FallbackHardcoded = 'fallbackHardcoded'
+    FallbackHardcoded = 'fallbackHardcoded',
+    ClaseDuplicada = 'claseDuplicada'
 }
 
 /*
@@ -291,8 +304,8 @@ export interface VariableSearchResult {
  * Mapeo de severidades de string a DiagnosticSeverity
  */
 export const SEVERITY_MAP: Record<string, vscode.DiagnosticSeverity> = {
-    'error': vscode.DiagnosticSeverity.Error,
-    'warning': vscode.DiagnosticSeverity.Warning,
-    'information': vscode.DiagnosticSeverity.Information,
-    'hint': vscode.DiagnosticSeverity.Hint
+    error: vscode.DiagnosticSeverity.Error,
+    warning: vscode.DiagnosticSeverity.Warning,
+    information: vscode.DiagnosticSeverity.Information,
+    hint: vscode.DiagnosticSeverity.Hint
 };

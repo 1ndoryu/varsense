@@ -4,24 +4,10 @@
  */
 
 import * as vscode from 'vscode';
-import { 
-    CssVariable, 
-    CssDeclaration, 
-    CssRule, 
-    ParseResult, 
-    VariableUsage,
-    HardcodedValue
-} from '../types';
-import {
-    extraerVariablesDeValor,
-    esDefinicionVariable,
-    obtenerNombreVariable,
-    esValorHardcodeado,
-    extraerValorLimpio,
-    crearUsosVariable
-} from './valueParser';
-import { esColor } from '../utils/colorUtils';
-import { obtenerConfigService } from '../services/configService';
+import {CssVariable, CssDeclaration, CssRule, ParseResult, VariableUsage, HardcodedValue, DuplicateClass} from '../types';
+import {extraerVariablesDeValor, esDefinicionVariable, obtenerNombreVariable, esValorHardcodeado, extraerValorLimpio, crearUsosVariable} from './valueParser';
+import {esColor} from '../utils/colorUtils';
+import {obtenerConfigService} from '../services/configService';
 
 /*
  * Regex para encontrar bloques de reglas CSS
@@ -46,29 +32,54 @@ export class CssParser {
     private _documento: vscode.TextDocument;
     private _textoSinComentarios: string;
     private _mapaOffsets: Map<number, number>;
-    
+
     constructor(documento: vscode.TextDocument) {
         this._documento = documento;
         this._mapaOffsets = new Map();
         this._textoSinComentarios = this.eliminarComentarios(documento.getText());
     }
-    
+
     /*
      * Parsea el documento completo y retorna resultados
      */
     public parsear(): ParseResult {
         const resultado: ParseResult = {
             variablesDefinidas: [],
+            clasesDuplicadas: [],
             usosVariables: [],
             valoresHardcoded: [],
             errores: []
         };
-        
+
         try {
             /* Parsear reglas CSS */
             const reglas = this.parsearReglas();
-            
+
+            /* Mapa para detectar duplicados de selectores de clase exactos */
+            const clasesVistas = new Map<string, vscode.Range>();
+
             for (const regla of reglas) {
+                /* Detectar clases duplicadas */
+                const selectores = regla.selector.split(',').map(s => s.trim());
+                for (const selector of selectores) {
+                    /* Solo verificar selectores que son exactamente una clase (e.g. .mi-clase) */
+                    if (/^\.[a-zA-Z0-9_-]+$/.test(selector)) {
+                        const nombreClase = selector;
+
+                        if (clasesVistas.has(nombreClase)) {
+                            const rangoOriginal = clasesVistas.get(nombreClase)!;
+                            resultado.clasesDuplicadas.push({
+                                nombre: nombreClase,
+                                rango: regla.rangoSelector,
+                                linea: regla.rangoSelector.start.line,
+                                columna: regla.rangoSelector.start.character
+                            });
+                        } else {
+                            clasesVistas.set(nombreClase, regla.rangoSelector);
+                        }
+                    }
+                }
+
                 for (const declaracion of regla.declaraciones) {
                     /* Recolectar definiciones de variables */
                     if (declaracion.esDefinicionVariable) {
@@ -85,10 +96,10 @@ export class CssParser {
                             });
                         }
                     }
-                    
+
                     /* Recolectar usos de variables */
                     resultado.usosVariables.push(...declaracion.variablesUsadas);
-                    
+
                     /* Verificar fallbacks hardcodeados */
                     for (const uso of declaracion.variablesUsadas) {
                         if (uso.fallback && esValorHardcodeado(uso.fallback)) {
@@ -105,11 +116,10 @@ export class CssParser {
                     }
                 }
             }
-            
+
             /* Detectar valores hardcodeados en propiedades configuradas */
             const hardcoded = this.detectarHardcodeados(reglas);
             resultado.valoresHardcoded.push(...hardcoded);
-            
         } catch (error) {
             resultado.errores.push({
                 mensaje: `Error parseando CSS: ${error instanceof Error ? error.message : 'Error desconocido'}`,
@@ -117,10 +127,10 @@ export class CssParser {
                 columna: 0
             });
         }
-        
+
         return resultado;
     }
-    
+
     /*
      * Parsea solo las definiciones de variables del documento
      * Versión optimizada para escaneo inicial
@@ -128,15 +138,15 @@ export class CssParser {
     public parsearSoloDefiniciones(): CssVariable[] {
         const variables: CssVariable[] = [];
         const texto = this._documento.getText();
-        
+
         /* Regex optimizada para buscar solo definiciones de variables */
         const varDefRegex = /(--[\w-]+)\s*:\s*([^;{}]+);/g;
         let match: RegExpExecArray | null;
-        
+
         while ((match = varDefRegex.exec(texto)) !== null) {
             const posicion = this._documento.positionAt(match.index);
             const valorLimpio = extraerValorLimpio(match[2]);
-            
+
             variables.push({
                 nombre: match[1],
                 valor: valorLimpio,
@@ -147,10 +157,10 @@ export class CssParser {
                 frecuenciaUso: 0
             });
         }
-        
+
         return variables;
     }
-    
+
     /*
      * Parsea las reglas CSS del documento
      */
@@ -158,53 +168,47 @@ export class CssParser {
         const reglas: CssRule[] = [];
         const texto = this._textoSinComentarios;
         let match: RegExpExecArray | null;
-        
+
         RULE_REGEX.lastIndex = 0;
-        
+
         while ((match = RULE_REGEX.exec(texto)) !== null) {
             const selector = match[1].trim();
             const contenido = match[2];
             const inicioSelector = this.obtenerOffsetOriginal(match.index);
-            
+
             const regla: CssRule = {
                 selector,
                 rangoSelector: this.crearRangoDesdeOffset(inicioSelector, selector.length),
                 declaraciones: this.parsearDeclaraciones(contenido, match.index + match[1].length + 1)
             };
-            
+
             reglas.push(regla);
         }
-        
+
         return reglas;
     }
-    
+
     /*
      * Parsea las declaraciones dentro de un bloque CSS
      */
     private parsearDeclaraciones(contenido: string, offsetBase: number): CssDeclaration[] {
         const declaraciones: CssDeclaration[] = [];
         let match: RegExpExecArray | null;
-        
+
         DECLARATION_REGEX.lastIndex = 0;
-        
+
         while ((match = DECLARATION_REGEX.exec(contenido)) !== null) {
             const propiedad = match[1].trim();
             const valor = extraerValorLimpio(match[2]);
             const offsetPropiedad = this.obtenerOffsetOriginal(offsetBase + match.index);
             const offsetValor = offsetPropiedad + propiedad.length + match[0].indexOf(match[2]);
-            
+
             /* Extraer variables usadas en el valor */
             const variablesMatch = extraerVariablesDeValor(valor);
             const posPropiedad = this._documento.positionAt(offsetPropiedad);
-            
-            const variablesUsadas = crearUsosVariable(
-                variablesMatch,
-                this._documento,
-                posPropiedad.line,
-                posPropiedad.character + propiedad.length + 2,
-                valor
-            );
-            
+
+            const variablesUsadas = crearUsosVariable(variablesMatch, this._documento, posPropiedad.line, posPropiedad.character + propiedad.length + 2, valor);
+
             declaraciones.push({
                 propiedad,
                 valor,
@@ -214,34 +218,34 @@ export class CssParser {
                 esDefinicionVariable: esDefinicionVariable(propiedad)
             });
         }
-        
+
         return declaraciones;
     }
-    
+
     /*
      * Detecta valores hardcodeados según la configuración
      */
     private detectarHardcodeados(reglas: CssRule[]): HardcodedValue[] {
         const hardcodeados: HardcodedValue[] = [];
         const configService = obtenerConfigService();
-        
+
         for (const regla of reglas) {
             for (const declaracion of regla.declaraciones) {
                 /* Saltar definiciones de variables */
                 if (declaracion.esDefinicionVariable) {
                     continue;
                 }
-                
+
                 /* Verificar si la propiedad debe ser chequeada */
                 if (!configService.deberiVerificarPropiedad(declaracion.propiedad)) {
                     continue;
                 }
-                
+
                 /* Verificar si el valor es permitido */
                 if (configService.esValorPermitido(declaracion.valor)) {
                     continue;
                 }
-                
+
                 /* Verificar si es hardcodeado */
                 if (esValorHardcodeado(declaracion.valor)) {
                     hardcodeados.push({
@@ -256,10 +260,10 @@ export class CssParser {
                 }
             }
         }
-        
+
         return hardcodeados;
     }
-    
+
     /*
      * Elimina comentarios del CSS y construye mapa de offsets
      */
@@ -267,24 +271,24 @@ export class CssParser {
         let resultado = '';
         let ultimoFin = 0;
         let match: RegExpExecArray | null;
-        
+
         COMMENT_REGEX.lastIndex = 0;
-        
+
         while ((match = COMMENT_REGEX.exec(texto)) !== null) {
             /* Agregar texto antes del comentario */
             resultado += texto.slice(ultimoFin, match.index);
-            
+
             /* Reemplazar comentario con espacios para mantener posiciones */
             resultado += ' '.repeat(match[0].length);
-            
+
             ultimoFin = match.index + match[0].length;
         }
-        
+
         resultado += texto.slice(ultimoFin);
-        
+
         return resultado;
     }
-    
+
     /*
      * Obtiene el offset original (con comentarios) desde offset sin comentarios
      */
@@ -293,7 +297,7 @@ export class CssParser {
            porque reemplazamos comentarios con espacios */
         return offsetSinComentarios;
     }
-    
+
     /*
      * Crea un Range de VS Code desde offset y longitud
      */
@@ -326,14 +330,14 @@ export function parsearDefiniciones(documento: vscode.TextDocument): CssVariable
 export function buscarUsosVariables(documento: vscode.TextDocument): VariableUsage[] {
     const texto = documento.getText();
     const usos: VariableUsage[] = [];
-    
+
     const varRegex = /var\(\s*(--[\w-]+)\s*(?:,\s*([^)]+))?\s*\)/g;
     let match: RegExpExecArray | null;
-    
+
     while ((match = varRegex.exec(texto)) !== null) {
         const posicionInicio = documento.positionAt(match.index);
         const posicionFin = documento.positionAt(match.index + match[0].length);
-        
+
         usos.push({
             nombreVariable: match[1],
             archivo: documento.uri.fsPath,
@@ -343,60 +347,51 @@ export function buscarUsosVariables(documento: vscode.TextDocument): VariableUsa
             fallback: match[2]?.trim()
         });
     }
-    
+
     return usos;
 }
 
 /*
  * Encuentra la variable bajo el cursor en un documento
  */
-export function encontrarVariableEnPosicion(
-    documento: vscode.TextDocument,
-    posicion: vscode.Position
-): { nombre: string; rango: vscode.Range } | null {
+export function encontrarVariableEnPosicion(documento: vscode.TextDocument, posicion: vscode.Position): {nombre: string; rango: vscode.Range} | null {
     const lineaTexto = documento.lineAt(posicion.line).text;
-    
+
     /* Buscar var(--...) en la línea */
     const varRegex = /var\(\s*(--[\w-]+)\s*(?:,\s*[^)]+)?\s*\)/g;
     let match: RegExpExecArray | null;
-    
+
     while ((match = varRegex.exec(lineaTexto)) !== null) {
         const inicio = match.index;
         const fin = inicio + match[0].length;
-        
+
         /* Verificar si el cursor está dentro del match */
         if (posicion.character >= inicio && posicion.character <= fin) {
             /* Encontrar el rango exacto del nombre de la variable */
             const nombreInicio = lineaTexto.indexOf(match[1], inicio);
             const nombreFin = nombreInicio + match[1].length;
-            
+
             return {
                 nombre: match[1],
-                rango: new vscode.Range(
-                    new vscode.Position(posicion.line, nombreInicio),
-                    new vscode.Position(posicion.line, nombreFin)
-                )
+                rango: new vscode.Range(new vscode.Position(posicion.line, nombreInicio), new vscode.Position(posicion.line, nombreFin))
             };
         }
     }
-    
+
     /* También buscar definiciones de variables: --nombre: */
     const defRegex = /(--[\w-]+)\s*:/g;
     while ((match = defRegex.exec(lineaTexto)) !== null) {
         const inicio = match.index;
         const fin = inicio + match[1].length;
-        
+
         if (posicion.character >= inicio && posicion.character <= fin) {
             return {
                 nombre: match[1],
-                rango: new vscode.Range(
-                    new vscode.Position(posicion.line, inicio),
-                    new vscode.Position(posicion.line, fin)
-                )
+                rango: new vscode.Range(new vscode.Position(posicion.line, inicio), new vscode.Position(posicion.line, fin))
             };
         }
     }
-    
+
     return null;
 }
 
@@ -404,19 +399,16 @@ export function encontrarVariableEnPosicion(
  * Obtiene la propiedad CSS en una posición del documento
  * Útil para autocompletado contextual
  */
-export function obtenerPropiedadEnPosicion(
-    documento: vscode.TextDocument,
-    posicion: vscode.Position
-): string | null {
+export function obtenerPropiedadEnPosicion(documento: vscode.TextDocument, posicion: vscode.Position): string | null {
     const lineaTexto = documento.lineAt(posicion.line).text;
-    
+
     /* Buscar propiedad: valor en la línea */
     const propRegex = /^\s*([a-zA-Z-]+)\s*:\s*/;
     const match = propRegex.exec(lineaTexto);
-    
+
     if (match && posicion.character > lineaTexto.indexOf(':')) {
         return match[1];
     }
-    
+
     return null;
 }
