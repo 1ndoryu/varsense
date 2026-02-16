@@ -253,6 +253,11 @@
                     "enum": ["error", "warning", "information", "hint"],
                     "description": "Severidad para CSS inline detectado en React"
                 },
+                "cssVarsValidator.duplicateClassDetection.enabled": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Habilitar detección de clases CSS duplicadas (intra-archivo y cross-file)"
+                },
                 "cssVarsValidator.duplicateClassDetection.crossFile": {
                     "type": "boolean",
                     "default": true,

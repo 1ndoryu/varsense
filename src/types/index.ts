@@ -104,6 +104,7 @@ export interface ExtensionConfig {
     archivosVariables: string[];
     deteccionHardcoded: HardcodedDetectionConfig;
     deteccionInline: InlineDetectionConfig;
+    duplicadosHabilitado: boolean;
     duplicadosCrossFile: boolean;
     sugerenciasContextuales: Record<string, string[]>;
     patronesExcluidos: string[];

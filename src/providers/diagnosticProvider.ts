@@ -149,18 +149,19 @@ export class DiagnosticProvider {
             diagnosticos.push(diagnostic);
         }
 
-        /* 3. Detectar clases duplicadas (intra-archivo) */
-        for (const duplicada of resultadoParse.clasesDuplicadas) {
-            const diagnostic = new vscode.Diagnostic(duplicada.rango, `Clase duplicada '${duplicada.nombre}'. Esta clase ya está definida en este archivo.`, vscode.DiagnosticSeverity.Warning);
-            diagnostic.code = DiagnosticType.ClaseDuplicada;
-            diagnostic.source = 'CSS Vars Validator';
-            diagnosticos.push(diagnostic);
-        }
+        /* 3 y 4. Detectar clases duplicadas (si está habilitado) */
+        if (configService.estaDeteccionDuplicadosHabilitada()) {
+            for (const duplicada of resultadoParse.clasesDuplicadas) {
+                const diagnostic = new vscode.Diagnostic(duplicada.rango, `Clase duplicada '${duplicada.nombre}'. Esta clase ya está definida en este archivo.`, vscode.DiagnosticSeverity.Warning);
+                diagnostic.code = DiagnosticType.ClaseDuplicada;
+                diagnostic.source = 'CSS Vars Validator';
+                diagnosticos.push(diagnostic);
+            }
 
-        /* 4. Detectar clases duplicadas cross-file */
-        if (configService.estaCrossFileHabilitado()) {
-            const diagnosticosCrossFile = this.detectarClasesCrossFile(resultadoParse, documento);
-            diagnosticos.push(...diagnosticosCrossFile);
+            if (configService.estaCrossFileHabilitado()) {
+                const diagnosticosCrossFile = this.detectarClasesCrossFile(resultadoParse, documento);
+                diagnosticos.push(...diagnosticosCrossFile);
+            }
         }
 
         /* Establecer diagnósticos */
