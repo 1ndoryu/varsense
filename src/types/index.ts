@@ -102,6 +102,7 @@ export interface ParseError {
 export interface ExtensionConfig {
     habilitado: boolean;
     archivosVariables: string[];
+    patronesIncluidos: string[];
     deteccionHardcoded: HardcodedDetectionConfig;
     deteccionInline: InlineDetectionConfig;
     duplicadosHabilitado: boolean;

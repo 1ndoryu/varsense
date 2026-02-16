@@ -12,7 +12,7 @@ import {ParseResult, DuplicateClass} from '../types';
 import {parsearDocumento} from '../parsers/cssParser';
 import {existeVariable, obtenerScanner} from '../services/variableScanner';
 import {obtenerConfigService} from '../services/configService';
-import {esLenguajeSoportado, debounce} from '../utils/fileUtils';
+import {esLenguajeSoportado, debounce, coincideConPatron} from '../utils/fileUtils';
 
 /*
  * Lenguajes React para detección de inline CSS
@@ -75,7 +75,26 @@ export class DiagnosticProvider {
      * Verifica si el documento es soportado (CSS o React)
      */
     private esDocumentoSoportado(doc: vscode.TextDocument): boolean {
-        return esLenguajeSoportado(doc) || LENGUAJES_REACT.includes(doc.languageId);
+        const lenguajeSoportado = esLenguajeSoportado(doc) || LENGUAJES_REACT.includes(doc.languageId);
+
+        if (!lenguajeSoportado) {
+            return false;
+        }
+
+        const configService = obtenerConfigService();
+        const ruta = doc.uri.fsPath;
+        const incluidos = configService.obtenerPatronesIncluidos();
+        const excluidos = configService.obtenerPatronesExcluidos();
+
+        if (incluidos.length > 0 && !coincideConPatron(ruta, incluidos)) {
+            return false;
+        }
+
+        if (coincideConPatron(ruta, excluidos)) {
+            return false;
+        }
+
+        return true;
     }
 
     /*
@@ -132,6 +151,11 @@ export class DiagnosticProvider {
      */
     public async actualizarDiagnosticos(documento: vscode.TextDocument): Promise<void> {
         const configService = obtenerConfigService();
+
+        if (!this.esDocumentoSoportado(documento)) {
+            this._coleccion.delete(documento.uri);
+            return;
+        }
 
         /* Verificar si la extensión está habilitada */
         if (!configService.estaHabilitada()) {

@@ -79,6 +79,16 @@
                     },
                     "description": "Patrones glob para archivos que contienen definiciones de variables CSS"
                 },
+                "cssVarsValidator.includePatterns": {
+                    "type": "array",
+                    "default": [
+                        "**/*"
+                    ],
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Patrones glob de inclusión. Solo archivos que coincidan serán analizados"
+                },
                 "cssVarsValidator.hardcodedDetection.enabled": {
                     "type": "boolean",
                     "default": true,

@@ -22,6 +22,7 @@ const DEFAULT_CONFIG: ExtensionConfig = {
         '**/_variables.scss',
         '**/tokens.css'
     ],
+    patronesIncluidos: ['**/*'],
     deteccionHardcoded: {
         habilitado: true,
         severidad: vscode.DiagnosticSeverity.Warning,
@@ -134,6 +135,13 @@ class ConfigService {
     public obtenerPatronesVariables(): string[] {
         return this._config.archivosVariables;
     }
+
+    /*
+     * Obtiene los patrones de inclusión de archivos
+     */
+    public obtenerPatronesIncluidos(): string[] {
+        return this._config.patronesIncluidos;
+    }
     
     /*
      * Obtiene la configuración de detección de hardcoded
@@ -232,6 +240,7 @@ class ConfigService {
         return {
             habilitado: config.get<boolean>('enable', DEFAULT_CONFIG.habilitado),
             archivosVariables: config.get<string[]>('variableFiles', DEFAULT_CONFIG.archivosVariables),
+            patronesIncluidos: config.get<string[]>('includePatterns', DEFAULT_CONFIG.patronesIncluidos),
             deteccionHardcoded: this.cargarConfigHardcoded(config),
             deteccionInline: this.cargarConfigInline(config),
             duplicadosHabilitado: config.get<boolean>(
