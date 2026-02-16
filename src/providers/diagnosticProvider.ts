@@ -15,6 +15,11 @@ import {obtenerConfigService} from '../services/configService';
 import {esLenguajeSoportado, debounce} from '../utils/fileUtils';
 
 /*
+ * Lenguajes React para detección de inline CSS
+ */
+const LENGUAJES_REACT = ['typescriptreact', 'javascriptreact'];
+
+/*
  * Nombre de la colección de diagnósticos
  */
 const DIAGNOSTIC_COLLECTION_NAME = 'cssVarsValidator';
@@ -43,13 +48,20 @@ export class DiagnosticProvider {
     }
 
     /*
+     * Verifica si el documento es soportado (CSS o React)
+     */
+    private esDocumentoSoportado(doc: vscode.TextDocument): boolean {
+        return esLenguajeSoportado(doc) || LENGUAJES_REACT.includes(doc.languageId);
+    }
+
+    /*
      * Configura los listeners para actualizar diagnósticos
      */
     private configurarListeners(): void {
         /* Actualizar diagnósticos cuando se abre un documento */
         this._disposables.push(
             vscode.workspace.onDidOpenTextDocument(doc => {
-                if (esLenguajeSoportado(doc)) {
+                if (this.esDocumentoSoportado(doc)) {
                     void this.actualizarDiagnosticos(doc);
                 }
             })
@@ -58,7 +70,7 @@ export class DiagnosticProvider {
         /* Actualizar diagnósticos cuando se edita un documento (con debounce) */
         const actualizarDebounced = debounce((...args: unknown[]) => {
             const doc = args[0] as vscode.TextDocument;
-            if (esLenguajeSoportado(doc)) {
+            if (this.esDocumentoSoportado(doc)) {
                 void this.actualizarDiagnosticos(doc);
             }
         }, 500);
@@ -103,6 +115,13 @@ export class DiagnosticProvider {
             return;
         }
 
+        /* Si es un archivo React, solo buscar inline CSS */
+        if (LENGUAJES_REACT.includes(documento.languageId)) {
+            const diagnosticosInline = this.detectarInlineCssReact(documento);
+            this._coleccion.set(documento.uri, diagnosticosInline);
+            return;
+        }
+
         /* Asegurar que el índice de variables global esté actualizado */
         await obtenerScanner().escanear();
 
@@ -130,12 +149,18 @@ export class DiagnosticProvider {
             diagnosticos.push(diagnostic);
         }
 
-        /* 3. Detectar clases duplicadas */
+        /* 3. Detectar clases duplicadas (intra-archivo) */
         for (const duplicada of resultadoParse.clasesDuplicadas) {
             const diagnostic = new vscode.Diagnostic(duplicada.rango, `Clase duplicada '${duplicada.nombre}'. Esta clase ya está definida en este archivo.`, vscode.DiagnosticSeverity.Warning);
             diagnostic.code = DiagnosticType.ClaseDuplicada;
             diagnostic.source = 'CSS Vars Validator';
             diagnosticos.push(diagnostic);
+        }
+
+        /* 4. Detectar clases duplicadas cross-file */
+        if (configService.estaCrossFileHabilitado()) {
+            const diagnosticosCrossFile = this.detectarClasesCrossFile(resultadoParse, documento);
+            diagnosticos.push(...diagnosticosCrossFile);
         }
 
         /* Establecer diagnósticos */
@@ -187,10 +212,156 @@ export class DiagnosticProvider {
         const documentos = vscode.workspace.textDocuments;
 
         for (const doc of documentos) {
-            if (esLenguajeSoportado(doc)) {
+            if (esLenguajeSoportado(doc) || LENGUAJES_REACT.includes(doc.languageId)) {
                 await this.actualizarDiagnosticos(doc);
             }
         }
+    }
+
+    /*
+     * Escanea TODOS los archivos CSS del proyecto, no solo los abiertos
+     * Retorna el total de diagnósticos encontrados
+     */
+    public async escanearTodoElProyecto(): Promise<number> {
+        const configService = obtenerConfigService();
+        const excluidos = configService.obtenerPatronesExcluidos();
+        const patronExclusion = excluidos.length > 0 ? `{${excluidos.join(',')}}` : '**/node_modules/**';
+
+        /* Buscar archivos CSS */
+        const patronesCss = ['**/*.css', '**/*.scss', '**/*.less'];
+        const patronesReact = ['**/*.tsx', '**/*.jsx'];
+        const todosPatrones = [...patronesCss, ...patronesReact];
+
+        let totalDiagnosticos = 0;
+
+        for (const patron of todosPatrones) {
+            const archivos = await vscode.workspace.findFiles(patron, patronExclusion);
+            for (const uri of archivos) {
+                try {
+                    const doc = await vscode.workspace.openTextDocument(uri);
+                    await this.actualizarDiagnosticos(doc);
+                    const diags = this._coleccion.get(doc.uri);
+                    if (diags) {
+                        totalDiagnosticos += diags.length;
+                    }
+                } catch {
+                    /* Ignorar archivos que no se pueden abrir */
+                }
+            }
+        }
+
+        return totalDiagnosticos;
+    }
+
+    /*
+     * Detecta clases CSS definidas en este archivo que ya existen en otro archivo del proyecto
+     */
+    private detectarClasesCrossFile(resultadoParse: ParseResult, documento: vscode.TextDocument): vscode.Diagnostic[] {
+        const diagnosticos: vscode.Diagnostic[] = [];
+        const scanner = obtenerScanner();
+        const archivoActual = documento.uri.fsPath;
+
+        /* Obtener nombres de clase únicos del archivo actual (de las reglas parseadas) */
+        const texto = documento.getText();
+        const bloqueRegex = /([^{}]+)\{/g;
+        let match: RegExpExecArray | null;
+
+        while ((match = bloqueRegex.exec(texto)) !== null) {
+            const selectorCompleto = match[1].trim();
+            const selectores = selectorCompleto.split(',').map(s => s.trim());
+
+            for (const sel of selectores) {
+                if (/^\.[a-zA-Z0-9_-]+$/.test(sel)) {
+                    const duplicadaEnOtro = scanner.buscarClaseEnOtroArchivo(sel, archivoActual);
+                    if (duplicadaEnOtro) {
+                        const pos = documento.positionAt(match.index);
+                        const rango = new vscode.Range(pos, documento.positionAt(match.index + sel.length));
+                        const archivoCorto = duplicadaEnOtro.archivo.split(/[/\\]/).pop() || duplicadaEnOtro.archivo;
+
+                        const diagnostic = new vscode.Diagnostic(
+                            rango,
+                            `Clase '${sel}' ya definida en '${archivoCorto}' (línea ${duplicadaEnOtro.linea + 1})`,
+                            vscode.DiagnosticSeverity.Warning
+                        );
+                        diagnostic.code = DiagnosticType.ClaseDuplicadaCrossFile;
+                        diagnostic.source = 'CSS Vars Validator';
+                        diagnosticos.push(diagnostic);
+                    }
+                }
+            }
+        }
+
+        return diagnosticos;
+    }
+
+    /*
+     * Detecta uso de CSS inline (style={{ }}) en archivos React TSX/JSX
+     */
+    private detectarInlineCssReact(documento: vscode.TextDocument): vscode.Diagnostic[] {
+        const configService = obtenerConfigService();
+        const configInline = configService.obtenerConfigInline();
+
+        if (!configInline.habilitado) {
+            return [];
+        }
+
+        const diagnosticos: vscode.Diagnostic[] = [];
+        const texto = documento.getText();
+
+        /* Patrón 1: style={{ ... }} — objeto literal inline */
+        const styleObjRegex = /style\s*=\s*\{\s*\{/g;
+        let match: RegExpExecArray | null;
+
+        while ((match = styleObjRegex.exec(texto)) !== null) {
+            /* Encontrar el cierre correspondiente */
+            let profundidad = 2; /* ya abrimos {{ */
+            let i = match.index + match[0].length;
+
+            while (i < texto.length && profundidad > 0) {
+                if (texto[i] === '{') profundidad++;
+                else if (texto[i] === '}') profundidad--;
+                i++;
+            }
+
+            const inicio = documento.positionAt(match.index);
+            const fin = documento.positionAt(i);
+            const rango = new vscode.Range(inicio, fin);
+
+            const diagnostic = new vscode.Diagnostic(
+                rango,
+                'CSS inline detectado — usa clases CSS con variables en vez de style={{}}',
+                configInline.severidad
+            );
+            diagnostic.code = DiagnosticType.CssInlineReact;
+            diagnostic.source = 'CSS Vars Validator';
+            diagnosticos.push(diagnostic);
+        }
+
+        /* Patrón 2: style={variable} — variable que contiene estilos */
+        const styleVarRegex = /style\s*=\s*\{(?!\s*\{)([^}]+)\}/g;
+
+        while ((match = styleVarRegex.exec(texto)) !== null) {
+            /* Verificar que no sea un ternario o expresión compleja con className */
+            const contenido = match[1].trim();
+
+            /* Saltar si ya fue capturado por el patrón 1 (doble llave) */
+            if (contenido.startsWith('{')) continue;
+
+            const inicio = documento.positionAt(match.index);
+            const fin = documento.positionAt(match.index + match[0].length);
+            const rango = new vscode.Range(inicio, fin);
+
+            const diagnostic = new vscode.Diagnostic(
+                rango,
+                `CSS inline detectado (style={${contenido}}) — usa clases CSS con variables`,
+                configInline.severidad
+            );
+            diagnostic.code = DiagnosticType.CssInlineReact;
+            diagnostic.source = 'CSS Vars Validator';
+            diagnosticos.push(diagnostic);
+        }
+
+        return diagnosticos;
     }
 
     /*

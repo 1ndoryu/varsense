@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import { ExtensionConfig, HardcodedDetectionConfig, SEVERITY_MAP } from '../types';
+import { ExtensionConfig, HardcodedDetectionConfig, InlineDetectionConfig, SEVERITY_MAP } from '../types';
 
 /*
  * Nombre de la sección de configuración en VS Code
@@ -41,6 +41,11 @@ const DEFAULT_CONFIG: ExtensionConfig = {
             '100%', '50%', 'transparent', 'currentColor'
         ]
     },
+    deteccionInline: {
+        habilitado: true,
+        severidad: vscode.DiagnosticSeverity.Error
+    },
+    duplicadosCrossFile: true,
     sugerenciasContextuales: {
         'font-size': ['font', 'size', 'fs', 'text', 'tipo'],
         'font-family': ['font', 'family', 'tipo'],
@@ -151,6 +156,20 @@ class ConfigService {
     }
     
     /*
+     * Obtiene la configuración de detección inline React
+     */
+    public obtenerConfigInline(): InlineDetectionConfig {
+        return this._config.deteccionInline;
+    }
+
+    /*
+     * Verifica si la detección cross-file de clases está habilitada
+     */
+    public estaCrossFileHabilitado(): boolean {
+        return this._config.duplicadosCrossFile;
+    }
+
+    /*
      * Obtiene los patrones de exclusión
      */
     public obtenerPatronesExcluidos(): string[] {
@@ -206,6 +225,11 @@ class ConfigService {
             habilitado: config.get<boolean>('enable', DEFAULT_CONFIG.habilitado),
             archivosVariables: config.get<string[]>('variableFiles', DEFAULT_CONFIG.archivosVariables),
             deteccionHardcoded: this.cargarConfigHardcoded(config),
+            deteccionInline: this.cargarConfigInline(config),
+            duplicadosCrossFile: config.get<boolean>(
+                'duplicateClassDetection.crossFile',
+                DEFAULT_CONFIG.duplicadosCrossFile
+            ),
             sugerenciasContextuales: config.get<Record<string, string[]>>(
                 'contextualSuggestions',
                 DEFAULT_CONFIG.sugerenciasContextuales
@@ -236,6 +260,22 @@ class ConfigService {
                 'hardcodedDetection.allowedValues',
                 DEFAULT_CONFIG.deteccionHardcoded.valoresPermitidos
             )
+        };
+    }
+
+    /*
+     * Carga la configuración de detección de inline CSS en React
+     */
+    private cargarConfigInline(config: vscode.WorkspaceConfiguration): InlineDetectionConfig {
+        const severidadStr = config.get<string>('inlineDetection.severity', 'error');
+        const severidad = SEVERITY_MAP[severidadStr] ?? vscode.DiagnosticSeverity.Error;
+
+        return {
+            habilitado: config.get<boolean>(
+                'inlineDetection.enabled',
+                DEFAULT_CONFIG.deteccionInline.habilitado
+            ),
+            severidad
         };
     }
     

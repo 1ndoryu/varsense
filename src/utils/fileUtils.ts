@@ -213,6 +213,13 @@ export function esLenguajeSoportado(documento: vscode.TextDocument): boolean {
 }
 
 /*
+ * Verifica si el documento es un archivo React (TSX/JSX)
+ */
+export function esReact(documento: vscode.TextDocument): boolean {
+    return ['typescriptreact', 'javascriptreact'].includes(documento.languageId);
+}
+
+/*
  * Obtiene el texto de una línea específica
  */
 export function obtenerLinea(documento: vscode.TextDocument, numeroLinea: number): string {

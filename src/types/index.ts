@@ -103,6 +103,8 @@ export interface ExtensionConfig {
     habilitado: boolean;
     archivosVariables: string[];
     deteccionHardcoded: HardcodedDetectionConfig;
+    deteccionInline: InlineDetectionConfig;
+    duplicadosCrossFile: boolean;
     sugerenciasContextuales: Record<string, string[]>;
     patronesExcluidos: string[];
     escanearTodosArchivos: boolean;
@@ -163,7 +165,9 @@ export enum DiagnosticType {
     VariableNoDefinida = 'variableNoDefinida',
     ValorHardcoded = 'valorHardcoded',
     FallbackHardcoded = 'fallbackHardcoded',
-    ClaseDuplicada = 'claseDuplicada'
+    ClaseDuplicada = 'claseDuplicada',
+    ClaseDuplicadaCrossFile = 'claseDuplicadaCrossFile',
+    CssInlineReact = 'cssInlineReact'
 }
 
 /*
@@ -176,6 +180,26 @@ export interface CacheState {
     indice: VariableIndex;
     /* Map de archivo a sus variables para invalidación parcial */
     variablesPorArchivo: Map<string, CssVariable[]>;
+    /* Índice de clases CSS por archivo para detección cross-file */
+    clasesPorArchivo: Map<string, ClassEntry[]>;
+}
+
+/*
+ * Entrada de clase CSS indexada para detección cross-file
+ */
+export interface ClassEntry {
+    nombre: string;
+    archivo: string;
+    linea: number;
+    columna: number;
+}
+
+/*
+ * Configuración para detección de CSS inline en React
+ */
+export interface InlineDetectionConfig {
+    habilitado: boolean;
+    severidad: vscode.DiagnosticSeverity;
 }
 
 /*

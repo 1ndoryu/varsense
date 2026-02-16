@@ -101,7 +101,9 @@ function registrarProviders(contexto: vscode.ExtensionContext): void {
         { language: 'css', scheme: 'file' },
         { language: 'scss', scheme: 'file' },
         { language: 'less', scheme: 'file' },
-        { language: 'vue', scheme: 'file' }
+        { language: 'vue', scheme: 'file' },
+        { language: 'typescriptreact', scheme: 'file' },
+        { language: 'javascriptreact', scheme: 'file' }
     ];
     
     /* Diagnostic Provider */
@@ -151,6 +153,20 @@ function registrarComandos(contexto: vscode.ExtensionContext): void {
     contexto.subscriptions.push(
         vscode.commands.registerCommand('cssVarsValidator.goToDefinition', async () => {
             await comandoIrADefinicion();
+        })
+    );
+
+    /* Comando: Escanear todo el proyecto */
+    contexto.subscriptions.push(
+        vscode.commands.registerCommand('cssVarsValidator.scanAllDiagnostics', async () => {
+            await comandoEscanearTodoProyecto();
+        })
+    );
+
+    /* Comando: Limpiar caché */
+    contexto.subscriptions.push(
+        vscode.commands.registerCommand('cssVarsValidator.clearCache', async () => {
+            await comandoLimpiarCache();
         })
     );
 }
@@ -313,4 +329,67 @@ async function navegarAVariable(variable: CssVariable): Promise<void> {
             `CSS Vars: Error al abrir archivo - ${error instanceof Error ? error.message : 'Error desconocido'}`
         );
     }
+}
+
+/*
+ * Comando: Escanear todo el proyecto (archivos abiertos y cerrados)
+ */
+async function comandoEscanearTodoProyecto(): Promise<void> {
+    await vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: 'CSS Vars Validator',
+            cancellable: false
+        },
+        async (progress) => {
+            progress.report({ message: 'Escaneando variables...' });
+            await escanearVariables(true);
+
+            progress.report({ message: 'Analizando todos los archivos del proyecto...' });
+
+            if (diagnosticProvider) {
+                const total = await diagnosticProvider.escanearTodoElProyecto();
+                vscode.window.showInformationMessage(
+                    `CSS Vars: Escaneo completo — ${total} problema(s) encontrado(s)`
+                );
+            }
+        }
+    );
+}
+
+/*
+ * Comando: Limpiar caché y re-escanear
+ */
+async function comandoLimpiarCache(): Promise<void> {
+    await vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: 'CSS Vars Validator',
+            cancellable: false
+        },
+        async (progress) => {
+            progress.report({ message: 'Limpiando caché...' });
+
+            /* Limpiar caché del scanner */
+            obtenerScanner().limpiarCache();
+
+            /* Limpiar diagnósticos */
+            if (diagnosticProvider) {
+                diagnosticProvider.limpiar();
+            }
+
+            progress.report({ message: 'Re-escaneando variables...' });
+            await escanearVariables(true);
+
+            /* Actualizar diagnósticos en documentos abiertos */
+            if (diagnosticProvider) {
+                await diagnosticProvider.actualizarTodosDocumentos();
+            }
+
+            const stats = obtenerScanner().obtenerEstadisticas();
+            vscode.window.showInformationMessage(
+                `CSS Vars: Caché limpiado. ${stats.totalVariables} variables re-escaneadas de ${stats.archivosEscaneados} archivos`
+            );
+        }
+    );
 }

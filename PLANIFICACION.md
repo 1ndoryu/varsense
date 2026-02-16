@@ -257,7 +257,40 @@ opcion b
 - [x] Documentación (README.md, CHANGELOG.md)
 - [x] Preparado para desarrollo local
 
-### Próximas Mejoras (Backlog)
+### Fase 7: Mejoras v2.0 — Detección cross-file, React inline, comandos
+
+#### 7.1 Comando scanAllDiagnostics
+- [ ] Buscar TODOS los archivos CSS del proyecto (no solo los abiertos)
+- [ ] Abrir temporalmente cada uno, correr diagnósticos, agregar al panel de Problemas
+- [ ] Mostrar barra de progreso con conteo de archivos
+- [ ] Registrar en package.json como `cssVarsValidator.scanAllDiagnostics`
+
+#### 7.2 Comando clearCache
+- [ ] Llamar `limpiarCache()` del scanner
+- [ ] Limpiar colección de diagnósticos
+- [ ] Forzar re-escaneo completo
+- [ ] Registrar en package.json como `cssVarsValidator.clearCache`
+
+#### 7.3 Clases duplicadas cross-file
+- [ ] Agregar índice de clases al scanner (`clasesPorArchivo: Map<string, {archivo, linea}>`)
+- [ ] Al parsear cada archivo CSS, extraer selectores de clase y indexarlos
+- [ ] En diagnosticProvider, al encontrar una clase que ya existe en OTRO archivo, marcar warning
+- [ ] Excluir del chequeo clases como `:root`, `*`, `body`, `html` (son globales legítimas)
+- [ ] Quick fix: "Ir a definición original en {archivo}"
+
+#### 7.4 Detección CSS inline en React (TSX/JSX)
+- [ ] Agregar `typescriptreact` y `javascriptreact` a activationEvents en package.json
+- [ ] Agregar a selectores de lenguaje en los providers
+- [ ] Crear parser/detector para patrones `style={{ ... }}` y `style={variable}` en JSX
+- [ ] Marcar como **error** con mensaje: "CSS inline detectado — usa clases CSS con variables"
+- [ ] Configuración: `cssVarsValidator.inlineDetection.enabled` (default: true)
+- [ ] Configuración: `cssVarsValidator.inlineDetection.severity` (default: error)
+
+#### 7.5 Variables locales en archivo (verificación)
+- [x] Ya funcional: `diagnosticProvider.ts` crea Set de `variablesLocales` y verifica contra global + local
+- [ ] Documentar en README que variables definidas en el mismo archivo son válidas
+
+### Backlog (futuro)
 - [ ] Soporte para variables SCSS (`$variable`)
 - [ ] Definition provider (Ctrl+Click)
 - [ ] Rename provider
@@ -267,57 +300,43 @@ opcion b
 
 ---
 
-## 🚀 Comandos de la Extensión
+## Comandos de la Extensión
 
 | Comando | Descripción |
 |---------|-------------|
 | `cssVarsValidator.refreshVariables` | Re-escanear variables manualmente |
 | `cssVarsValidator.showAllVariables` | Mostrar lista de todas las variables detectadas |
 | `cssVarsValidator.goToDefinition` | Ir a la definición de una variable |
+| `cssVarsValidator.scanAllDiagnostics` | Escanear TODOS los archivos CSS del proyecto |
+| `cssVarsValidator.clearCache` | Limpiar caché y re-escanear desde cero |
 
 ---
 
-## 📝 Notas Técnicas
-
-### API de VS Code a Utilizar:
-- `vscode.languages.registerHoverProvider` - Para hover
-- `vscode.languages.registerCompletionItemProvider` - Para autocompletado
-- `vscode.languages.createDiagnosticCollection` - Para errores/warnings
-- `vscode.workspace.findFiles` - Para buscar archivos
-- `vscode.workspace.createFileSystemWatcher` - Para detectar cambios
+## Notas Técnicas
 
 ### Lenguajes Soportados:
-- CSS
-- SCSS (si se confirma)
-- Vue (sección `<style>`)
-- HTML (estilos inline, si se requiere)
+- CSS, SCSS, Less, Vue (`<style>`)
+- TypeScript React (TSX) — solo detección de inline styles
+- JavaScript React (JSX) — solo detección de inline styles
 
 ---
 
-**Estado:** ✅ Implementación Completa (v1.0.2) - Sin errores de compilación ni lint
-**Última actualización:** 3 de febrero de 2026
+**Estado:** En progreso (v2.0.0)
+**Última actualización:** 16 de febrero de 2026
 
-### Notas de Implementación
+### Notas de Implementación v1.x
 - Todos los providers implementados y funcionales
 - Sistema de caché optimizado con invalidación parcial
 - Soporte para resolución de variables anidadas
 - Quick fixes implementados para errores comunes
-- Tests unitarios cubriendo parsers y utilidades
 - Compilación exitosa con esbuild (38kb bundle)
-- TypeScript sin errores (`tsc --noEmit` pasa correctamente)
 
 ### Correcciones Aplicadas (v1.0.1)
 - tsconfig.json: Agregado "DOM" a libs y "types" explícitos
 - Corregidos tipos incompatibles en funciones debounce
 - Actualizada versión de @types/vscode a 1.85.0 (compatible con engine)
-- Corregidos imports de glob y mocha en test runner
 
 ### Correcciones Aplicadas (v1.0.2)
-- **Regex de detección mejorada**: Ahora soporta múltiples declaraciones CSS por línea y estilos minificados
-- **Sistema de metadatos refactorizado**: Uso de WeakMap en lugar de hack con .data para almacenar metadatos de diagnósticos
-- **Script de tests corregido**: Manejo correcto de rutas con espacios
+- Regex de detección mejorada: múltiples declaraciones por línea y minificados
+- Sistema de metadatos refactorizado: WeakMap en vez de hack con .data
 - Variables no usadas eliminadas para código más limpio
-- Corregidos tipos incompatibles en funciones debounce
-- Corregidos accesos a propiedades `data` usando casts para compatibilidad
-- Actualizada versión de @types/vscode a 1.85.0 (compatible con engine)
-- Corregidos imports de glob y mocha en test runner

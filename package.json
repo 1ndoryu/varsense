@@ -2,8 +2,9 @@
     "name": "varsense",
     "displayName": "VarSense",
     "description": "Extensión de VS Code para validación y gestión de variables CSS. Detecta errores, sugiere variables y mejora el flujo de trabajo con CSS custom properties.",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "publisher": "1ndoryu",
+    "icon": "icon.jpg",
     "repository": {
         "type": "git",
         "url": "https://github.com/1ndoryu/varsense"
@@ -25,7 +26,9 @@
     "activationEvents": [
         "onLanguage:css",
         "onLanguage:scss",
-        "onLanguage:vue"
+        "onLanguage:vue",
+        "onLanguage:typescriptreact",
+        "onLanguage:javascriptreact"
     ],
     "main": "./dist/extension.js",
     "contributes": {
@@ -41,6 +44,14 @@
             {
                 "command": "cssVarsValidator.goToDefinition",
                 "title": "CSS Vars: Ir a Definición"
+            },
+            {
+                "command": "cssVarsValidator.scanAllDiagnostics",
+                "title": "CSS Vars: Escanear Todo el Proyecto"
+            },
+            {
+                "command": "cssVarsValidator.clearCache",
+                "title": "CSS Vars: Limpiar Caché"
             }
         ],
         "configuration": {
@@ -230,6 +241,22 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Escanear todos los archivos CSS en busca de variables (más lento)"
+                },
+                "cssVarsValidator.inlineDetection.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Detectar CSS inline (style={{}}) en archivos React TSX/JSX"
+                },
+                "cssVarsValidator.inlineDetection.severity": {
+                    "type": "string",
+                    "default": "error",
+                    "enum": ["error", "warning", "information", "hint"],
+                    "description": "Severidad para CSS inline detectado en React"
+                },
+                "cssVarsValidator.duplicateClassDetection.crossFile": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Detectar clases CSS duplicadas entre archivos distintos"
                 }
             }
         }
