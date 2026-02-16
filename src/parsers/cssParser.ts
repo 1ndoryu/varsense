@@ -199,21 +199,45 @@ export class CssParser {
 
         while ((match = DECLARATION_REGEX.exec(contenido)) !== null) {
             const propiedad = match[1].trim();
-            const valor = extraerValorLimpio(match[2]);
             const offsetPropiedad = this.obtenerOffsetOriginal(offsetBase + match.index);
-            const offsetValor = offsetPropiedad + propiedad.length + match[0].indexOf(match[2]);
+            const valorRaw = match[2];
+            const indiceValorEnMatch = match[0].indexOf(valorRaw);
+            const espaciosInicioValor = valorRaw.search(/\S|$/);
+            const valor = extraerValorLimpio(valorRaw);
+
+            /* Offset real del inicio del valor dentro del documento */
+            const offsetValor = offsetBase + match.index + indiceValorEnMatch + espaciosInicioValor;
+            const posPropiedad = this._documento.positionAt(offsetPropiedad);
+            let rangoValor = this.crearRangoDesdeOffset(offsetValor, valor.length);
+
+            /*
+             * Corrección de precisión: si el valor no es multilínea, forzar el rango
+             * a la misma línea de la propiedad para evitar subrayado desplazado.
+             */
+            if (!valor.includes('\n') && rangoValor.start.line !== posPropiedad.line) {
+                const textoLinea = this._documento.lineAt(posPropiedad.line).text;
+                const desdeColumna = Math.max(0, posPropiedad.character + propiedad.length);
+                const indiceEnLinea = textoLinea.indexOf(valor, desdeColumna);
+
+                if (indiceEnLinea >= 0) {
+                    rangoValor = new vscode.Range(
+                        new vscode.Position(posPropiedad.line, indiceEnLinea),
+                        new vscode.Position(posPropiedad.line, indiceEnLinea + valor.length)
+                    );
+                }
+            }
 
             /* Extraer variables usadas en el valor */
             const variablesMatch = extraerVariablesDeValor(valor);
-            const posPropiedad = this._documento.positionAt(offsetPropiedad);
+            const posValor = this._documento.positionAt(offsetValor);
 
-            const variablesUsadas = crearUsosVariable(variablesMatch, this._documento, posPropiedad.line, posPropiedad.character + propiedad.length + 2, valor);
+            const variablesUsadas = crearUsosVariable(variablesMatch, this._documento, posValor.line, posValor.character, valor);
 
             declaraciones.push({
                 propiedad,
                 valor,
                 rangoPropiedad: this.crearRangoDesdeOffset(offsetPropiedad, propiedad.length),
-                rangoValor: this.crearRangoDesdeOffset(offsetValor, valor.length),
+                rangoValor,
                 variablesUsadas,
                 esDefinicionVariable: esDefinicionVariable(propiedad)
             });
