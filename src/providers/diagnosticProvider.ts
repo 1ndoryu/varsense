@@ -25,6 +25,30 @@ const LENGUAJES_REACT = ['typescriptreact', 'javascriptreact'];
 const DIAGNOSTIC_COLLECTION_NAME = 'cssVarsValidator';
 
 /*
+ * Resumen de diagnósticos por archivo durante escaneo global
+ */
+export interface ResumenDiagnosticoArchivo {
+    uri: vscode.Uri;
+    ruta: string;
+    total: number;
+    errores: number;
+    warnings: number;
+    informacion: number;
+    hints: number;
+    ejemplos: string[];
+}
+
+/*
+ * Resultado del escaneo global de diagnósticos
+ */
+export interface ResultadoEscaneoProyecto {
+    totalDiagnosticos: number;
+    totalArchivosAnalizados: number;
+    totalArchivosConProblemas: number;
+    archivosConProblemas: ResumenDiagnosticoArchivo[];
+}
+
+/*
  * Mapa para almacenar metadatos de diagnósticos
  * Evita el uso de propiedades no estándar en objetos Diagnostic
  */
@@ -223,7 +247,9 @@ export class DiagnosticProvider {
      * Escanea TODOS los archivos CSS del proyecto, no solo los abiertos
      * Retorna el total de diagnósticos encontrados
      */
-    public async escanearTodoElProyecto(): Promise<number> {
+    public async escanearTodoElProyecto(
+        onProgress?: (actual: number, total: number, rutaArchivo: string) => void
+    ): Promise<ResultadoEscaneoProyecto> {
         const configService = obtenerConfigService();
         const excluidos = configService.obtenerPatronesExcluidos();
         const patronExclusion = excluidos.length > 0 ? `{${excluidos.join(',')}}` : '**/node_modules/**';
@@ -234,24 +260,101 @@ export class DiagnosticProvider {
         const todosPatrones = [...patronesCss, ...patronesReact];
 
         let totalDiagnosticos = 0;
+        const archivosVisitados = new Set<string>();
+        const resumenPorArchivo = new Map<string, ResumenDiagnosticoArchivo>();
+
+        const urisUnicos = new Map<string, vscode.Uri>();
 
         for (const patron of todosPatrones) {
             const archivos = await vscode.workspace.findFiles(patron, patronExclusion);
             for (const uri of archivos) {
-                try {
-                    const doc = await vscode.workspace.openTextDocument(uri);
-                    await this.actualizarDiagnosticos(doc);
-                    const diags = this._coleccion.get(doc.uri);
-                    if (diags) {
-                        totalDiagnosticos += diags.length;
+                urisUnicos.set(uri.fsPath, uri);
+            }
+        }
+
+        const archivosPorProcesar = Array.from(urisUnicos.values());
+        const totalArchivos = archivosPorProcesar.length;
+        let archivosProcesados = 0;
+
+        for (const uri of archivosPorProcesar) {
+            const ruta = uri.fsPath;
+
+            if (archivosVisitados.has(ruta)) {
+                continue;
+            }
+
+            archivosVisitados.add(ruta);
+
+            try {
+                const doc = await vscode.workspace.openTextDocument(uri);
+                await this.actualizarDiagnosticos(doc);
+                const diags = this._coleccion.get(doc.uri);
+                if (diags) {
+                    totalDiagnosticos += diags.length;
+
+                    if (diags.length > 0) {
+                        let errores = 0;
+                        let warnings = 0;
+                        let informacion = 0;
+                        let hints = 0;
+
+                        for (const diag of diags) {
+                            switch (diag.severity) {
+                                case vscode.DiagnosticSeverity.Error:
+                                    errores++;
+                                    break;
+                                case vscode.DiagnosticSeverity.Warning:
+                                    warnings++;
+                                    break;
+                                case vscode.DiagnosticSeverity.Information:
+                                    informacion++;
+                                    break;
+                                case vscode.DiagnosticSeverity.Hint:
+                                    hints++;
+                                    break;
+                            }
+                        }
+
+                        const ejemplos = diags
+                            .slice(0, 3)
+                            .map(diag => `L${diag.range.start.line + 1}: ${diag.message}`);
+
+                        resumenPorArchivo.set(ruta, {
+                            uri: doc.uri,
+                            ruta,
+                            total: diags.length,
+                            errores,
+                            warnings,
+                            informacion,
+                            hints,
+                            ejemplos
+                        });
                     }
-                } catch {
-                    /* Ignorar archivos que no se pueden abrir */
+                }
+            } catch {
+                /* Ignorar archivos que no se pueden abrir */
+            } finally {
+                archivosProcesados++;
+                if (onProgress) {
+                    onProgress(archivosProcesados, totalArchivos, ruta);
                 }
             }
         }
 
-        return totalDiagnosticos;
+        const archivosConProblemas = Array.from(resumenPorArchivo.values()).sort((a, b) => {
+            if (b.errores !== a.errores) {
+                return b.errores - a.errores;
+            }
+
+            return b.total - a.total;
+        });
+
+        return {
+            totalDiagnosticos,
+            totalArchivosAnalizados: archivosVisitados.size,
+            totalArchivosConProblemas: archivosConProblemas.length,
+            archivosConProblemas
+        };
     }
 
     /*

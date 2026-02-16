@@ -5,6 +5,21 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-02-16
+
+### Agregado
+- **Comando scanAllDiagnostics**: Escaneo completo del workspace (archivos abiertos y cerrados) para CSS/SCSS/LESS/TSX/JSX.
+- **Progreso con conteo real**: Durante el escaneo global se muestra avance por archivo (`actual/total`).
+- **Reporte detallado por archivo**: Nuevo resumen en OutputChannel `CSS Vars Validator` con severidades y ejemplos por línea.
+- **Navegación por Quick Pick**: Desde el resultado del escaneo se puede abrir rápidamente cualquier archivo con problemas.
+- **Comando autoFixAllCss**: Aplicación masiva de quick fixes para diagnósticos soportados en CSS/SCSS/LESS.
+- **Resultado estructurado de escaneo**: Nuevo objeto `ResultadoEscaneoProyecto` con métricas globales y por archivo.
+
+### Mejorado
+- **Detección cross-file de clases duplicadas**: Integrada con índice de clases en scanner y diagnóstico con referencia a archivo/línea original.
+- **Detección inline en React**: Validación para `style={{...}}` y `style={variable}` en TSX/JSX con severidad configurable.
+- **Validación de scope local**: Variables definidas en el mismo archivo se consideran válidas para evitar falsos positivos.
+
 ## [1.0.0] - 2026-02-03
 
 ### Agregado

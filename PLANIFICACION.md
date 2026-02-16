@@ -260,35 +260,43 @@ opcion b
 ### Fase 7: Mejoras v2.0 — Detección cross-file, React inline, comandos
 
 #### 7.1 Comando scanAllDiagnostics
-- [ ] Buscar TODOS los archivos CSS del proyecto (no solo los abiertos)
-- [ ] Abrir temporalmente cada uno, correr diagnósticos, agregar al panel de Problemas
-- [ ] Mostrar barra de progreso con conteo de archivos
-- [ ] Registrar en package.json como `cssVarsValidator.scanAllDiagnostics`
+- [x] Buscar TODOS los archivos CSS del proyecto (no solo los abiertos)
+- [x] Abrir temporalmente cada uno, correr diagnósticos, agregar al panel de Problemas
+- [x] Mostrar barra de progreso con conteo de archivos
+- [x] Registrar en package.json como `cssVarsValidator.scanAllDiagnostics`
+- [x] Reporte detallado por archivo en OutputChannel (`CSS Vars Validator`)
+- [x] Quick Pick para navegar a archivos con problemas
 
 #### 7.2 Comando clearCache
-- [ ] Llamar `limpiarCache()` del scanner
-- [ ] Limpiar colección de diagnósticos
-- [ ] Forzar re-escaneo completo
-- [ ] Registrar en package.json como `cssVarsValidator.clearCache`
+- [x] Llamar `limpiarCache()` del scanner
+- [x] Limpiar colección de diagnósticos
+- [x] Forzar re-escaneo completo
+- [x] Registrar en package.json como `cssVarsValidator.clearCache`
 
 #### 7.3 Clases duplicadas cross-file
-- [ ] Agregar índice de clases al scanner (`clasesPorArchivo: Map<string, {archivo, linea}>`)
-- [ ] Al parsear cada archivo CSS, extraer selectores de clase y indexarlos
-- [ ] En diagnosticProvider, al encontrar una clase que ya existe en OTRO archivo, marcar warning
-- [ ] Excluir del chequeo clases como `:root`, `*`, `body`, `html` (son globales legítimas)
+- [x] Agregar índice de clases al scanner (`clasesPorArchivo: Map<string, {archivo, linea}>`)
+- [x] Al parsear cada archivo CSS, extraer selectores de clase y indexarlos
+- [x] En diagnosticProvider, al encontrar una clase que ya existe en OTRO archivo, marcar warning
+- [x] Excluir del chequeo clases como `:root`, `*`, `body`, `html` (son globales legítimas)
 - [ ] Quick fix: "Ir a definición original en {archivo}"
 
 #### 7.4 Detección CSS inline en React (TSX/JSX)
-- [ ] Agregar `typescriptreact` y `javascriptreact` a activationEvents en package.json
-- [ ] Agregar a selectores de lenguaje en los providers
-- [ ] Crear parser/detector para patrones `style={{ ... }}` y `style={variable}` en JSX
-- [ ] Marcar como **error** con mensaje: "CSS inline detectado — usa clases CSS con variables"
-- [ ] Configuración: `cssVarsValidator.inlineDetection.enabled` (default: true)
-- [ ] Configuración: `cssVarsValidator.inlineDetection.severity` (default: error)
+- [x] Agregar `typescriptreact` y `javascriptreact` a activationEvents en package.json
+- [x] Agregar a selectores de lenguaje en los providers
+- [x] Crear parser/detector para patrones `style={{ ... }}` y `style={variable}` en JSX
+- [x] Marcar como **error** con mensaje: "CSS inline detectado — usa clases CSS con variables"
+- [x] Configuración: `cssVarsValidator.inlineDetection.enabled` (default: true)
+- [x] Configuración: `cssVarsValidator.inlineDetection.severity` (default: error)
 
 #### 7.5 Variables locales en archivo (verificación)
 - [x] Ya funcional: `diagnosticProvider.ts` crea Set de `variablesLocales` y verifica contra global + local
-- [ ] Documentar en README que variables definidas en el mismo archivo son válidas
+- [x] Documentar en README que variables definidas en el mismo archivo son válidas
+
+#### 7.6 Auto-fix masivo de CSS
+- [x] Registrar comando `cssVarsValidator.autoFixAllCss` en package.json
+- [x] Ejecutar quick fixes soportados en lote para CSS/SCSS/LESS
+- [x] Guardar archivos modificados automáticamente
+- [x] Re-escanear proyecto al finalizar y publicar resumen final
 
 ### Backlog (futuro)
 - [ ] Soporte para variables SCSS (`$variable`)

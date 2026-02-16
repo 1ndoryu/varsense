@@ -50,6 +50,10 @@
                 "title": "CSS Vars: Escanear Todo el Proyecto"
             },
             {
+                "command": "cssVarsValidator.autoFixAllCss",
+                "title": "CSS Vars: Auto-fix en Todos los CSS"
+            },
+            {
                 "command": "cssVarsValidator.clearCache",
                 "title": "CSS Vars: Limpiar Caché"
             }

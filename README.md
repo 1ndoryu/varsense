@@ -24,6 +24,37 @@ Extensión de VS Code para validación y gestión de variables CSS. Detecta erro
 - Ordenado por frecuencia de uso
 - Preview del valor en el autocompletado
 
+### 🧭 Escaneo Global con Reporte por Archivo
+- Escanea CSS/SCSS/LESS/TSX/JSX de todo el workspace (abiertos y cerrados)
+- Muestra barra de progreso con conteo real de archivos (`actual/total`)
+- Escribe reporte detallado en Output (`CSS Vars Validator`) con:
+  - archivo
+  - total por severidad
+  - ejemplos de problemas por línea
+- Permite navegar a archivos con problemas desde Quick Pick
+
+### 🧹 Auto-fix Masivo de CSS
+- Comando para aplicar quick fixes en lote sobre CSS/SCSS/LESS
+- Aplica fixes preferidos para:
+  - valores hardcodeados
+  - fallbacks hardcodeados
+  - variables no definidas (cuando hay sugerencia)
+- Guarda archivos automáticamente y re-escanea al finalizar
+
+### ♻️ Detección de Clases Duplicadas Cross-file
+- Indexa clases por archivo en caché del scanner
+- Detecta clases duplicadas en archivos distintos
+- Reporta warning con archivo y línea de la definición previa
+
+### ⚛️ Detección de CSS Inline en React
+- Soporte para TSX/JSX (`style={{...}}` y `style={variable}`)
+- Diagnóstico configurable por severidad
+- Mensaje estándar: `CSS inline detectado — usa clases CSS con variables`
+
+### 📌 Variables Locales Válidas
+- Si una variable se define en el mismo archivo, se considera válida
+- La validación combina variables globales + locales para evitar falsos positivos
+
 ## Instalación
 
 ### Desde el Marketplace
@@ -94,6 +125,9 @@ Agrega estas opciones a tu `settings.json`:
 | `CSS Vars: Refrescar Variables` | Re-escanea todos los archivos de variables |
 | `CSS Vars: Mostrar Todas las Variables` | Muestra lista de variables en Quick Pick |
 | `CSS Vars: Ir a Definición` | Navega a la definición de la variable bajo el cursor |
+| `CSS Vars: Escanear Todo el Proyecto` | Analiza todos los archivos soportados y genera reporte detallado |
+| `CSS Vars: Auto-fix en Todos los CSS` | Intenta corregir automáticamente diagnósticos soportados en lote |
+| `CSS Vars: Limpiar Caché` | Limpia caché, re-escanea variables y refresca diagnósticos |
 
 ## Uso
 
@@ -145,6 +179,8 @@ Escribe `var(` y la extensión sugerirá variables relevantes:
 - SCSS
 - LESS
 - Vue (sección `<style>`)
+- TypeScript React (TSX) para detección de CSS inline
+- JavaScript React (JSX) para detección de CSS inline
 
 ## Arquitectura
 

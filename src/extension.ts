@@ -4,18 +4,19 @@
  */
 
 import * as vscode from 'vscode';
-import { DiagnosticProvider, DiagnosticCodeActionProvider } from './providers/diagnosticProvider';
+import { DiagnosticProvider, DiagnosticCodeActionProvider, ResultadoEscaneoProyecto } from './providers/diagnosticProvider';
 import { crearHoverProvider } from './providers/hoverProvider';
 import { crearCompletionProvider } from './providers/completionProvider';
 import { obtenerScanner, escanearVariables } from './services/variableScanner';
 import { obtenerConfigService, estaExtensionHabilitada } from './services/configService';
-import { CssVariable } from './types';
+import { CssVariable, DiagnosticType } from './types';
 
 /*
  * Colección de disposables para limpieza
  */
 let disposables: vscode.Disposable[] = [];
 let diagnosticProvider: DiagnosticProvider | null = null;
+let canalSalida: vscode.OutputChannel | null = null;
 
 /*
  * Función de activación de la extensión
@@ -39,6 +40,9 @@ export async function activate(contexto: vscode.ExtensionContext): Promise<void>
         
         /* Registrar comandos */
         registrarComandos(contexto);
+
+        canalSalida = vscode.window.createOutputChannel('CSS Vars Validator');
+        contexto.subscriptions.push(canalSalida);
         
         /* Escanear variables inicialmente */
         await escanearVariablesInicial();
@@ -160,6 +164,13 @@ function registrarComandos(contexto: vscode.ExtensionContext): void {
     contexto.subscriptions.push(
         vscode.commands.registerCommand('cssVarsValidator.scanAllDiagnostics', async () => {
             await comandoEscanearTodoProyecto();
+        })
+    );
+
+    /* Comando: Aplicar quick-fixes a todos los CSS */
+    contexto.subscriptions.push(
+        vscode.commands.registerCommand('cssVarsValidator.autoFixAllCss', async () => {
+            await comandoAutoFixTodosLosCss();
         })
     );
 
@@ -335,6 +346,8 @@ async function navegarAVariable(variable: CssVariable): Promise<void> {
  * Comando: Escanear todo el proyecto (archivos abiertos y cerrados)
  */
 async function comandoEscanearTodoProyecto(): Promise<void> {
+    let resultadoEscaneo: ResultadoEscaneoProyecto | null = null;
+
     await vscode.window.withProgress(
         {
             location: vscode.ProgressLocation.Notification,
@@ -348,13 +361,231 @@ async function comandoEscanearTodoProyecto(): Promise<void> {
             progress.report({ message: 'Analizando todos los archivos del proyecto...' });
 
             if (diagnosticProvider) {
-                const total = await diagnosticProvider.escanearTodoElProyecto();
-                vscode.window.showInformationMessage(
-                    `CSS Vars: Escaneo completo — ${total} problema(s) encontrado(s)`
-                );
+                resultadoEscaneo = await diagnosticProvider.escanearTodoElProyecto((actual, total, rutaArchivo) => {
+                    const nombreArchivo = rutaArchivo.split(/[/\\]/).pop() || rutaArchivo;
+                    progress.report({ message: `Analizando ${actual}/${total}: ${nombreArchivo}` });
+                });
             }
         }
     );
+
+    if (resultadoEscaneo) {
+        mostrarResultadoEscaneo(resultadoEscaneo);
+    }
+}
+
+/*
+ * Muestra resultado del escaneo global y facilita navegación por archivo
+ */
+function mostrarResultadoEscaneo(resultado: ResultadoEscaneoProyecto): void {
+    const mensaje = `CSS Vars: Escaneo completo — ${resultado.totalDiagnosticos} problema(s) en ${resultado.totalArchivosConProblemas} archivo(s)`;
+
+    if (resultado.totalDiagnosticos === 0) {
+        void vscode.window.showInformationMessage(mensaje);
+        return;
+    }
+
+    escribirReporteEnOutput(resultado);
+
+    void vscode.window.showInformationMessage(
+        mensaje,
+        'Ver reporte',
+        'Ir a archivo con errores'
+    ).then(async accion => {
+        if (accion === 'Ver reporte' && canalSalida) {
+            canalSalida.show(true);
+            return;
+        }
+
+        if (accion === 'Ir a archivo con errores') {
+            await abrirQuickPickArchivosConProblemas(resultado);
+        }
+    });
+}
+
+/*
+ * Escribe el reporte completo en el OutputChannel
+ */
+function escribirReporteEnOutput(resultado: ResultadoEscaneoProyecto): void {
+    if (!canalSalida) {
+        return;
+    }
+
+    canalSalida.clear();
+    canalSalida.appendLine('=== CSS Vars Validator · Reporte de escaneo global ===');
+    canalSalida.appendLine(`Total diagnósticos: ${resultado.totalDiagnosticos}`);
+    canalSalida.appendLine(`Archivos analizados: ${resultado.totalArchivosAnalizados}`);
+    canalSalida.appendLine(`Archivos con problemas: ${resultado.totalArchivosConProblemas}`);
+    canalSalida.appendLine('');
+
+    for (const archivo of resultado.archivosConProblemas) {
+        canalSalida.appendLine(`• ${archivo.ruta}`);
+        canalSalida.appendLine(`  Total: ${archivo.total} | Errores: ${archivo.errores} | Warnings: ${archivo.warnings} | Info: ${archivo.informacion} | Hint: ${archivo.hints}`);
+        for (const ejemplo of archivo.ejemplos) {
+            canalSalida.appendLine(`    - ${ejemplo}`);
+        }
+        canalSalida.appendLine('');
+    }
+}
+
+/*
+ * Abre un quick pick para navegar a los archivos con problemas
+ */
+async function abrirQuickPickArchivosConProblemas(resultado: ResultadoEscaneoProyecto): Promise<void> {
+    const items = resultado.archivosConProblemas.map(archivo => ({
+        label: `${archivo.errores > 0 ? '$(error)' : '$(warning)'} ${archivo.ruta.split(/[/\\]/).pop() || archivo.ruta}`,
+        description: `${archivo.total} problema(s) · E:${archivo.errores} W:${archivo.warnings}`,
+        detail: archivo.ruta,
+        uri: archivo.uri
+    }));
+
+    const seleccion = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Selecciona un archivo para abrirlo',
+        matchOnDescription: true,
+        matchOnDetail: true
+    });
+
+    if (!seleccion) {
+        return;
+    }
+
+    const doc = await vscode.workspace.openTextDocument(seleccion.uri);
+    await vscode.window.showTextDocument(doc);
+}
+
+/*
+ * Comando: aplica quick-fixes automáticos en todos los archivos CSS/SCSS/LESS con diagnósticos
+ */
+async function comandoAutoFixTodosLosCss(): Promise<void> {
+    if (!diagnosticProvider) {
+        return;
+    }
+
+    const provider = diagnosticProvider;
+
+    await vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: 'CSS Vars Validator',
+            cancellable: false
+        },
+        async (progress) => {
+            progress.report({ message: 'Escaneando proyecto completo...' });
+            await escanearVariables(true);
+            const resultado = await provider.escanearTodoElProyecto();
+
+            const archivosCss = resultado.archivosConProblemas.filter(a => /\.(css|scss|less)$/i.test(a.ruta));
+            let totalFixesAplicados = 0;
+
+            for (let indice = 0; indice < archivosCss.length; indice++) {
+                const archivo = archivosCss[indice];
+                const porcentaje = Math.round(((indice + 1) / archivosCss.length) * 100);
+
+                progress.report({
+                    message: `Aplicando quick-fixes (${indice + 1}/${archivosCss.length}): ${archivo.ruta.split(/[/\\]/).pop()}`,
+                    increment: archivosCss.length > 0 ? 100 / archivosCss.length : 100
+                });
+
+                const fixesArchivo = await aplicarQuickFixesEnDocumento(archivo.uri);
+                totalFixesAplicados += fixesArchivo;
+
+                if (porcentaje % 20 === 0 && canalSalida) {
+                    canalSalida.appendLine(`[AutoFix] Progreso ${porcentaje}% · ${archivo.ruta} · fixes: ${fixesArchivo}`);
+                }
+            }
+
+            progress.report({ message: 'Re-escanendo diagnósticos para validar resultados...' });
+            const resultadoFinal = await provider.escanearTodoElProyecto();
+            escribirReporteEnOutput(resultadoFinal);
+
+            vscode.window.showInformationMessage(
+                `CSS Vars: Auto-fix completado. ${totalFixesAplicados} quick-fix(es) aplicado(s). Restantes: ${resultadoFinal.totalDiagnosticos}`,
+                'Ver reporte'
+            ).then(accion => {
+                if (accion === 'Ver reporte' && canalSalida) {
+                    canalSalida.show(true);
+                }
+            });
+        }
+    );
+}
+
+/*
+ * Aplica quick-fixes soportados para un documento específico
+ */
+async function aplicarQuickFixesEnDocumento(uri: vscode.Uri): Promise<number> {
+    if (!diagnosticProvider) {
+        return 0;
+    }
+
+    const doc = await vscode.workspace.openTextDocument(uri);
+    const editor = await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
+    await diagnosticProvider.actualizarDiagnosticos(doc);
+
+    const diagnosticos = diagnosticProvider
+        .obtenerColeccion()
+        .get(uri)
+        ?.filter(diag => {
+            if (diag.source !== 'CSS Vars Validator') {
+                return false;
+            }
+
+            return diag.code === DiagnosticType.ValorHardcoded ||
+                diag.code === DiagnosticType.FallbackHardcoded ||
+                diag.code === DiagnosticType.VariableNoDefinida;
+        }) || [];
+
+    if (diagnosticos.length === 0) {
+        return 0;
+    }
+
+    const diagnosticosOrdenados = [...diagnosticos].sort((a, b) => {
+        if (a.range.start.line !== b.range.start.line) {
+            return b.range.start.line - a.range.start.line;
+        }
+        return b.range.start.character - a.range.start.character;
+    });
+
+    let fixesAplicados = 0;
+
+    for (const diagnostic of diagnosticosOrdenados) {
+        const acciones = await vscode.commands.executeCommand<(vscode.CodeAction | vscode.Command)[]>(
+            'vscode.executeCodeActionProvider',
+            uri,
+            diagnostic.range,
+            vscode.CodeActionKind.QuickFix
+        );
+
+        if (!acciones || acciones.length === 0) {
+            continue;
+        }
+
+        const accionesCodigo = acciones.filter((accion): accion is vscode.CodeAction => {
+            return accion instanceof vscode.CodeAction;
+        });
+
+        if (accionesCodigo.length === 0) {
+            continue;
+        }
+
+        const accionElegida = accionesCodigo.find(a => a.isPreferred) || accionesCodigo[0];
+
+        if (accionElegida.edit) {
+            const aplicado = await vscode.workspace.applyEdit(accionElegida.edit);
+            if (aplicado) {
+                fixesAplicados++;
+            }
+        }
+
+        if (accionElegida.command) {
+            await vscode.commands.executeCommand(accionElegida.command.command, ...(accionElegida.command.arguments || []));
+        }
+    }
+
+    await editor.document.save();
+    await diagnosticProvider.actualizarDiagnosticos(editor.document);
+
+    return fixesAplicados;
 }
 
 /*
