@@ -5,7 +5,7 @@
  */
 
 import * as vscode from 'vscode';
-import {CssVariable, VariableIndex, CacheState, ClassEntry} from '../types';
+import {CssVariable, VariableIndex, CacheState} from '../types';
 import {buscarArchivos, crearFileWatcher, debounce} from '../utils/fileUtils';
 import {parsearDefiniciones} from '../parsers/cssParser';
 import {obtenerConfigService} from './configService';
@@ -31,8 +31,7 @@ export class VariableScanner {
                 ultimaActualizacion: 0,
                 archivosEscaneados: []
             },
-            variablesPorArchivo: new Map(),
-            clasesPorArchivo: new Map()
+            variablesPorArchivo: new Map()
         };
 
         this._onVariablesChange = new vscode.EventEmitter<void>();
@@ -69,8 +68,18 @@ export class VariableScanner {
 
         try {
             const configService = obtenerConfigService();
-            const patrones = configService.obtenerPatronesVariables();
             const excluidos = configService.obtenerPatronesExcluidos();
+
+            /*
+             * Si scanAllFiles está habilitado, escanear TODOS los archivos CSS del proyecto.
+             * Caso contrario, usar solo los patrones de variableFiles.
+             */
+            let patrones: string[];
+            if (configService.debeEscanearTodos()) {
+                patrones = ['**/*.css', '**/*.scss', '**/*.less'];
+            } else {
+                patrones = configService.obtenerPatronesVariables();
+            }
 
             /* Buscar archivos que coincidan con los patrones */
             const archivos = await buscarArchivos(patrones, excluidos);
@@ -78,7 +87,6 @@ export class VariableScanner {
             /* Limpiar caché anterior */
             this._cache.indice.variables.clear();
             this._cache.variablesPorArchivo.clear();
-            this._cache.clasesPorArchivo.clear();
             this._cache.indice.archivosEscaneados = [];
 
             /* Procesar archivos en paralelo para mejor rendimiento */
@@ -120,43 +128,9 @@ export class VariableScanner {
                     this._cache.indice.variables.set(variable.nombre, variable);
                 }
             }
-
-            /* Indexar clases CSS para detección cross-file */
-            this.indexarClases(documento, uri.fsPath);
         } catch (error) {
             console.error(`[CSS Vars Validator] Error procesando ${uri.fsPath}:`, error);
         }
-    }
-
-    /*
-     * Extrae y almacena selectores de clase de un archivo para detección cross-file
-     */
-    private indexarClases(documento: vscode.TextDocument, rutaArchivo: string): void {
-        const texto = documento.getText();
-        const clases: ClassEntry[] = [];
-        /* Regex para bloques CSS: selector { ... } */
-        const bloqueRegex = /([^{}]+)\{/g;
-        let match: RegExpExecArray | null;
-
-        while ((match = bloqueRegex.exec(texto)) !== null) {
-            const selectorCompleto = match[1].trim();
-            /* Separar selectores por coma */
-            const selectores = selectorCompleto.split(',').map(s => s.trim());
-            for (const sel of selectores) {
-                /* Solo indexar selectores que son exactamente una clase simple */
-                if (/^\.[a-zA-Z0-9_-]+$/.test(sel)) {
-                    const pos = documento.positionAt(match.index);
-                    clases.push({
-                        nombre: sel,
-                        archivo: rutaArchivo,
-                        linea: pos.line,
-                        columna: pos.character
-                    });
-                }
-            }
-        }
-
-        this._cache.clasesPorArchivo.set(rutaArchivo, clases);
     }
 
     /*
@@ -267,23 +241,9 @@ export class VariableScanner {
                 ultimaActualizacion: 0,
                 archivosEscaneados: []
             },
-            variablesPorArchivo: new Map(),
-            clasesPorArchivo: new Map()
+            variablesPorArchivo: new Map()
         };
         this._onVariablesChange.fire();
-    }
-
-    /*
-     * Busca si una clase existe en algún archivo distinto al dado
-     * Retorna la primera coincidencia en otro archivo, o undefined
-     */
-    public buscarClaseEnOtroArchivo(nombreClase: string, archivoActual: string): ClassEntry | undefined {
-        for (const [archivo, clases] of this._cache.clasesPorArchivo.entries()) {
-            if (archivo === archivoActual) continue;
-            const encontrada = clases.find(c => c.nombre === nombreClase);
-            if (encontrada) return encontrada;
-        }
-        return undefined;
     }
 
     /*

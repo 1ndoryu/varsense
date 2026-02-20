@@ -67,24 +67,12 @@ export interface HardcodedValue {
 export interface ParseResult {
     /* Variables definidas en el archivo */
     variablesDefinidas: CssVariable[];
-    /* Clases duplicadas detectadas */
-    clasesDuplicadas: DuplicateClass[];
     /* Usos de variables encontrados */
     usosVariables: VariableUsage[];
     /* Valores hardcodeados detectados */
     valoresHardcoded: HardcodedValue[];
     /* Errores de parsing si los hay */
     errores: ParseError[];
-}
-
-/*
- * Clase duplicada detectada
- */
-export interface DuplicateClass {
-    nombre: string;
-    rango: vscode.Range;
-    linea: number;
-    columna: number;
 }
 
 /*
@@ -105,8 +93,6 @@ export interface ExtensionConfig {
     patronesIncluidos: string[];
     deteccionHardcoded: HardcodedDetectionConfig;
     deteccionInline: InlineDetectionConfig;
-    duplicadosHabilitado: boolean;
-    duplicadosCrossFile: boolean;
     sugerenciasContextuales: Record<string, string[]>;
     patronesExcluidos: string[];
     escanearTodosArchivos: boolean;
@@ -167,8 +153,6 @@ export enum DiagnosticType {
     VariableNoDefinida = 'variableNoDefinida',
     ValorHardcoded = 'valorHardcoded',
     FallbackHardcoded = 'fallbackHardcoded',
-    ClaseDuplicada = 'claseDuplicada',
-    ClaseDuplicadaCrossFile = 'claseDuplicadaCrossFile',
     CssInlineReact = 'cssInlineReact'
 }
 
@@ -182,18 +166,6 @@ export interface CacheState {
     indice: VariableIndex;
     /* Map de archivo a sus variables para invalidación parcial */
     variablesPorArchivo: Map<string, CssVariable[]>;
-    /* Índice de clases CSS por archivo para detección cross-file */
-    clasesPorArchivo: Map<string, ClassEntry[]>;
-}
-
-/*
- * Entrada de clase CSS indexada para detección cross-file
- */
-export interface ClassEntry {
-    nombre: string;
-    archivo: string;
-    linea: number;
-    columna: number;
 }
 
 /*

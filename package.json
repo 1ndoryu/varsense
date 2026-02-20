@@ -254,7 +254,7 @@
                 "cssVarsValidator.scanAllFiles": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Escanear todos los archivos CSS en busca de variables (más lento)"
+                    "description": "Escanear todos los archivos CSS del workspace en busca de definiciones de variables (más lento pero completo). Si está desactivado, solo se escanean los archivos que coinciden con variableFiles."
                 },
                 "cssVarsValidator.inlineDetection.enabled": {
                     "type": "boolean",
@@ -266,16 +266,6 @@
                     "default": "error",
                     "enum": ["error", "warning", "information", "hint"],
                     "description": "Severidad para CSS inline detectado en React"
-                },
-                "cssVarsValidator.duplicateClassDetection.enabled": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Habilitar detección de clases CSS duplicadas (intra-archivo y cross-file)"
-                },
-                "cssVarsValidator.duplicateClassDetection.crossFile": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Detectar clases CSS duplicadas entre archivos distintos"
                 }
             }
         }

@@ -41,19 +41,15 @@ Extensión de VS Code para validación y gestión de variables CSS. Detecta erro
   - variables no definidas (cuando hay sugerencia)
 - Guarda archivos automáticamente y re-escanea al finalizar
 
-### ♻️ Detección de Clases Duplicadas Cross-file
-- Indexa clases por archivo en caché del scanner
-- Detecta clases duplicadas en archivos distintos
-- Reporta warning con archivo y línea de la definición previa
-
 ### ⚛️ Detección de CSS Inline en React
 - Soporte para TSX/JSX (`style={{...}}` y `style={variable}`)
 - Diagnóstico configurable por severidad
 - Mensaje estándar: `CSS inline detectado — usa clases CSS con variables`
 
-### 📌 Variables Locales Válidas
-- Si una variable se define en el mismo archivo, se considera válida
-- La validación combina variables globales + locales para evitar falsos positivos
+### 🗂️ Escaneo Completo de Variables
+- Opción `scanAllFiles` para escanear TODOS los archivos CSS del workspace en busca de definiciones
+- Cuando está desactivado, solo se escanean archivos que coinciden con `variableFiles`
+- Útil para proyectos donde las variables están distribuidas en múltiples archivos
 
 ## Instalación
 
@@ -114,7 +110,14 @@ Agrega estas opciones a tu `settings.json`:
     "**/node_modules/**",
     "**/vendor/**",
     "**/*.min.css"
-  ]
+  ],
+  
+  // Escanear TODOS los archivos CSS para variables (más lento)
+  "cssVarsValidator.scanAllFiles": false,
+  
+  // Detección de CSS inline en React
+  "cssVarsValidator.inlineDetection.enabled": true,
+  "cssVarsValidator.inlineDetection.severity": "error"
 }
 ```
 

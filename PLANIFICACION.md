@@ -273,12 +273,8 @@ opcion b
 - [x] Forzar re-escaneo completo
 - [x] Registrar en package.json como `cssVarsValidator.clearCache`
 
-#### 7.3 Clases duplicadas cross-file
-- [x] Agregar índice de clases al scanner (`clasesPorArchivo: Map<string, {archivo, linea}>`)
-- [x] Al parsear cada archivo CSS, extraer selectores de clase y indexarlos
-- [x] En diagnosticProvider, al encontrar una clase que ya existe en OTRO archivo, marcar warning
-- [x] Excluir del chequeo clases como `:root`, `*`, `body`, `html` (son globales legítimas)
-- [ ] Quick fix: "Ir a definición original en {archivo}"
+#### 7.3 Clases duplicadas cross-file — DESACTIVADO PERMANENTEMENTE
+> Funcionalidad desactivada porque no funcionaba correctamente. Código eliminado del codebase.
 
 #### 7.4 Detección CSS inline en React (TSX/JSX)
 - [x] Agregar `typescriptreact` y `javascriptreact` a activationEvents en package.json
@@ -288,9 +284,8 @@ opcion b
 - [x] Configuración: `cssVarsValidator.inlineDetection.enabled` (default: true)
 - [x] Configuración: `cssVarsValidator.inlineDetection.severity` (default: error)
 
-#### 7.5 Variables locales en archivo (verificación)
-- [x] Ya funcional: `diagnosticProvider.ts` crea Set de `variablesLocales` y verifica contra global + local
-- [x] Documentar en README que variables definidas en el mismo archivo son válidas
+#### 7.5 Variables locales en archivo — DESACTIVADO PERMANENTEMENTE
+> Funcionalidad de `variablesLocales` desactivada porque causaba comportamiento inconsistente. La validación ahora solo usa el índice global del scanner. `scanAllFiles` cableado para compensar.
 
 #### 7.6 Auto-fix masivo de CSS
 - [x] Registrar comando `cssVarsValidator.autoFixAllCss` en package.json
@@ -348,3 +343,10 @@ opcion b
 - Regex de detección mejorada: múltiples declaraciones por línea y minificados
 - Sistema de metadatos refactorizado: WeakMap en vez de hack con .data
 - Variables no usadas eliminadas para código más limpio
+
+### Correcciones Aplicadas (v2.1.0) — 20 feb 2026
+- [scanAllFiles]: Config existía en package.json pero NO estaba cableada en el scanner. Ahora funcional: cuando `true`, escanea `**/*.css`, `**/*.scss`, `**/*.less` completos.
+- [Duplicados]: Detección de clases duplicadas eliminada completamente (intra-file + cross-file). No funcionaba correctamente. Se eliminó: `DuplicateClass`, `ClassEntry`, `ClaseDuplicada`, `ClaseDuplicadaCrossFile`, `clasesPorArchivo`, `indexarClases`, `buscarClaseEnOtroArchivo`, settings en package.json.
+- [VariablesLocales]: Check de `variablesLocales` eliminado de diagnosticProvider. Causaba inconsistencias. Variables solo se validan contra el índice global. Usar `scanAllFiles: true` si las variables están distribuidas.
+- [tsconfig]: Eliminado `ignoreDeprecations: "6.0"` — ya no soportado en TS 5.9.
+- [README]: Actualizado para reflejar todos los cambios y nuevas opciones de configuración.

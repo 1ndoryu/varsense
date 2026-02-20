@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import {CssVariable, CssDeclaration, CssRule, ParseResult, VariableUsage, HardcodedValue, DuplicateClass} from '../types';
+import {CssVariable, CssDeclaration, CssRule, ParseResult, VariableUsage, HardcodedValue} from '../types';
 import {extraerVariablesDeValor, esDefinicionVariable, obtenerNombreVariable, esValorHardcodeado, extraerValorLimpio, crearUsosVariable} from './valueParser';
 import {esColor} from '../utils/colorUtils';
 import {obtenerConfigService} from '../services/configService';
@@ -45,7 +45,6 @@ export class CssParser {
     public parsear(): ParseResult {
         const resultado: ParseResult = {
             variablesDefinidas: [],
-            clasesDuplicadas: [],
             usosVariables: [],
             valoresHardcoded: [],
             errores: []
@@ -55,31 +54,7 @@ export class CssParser {
             /* Parsear reglas CSS */
             const reglas = this.parsearReglas();
 
-            /* Mapa para detectar duplicados de selectores de clase exactos */
-            const clasesVistas = new Map<string, vscode.Range>();
-
             for (const regla of reglas) {
-                /* Detectar clases duplicadas */
-                const selectores = regla.selector.split(',').map(s => s.trim());
-                for (const selector of selectores) {
-                    /* Solo verificar selectores que son exactamente una clase (e.g. .mi-clase) */
-                    if (/^\.[a-zA-Z0-9_-]+$/.test(selector)) {
-                        const nombreClase = selector;
-
-                        if (clasesVistas.has(nombreClase)) {
-                            const rangoOriginal = clasesVistas.get(nombreClase)!;
-                            resultado.clasesDuplicadas.push({
-                                nombre: nombreClase,
-                                rango: regla.rangoSelector,
-                                linea: regla.rangoSelector.start.line,
-                                columna: regla.rangoSelector.start.character
-                            });
-                        } else {
-                            clasesVistas.set(nombreClase, regla.rangoSelector);
-                        }
-                    }
-                }
-
                 for (const declaracion of regla.declaraciones) {
                     /* Recolectar definiciones de variables */
                     if (declaracion.esDefinicionVariable) {

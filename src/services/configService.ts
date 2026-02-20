@@ -46,8 +46,6 @@ const DEFAULT_CONFIG: ExtensionConfig = {
         habilitado: true,
         severidad: vscode.DiagnosticSeverity.Error
     },
-    duplicadosHabilitado: false,
-    duplicadosCrossFile: true,
     sugerenciasContextuales: {
         'font-size': ['font', 'size', 'fs', 'text', 'tipo'],
         'font-family': ['font', 'family', 'tipo'],
@@ -172,20 +170,6 @@ class ConfigService {
     }
 
     /*
-     * Verifica si la detección de clases duplicadas está habilitada
-     */
-    public estaDeteccionDuplicadosHabilitada(): boolean {
-        return this._config.duplicadosHabilitado;
-    }
-
-    /*
-     * Verifica si la detección cross-file de clases está habilitada
-     */
-    public estaCrossFileHabilitado(): boolean {
-        return this._config.duplicadosCrossFile;
-    }
-
-    /*
      * Obtiene los patrones de exclusión
      */
     public obtenerPatronesExcluidos(): string[] {
@@ -243,14 +227,6 @@ class ConfigService {
             patronesIncluidos: config.get<string[]>('includePatterns', DEFAULT_CONFIG.patronesIncluidos),
             deteccionHardcoded: this.cargarConfigHardcoded(config),
             deteccionInline: this.cargarConfigInline(config),
-            duplicadosHabilitado: config.get<boolean>(
-                'duplicateClassDetection.enabled',
-                DEFAULT_CONFIG.duplicadosHabilitado
-            ),
-            duplicadosCrossFile: config.get<boolean>(
-                'duplicateClassDetection.crossFile',
-                DEFAULT_CONFIG.duplicadosCrossFile
-            ),
             sugerenciasContextuales: config.get<Record<string, string[]>>(
                 'contextualSuggestions',
                 DEFAULT_CONFIG.sugerenciasContextuales

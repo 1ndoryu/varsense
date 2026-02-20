@@ -8,7 +8,7 @@
 
 import * as vscode from 'vscode';
 import {DiagnosticType} from '../types';
-import {ParseResult, DuplicateClass} from '../types';
+import {ParseResult} from '../types';
 import {parsearDocumento} from '../parsers/cssParser';
 import {existeVariable, obtenerScanner} from '../services/variableScanner';
 import {obtenerConfigService} from '../services/configService';
@@ -197,21 +197,6 @@ export class DiagnosticProvider {
             diagnosticos.push(diagnostic);
         }
 
-        /* 3 y 4. Detectar clases duplicadas (si está habilitado) */
-        if (configService.estaDeteccionDuplicadosHabilitada()) {
-            for (const duplicada of resultadoParse.clasesDuplicadas) {
-                const diagnostic = new vscode.Diagnostic(duplicada.rango, `Clase duplicada '${duplicada.nombre}'. Esta clase ya está definida en este archivo.`, vscode.DiagnosticSeverity.Warning);
-                diagnostic.code = DiagnosticType.ClaseDuplicada;
-                diagnostic.source = 'CSS Vars Validator';
-                diagnosticos.push(diagnostic);
-            }
-
-            if (configService.estaCrossFileHabilitado()) {
-                const diagnosticosCrossFile = this.detectarClasesCrossFile(resultadoParse, documento);
-                diagnosticos.push(...diagnosticosCrossFile);
-            }
-        }
-
         /* Establecer diagnósticos */
         this._coleccion.set(documento.uri, diagnosticos);
     }
@@ -223,12 +208,9 @@ export class DiagnosticProvider {
         const diagnosticos: vscode.Diagnostic[] = [];
         const scanner = obtenerScanner();
 
-        /* Crear Set de variables locales para búsqueda rápida */
-        const variablesLocales = new Set(resultadoParse.variablesDefinidas.map(v => v.nombre));
-
         for (const uso of resultadoParse.usosVariables) {
-            /* Verificar si la variable existe (Globalmente O Localmente) */
-            if (!scanner.existeVariable(uso.nombreVariable) && !variablesLocales.has(uso.nombreVariable)) {
+            /* Verificar si la variable existe en el índice global */
+            if (!scanner.existeVariable(uso.nombreVariable)) {
                 const diagnostic = new vscode.Diagnostic(uso.rango, `Variable '${uso.nombreVariable}' no está definida`, vscode.DiagnosticSeverity.Error);
 
                 diagnostic.code = DiagnosticType.VariableNoDefinida;
@@ -236,19 +218,6 @@ export class DiagnosticProvider {
 
                 diagnosticos.push(diagnostic);
             }
-
-            /* Verificar fallback hardcodeado */
-            // Esto ya podría venir en valoresHardcoded si el parser lo detectara así,
-            // pero el parser actual separa 'usosVariables' de 'valoresHardcodeados'.
-            /* Nota: Si el parser ya detectó fallbacks hardcodeados en valoresHardcoded, esto podría duplicar?
-               Revisando cssParser.ts:
-               for (const uso of declaracion.variablesUsadas) {
-                   if (uso.fallback && esValorHardcodeado(uso.fallback)) {
-                       resultado.valoresHardcoded.push(...)
-               }
-               ¡Sí, el parser YA agrega fallbacks hardcodeados a result.valoresHardcoded!
-               Por lo tanto, NO necesitamos verificar fallbacks aquí de nuevo.
-            */
         }
 
         return diagnosticos;
@@ -379,47 +348,6 @@ export class DiagnosticProvider {
             totalArchivosConProblemas: archivosConProblemas.length,
             archivosConProblemas
         };
-    }
-
-    /*
-     * Detecta clases CSS definidas en este archivo que ya existen en otro archivo del proyecto
-     */
-    private detectarClasesCrossFile(resultadoParse: ParseResult, documento: vscode.TextDocument): vscode.Diagnostic[] {
-        const diagnosticos: vscode.Diagnostic[] = [];
-        const scanner = obtenerScanner();
-        const archivoActual = documento.uri.fsPath;
-
-        /* Obtener nombres de clase únicos del archivo actual (de las reglas parseadas) */
-        const texto = documento.getText();
-        const bloqueRegex = /([^{}]+)\{/g;
-        let match: RegExpExecArray | null;
-
-        while ((match = bloqueRegex.exec(texto)) !== null) {
-            const selectorCompleto = match[1].trim();
-            const selectores = selectorCompleto.split(',').map(s => s.trim());
-
-            for (const sel of selectores) {
-                if (/^\.[a-zA-Z0-9_-]+$/.test(sel)) {
-                    const duplicadaEnOtro = scanner.buscarClaseEnOtroArchivo(sel, archivoActual);
-                    if (duplicadaEnOtro) {
-                        const pos = documento.positionAt(match.index);
-                        const rango = new vscode.Range(pos, documento.positionAt(match.index + sel.length));
-                        const archivoCorto = duplicadaEnOtro.archivo.split(/[/\\]/).pop() || duplicadaEnOtro.archivo;
-
-                        const diagnostic = new vscode.Diagnostic(
-                            rango,
-                            `Clase '${sel}' ya definida en '${archivoCorto}' (línea ${duplicadaEnOtro.linea + 1})`,
-                            vscode.DiagnosticSeverity.Warning
-                        );
-                        diagnostic.code = DiagnosticType.ClaseDuplicadaCrossFile;
-                        diagnostic.source = 'CSS Vars Validator';
-                        diagnosticos.push(diagnostic);
-                    }
-                }
-            }
-        }
-
-        return diagnosticos;
     }
 
     /*
