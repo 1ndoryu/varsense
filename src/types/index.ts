@@ -153,7 +153,8 @@ export enum DiagnosticType {
     VariableNoDefinida = 'variableNoDefinida',
     ValorHardcoded = 'valorHardcoded',
     FallbackHardcoded = 'fallbackHardcoded',
-    CssInlineReact = 'cssInlineReact'
+    CssInlineReact = 'cssInlineReact',
+    ClaseHuerfana = 'claseHuerfana'
 }
 
 /*

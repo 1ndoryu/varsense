@@ -56,6 +56,14 @@
             {
                 "command": "cssVarsValidator.clearCache",
                 "title": "CSS Vars: Limpiar Caché"
+            },
+            {
+                "command": "cssVarsValidator.exportReport",
+                "title": "CSS Vars: Exportar Reporte de Errores"
+            },
+            {
+                "command": "cssVarsValidator.scanOrphanClasses",
+                "title": "CSS Vars: Detectar Clases Huerfanas"
             }
         ],
         "configuration": {
@@ -266,6 +274,19 @@
                     "default": "error",
                     "enum": ["error", "warning", "information", "hint"],
                     "description": "Severidad para CSS inline detectado en React"
+                },
+                "cssVarsValidator.orphanClassDetection.minClassLength": {
+                    "type": "number",
+                    "default": 3,
+                    "description": "Longitud minima de nombre de clase para incluir en el analisis de huerfanas"
+                },
+                "cssVarsValidator.orphanClassDetection.excludeClassPatterns": {
+                    "type": "array",
+                    "default": [],
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Patrones regex para excluir nombres de clase del analisis de huerfanas (ej: '^wp-', '^elementor-')"
                 }
             }
         }

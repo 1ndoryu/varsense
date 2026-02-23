@@ -10,6 +10,7 @@ import { crearCompletionProvider } from './providers/completionProvider';
 import { obtenerScanner, escanearVariables } from './services/variableScanner';
 import { obtenerConfigService, estaExtensionHabilitada } from './services/configService';
 import { CssVariable, DiagnosticType } from './types';
+import { escanearClasesHuerfanas, ResultadoClasesHuerfanas } from './services/classScanner';
 
 /*
  * Colección de disposables para limpieza
@@ -17,6 +18,7 @@ import { CssVariable, DiagnosticType } from './types';
 let disposables: vscode.Disposable[] = [];
 let diagnosticProvider: DiagnosticProvider | null = null;
 let canalSalida: vscode.OutputChannel | null = null;
+let coleccionHuerfanas: vscode.DiagnosticCollection | null = null;
 
 /*
  * Función de activación de la extensión
@@ -43,6 +45,9 @@ export async function activate(contexto: vscode.ExtensionContext): Promise<void>
 
         canalSalida = vscode.window.createOutputChannel('CSS Vars Validator');
         contexto.subscriptions.push(canalSalida);
+
+        coleccionHuerfanas = vscode.languages.createDiagnosticCollection('cssVarsOrphanClasses');
+        contexto.subscriptions.push(coleccionHuerfanas);
         
         /* Escanear variables inicialmente */
         await escanearVariablesInicial();
@@ -76,6 +81,12 @@ export function deactivate(): void {
     if (diagnosticProvider) {
         diagnosticProvider.dispose();
         diagnosticProvider = null;
+    }
+
+    /* Limpiar coleccion de huerfanas */
+    if (coleccionHuerfanas) {
+        coleccionHuerfanas.dispose();
+        coleccionHuerfanas = null;
     }
     
     /* Limpiar servicios singleton */
@@ -178,6 +189,20 @@ function registrarComandos(contexto: vscode.ExtensionContext): void {
     contexto.subscriptions.push(
         vscode.commands.registerCommand('cssVarsValidator.clearCache', async () => {
             await comandoLimpiarCache();
+        })
+    );
+
+    /* Comando: Exportar errores a archivo */
+    contexto.subscriptions.push(
+        vscode.commands.registerCommand('cssVarsValidator.exportReport', async () => {
+            await comandoExportarReporte();
+        })
+    );
+
+    /* Comando: Detectar clases CSS huerfanas */
+    contexto.subscriptions.push(
+        vscode.commands.registerCommand('cssVarsValidator.scanOrphanClasses', async () => {
+            await comandoDetectarClasesHuerfanas();
         })
     );
 }
@@ -623,4 +648,226 @@ async function comandoLimpiarCache(): Promise<void> {
             );
         }
     );
+}
+
+/*
+ * Comando: Exportar reporte de errores a archivo markdown
+ * Similar a lo que hace Code Sentinel con .sentinel-report.md
+ */
+async function comandoExportarReporte(): Promise<void> {
+    if (!diagnosticProvider) {
+        vscode.window.showWarningMessage('CSS Vars: Provider de diagnosticos no inicializado.');
+        return;
+    }
+
+    const provider = diagnosticProvider;
+    let resultadoEscaneo: ResultadoEscaneoProyecto | null = null;
+
+    await vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: 'CSS Vars Validator',
+            cancellable: false
+        },
+        async (progress) => {
+            progress.report({ message: 'Escaneando variables...' });
+            await escanearVariables(true);
+
+            progress.report({ message: 'Analizando todos los archivos del proyecto...' });
+            resultadoEscaneo = await provider.escanearTodoElProyecto((actual, total, rutaArchivo) => {
+                const nombreArchivo = rutaArchivo.split(/[/\\]/).pop() || rutaArchivo;
+                progress.report({ message: `Analizando ${actual}/${total}: ${nombreArchivo}` });
+            });
+        }
+    );
+
+    if (!resultadoEscaneo) {
+        return;
+    }
+
+    const resultado = resultadoEscaneo as ResultadoEscaneoProyecto;
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders) {
+        return;
+    }
+
+    const rutaBase = workspaceFolders[0].uri.fsPath.replace(/\\/g, '/');
+    const fecha = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    let contenido = `# VarSense - Reporte de Errores CSS\n\n`;
+    contenido += `**Fecha:** ${fecha}  \n`;
+    contenido += `**Archivos analizados:** ${resultado.totalArchivosAnalizados}  \n`;
+    contenido += `**Archivos con problemas:** ${resultado.totalArchivosConProblemas}  \n`;
+    contenido += `**Total problemas:** ${resultado.totalDiagnosticos}  \n\n`;
+
+    if (resultado.totalDiagnosticos === 0) {
+        contenido += `> Sin problemas detectados. El proyecto esta limpio.\n`;
+    }
+
+    /* Conteos por severidad */
+    let totalErrores = 0;
+    let totalWarnings = 0;
+    let totalInfo = 0;
+    let totalHints = 0;
+
+    for (const archivo of resultado.archivosConProblemas) {
+        totalErrores += archivo.errores;
+        totalWarnings += archivo.warnings;
+        totalInfo += archivo.informacion;
+        totalHints += archivo.hints;
+    }
+
+    contenido += `| Severidad | Cantidad |\n`;
+    contenido += `|-----------|----------|\n`;
+    contenido += `| Error | ${totalErrores} |\n`;
+    contenido += `| Warning | ${totalWarnings} |\n`;
+    contenido += `| Info | ${totalInfo} |\n`;
+    contenido += `| Hint | ${totalHints} |\n\n`;
+
+    /* Detalle por archivo */
+    for (const archivo of resultado.archivosConProblemas) {
+        const rutaRelativa = archivo.ruta.replace(/\\/g, '/').replace(rutaBase + '/', '');
+
+        contenido += `---\n\n`;
+        contenido += `## ${rutaRelativa} (${archivo.total} problemas)\n\n`;
+
+        for (const ejemplo of archivo.ejemplos) {
+            contenido += `- ${ejemplo}\n`;
+        }
+
+        contenido += `\n`;
+    }
+
+    try {
+        const rutaReporte = vscode.Uri.joinPath(workspaceFolders[0].uri, '.varsense-report.md');
+        await vscode.workspace.fs.writeFile(rutaReporte, Buffer.from(contenido, 'utf-8'));
+        const doc = await vscode.workspace.openTextDocument(rutaReporte);
+        await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+        vscode.window.showInformationMessage(
+            `CSS Vars: Reporte exportado a .varsense-report.md (${resultado.totalDiagnosticos} problemas en ${resultado.totalArchivosConProblemas} archivos).`
+        );
+    } catch (error) {
+        vscode.window.showErrorMessage(
+            `CSS Vars: Error al generar reporte — ${error instanceof Error ? error.message : 'Error desconocido'}`
+        );
+    }
+}
+
+/*
+ * Comando: Detectar clases CSS definidas pero no usadas en el proyecto
+ * Escanea todos los CSS para definiciones, cruza con TSX/JSX/PHP/HTML para uso
+ * Muestra diagnosticos en los archivos CSS donde se definen las clases huerfanas
+ */
+async function comandoDetectarClasesHuerfanas(): Promise<void> {
+    if (!coleccionHuerfanas) {
+        vscode.window.showWarningMessage('CSS Vars: Coleccion de diagnosticos de huerfanas no inicializada.');
+        return;
+    }
+
+    const config = vscode.workspace.getConfiguration('cssVarsValidator');
+    const excluidos = config.get<string[]>('excludePatterns', [
+        '**/node_modules/**', '**/vendor/**', '**/*.min.css', '**/dist/**', '**/build/**'
+    ]);
+    const longitudMinima = config.get<number>('orphanClassDetection.minClassLength', 3);
+    const patronesExcluidos = config.get<string[]>('orphanClassDetection.excludeClassPatterns', []);
+
+    let resultado: ResultadoClasesHuerfanas | null = null;
+
+    await vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: 'CSS Vars Validator',
+            cancellable: false
+        },
+        async (progress) => {
+            resultado = await escanearClasesHuerfanas(
+                excluidos,
+                longitudMinima,
+                patronesExcluidos,
+                (fase, actual, total) => {
+                    progress.report({ message: `${fase} (${actual}/${total})` });
+                }
+            );
+        }
+    );
+
+    if (!resultado) {
+        return;
+    }
+
+    const res = resultado as ResultadoClasesHuerfanas;
+
+    /* Crear diagnosticos en los archivos CSS donde se definen las clases huerfanas */
+    coleccionHuerfanas.clear();
+    const diagsPorArchivo = new Map<string, vscode.Diagnostic[]>();
+
+    for (const clase of res.clasesHuerfanas) {
+        const diags = diagsPorArchivo.get(clase.archivo) || [];
+
+        const posInicio = new vscode.Position(clase.linea, clase.columna);
+        /* +1 por el punto del selector .clase */
+        const posFin = new vscode.Position(clase.linea, clase.columna + clase.nombre.length + 1);
+        const rango = new vscode.Range(posInicio, posFin);
+
+        const diag = new vscode.Diagnostic(
+            rango,
+            `Clase CSS '.${clase.nombre}' no se usa en ningun archivo del proyecto`,
+            vscode.DiagnosticSeverity.Information
+        );
+        diag.code = DiagnosticType.ClaseHuerfana;
+        diag.source = 'CSS Vars Validator';
+
+        diags.push(diag);
+        diagsPorArchivo.set(clase.archivo, diags);
+    }
+
+    for (const [archivo, diags] of diagsPorArchivo) {
+        coleccionHuerfanas.set(vscode.Uri.file(archivo), diags);
+    }
+
+    /* Escribir reporte en el output channel */
+    if (canalSalida) {
+        canalSalida.clear();
+        canalSalida.appendLine('=== CSS Vars Validator · Clases CSS Huerfanas ===');
+        canalSalida.appendLine(`Clases definidas: ${res.totalClasesDefinidas}`);
+        canalSalida.appendLine(`Clases usadas: ${res.totalClasesUsadas}`);
+        canalSalida.appendLine(`Clases huerfanas: ${res.totalClasesHuerfanas}`);
+        canalSalida.appendLine(`Archivos CSS analizados: ${res.archivosAnalizadosCss}`);
+        canalSalida.appendLine(`Archivos consumidores analizados: ${res.archivosAnalizadosConsumo}`);
+        canalSalida.appendLine(`Tiempo: ${res.tiempoMs}ms`);
+        canalSalida.appendLine('');
+
+        if (res.clasesHuerfanas.length > 0) {
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            const rutaBase = workspaceFolders ? workspaceFolders[0].uri.fsPath.replace(/\\/g, '/') : '';
+
+            let archivoActual = '';
+            for (const clase of res.clasesHuerfanas) {
+                const rutaRelativa = rutaBase
+                    ? clase.archivo.replace(/\\/g, '/').replace(rutaBase + '/', '')
+                    : clase.archivo;
+
+                if (rutaRelativa !== archivoActual) {
+                    canalSalida.appendLine(`\n--- ${rutaRelativa} ---`);
+                    archivoActual = rutaRelativa;
+                }
+                canalSalida.appendLine(`  L${clase.linea + 1}: .${clase.nombre}  (${clase.selector})`);
+            }
+        } else {
+            canalSalida.appendLine('Sin clases huerfanas detectadas. El proyecto esta limpio.');
+        }
+    }
+
+    /* Mostrar notificacion con resultado */
+    const mensaje = `CSS Vars: ${res.totalClasesHuerfanas} clase(s) huerfana(s) de ${res.totalClasesDefinidas} definida(s) [${res.tiempoMs}ms]`;
+
+    if (res.totalClasesHuerfanas === 0) {
+        vscode.window.showInformationMessage(mensaje);
+    } else {
+        vscode.window.showWarningMessage(mensaje, 'Ver reporte').then(accion => {
+            if (accion === 'Ver reporte' && canalSalida) {
+                canalSalida.show(true);
+            }
+        });
+    }
 }
