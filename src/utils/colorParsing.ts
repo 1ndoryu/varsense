@@ -1,6 +1,4 @@
-/* sentinel-disable-file limite-lineas — parsearColor es una función cohesiva que procesa
- * 10 formatos de color CSS secuencialmente. Dividirla fragmentaría un flujo lineal simple. */
-
+﻿
 /*
  * Detección y parsing de valores de color CSS.
  * Soporta: hex (3/4/6/8), rgb/rgba, hsl/hsla, colores nombrados.

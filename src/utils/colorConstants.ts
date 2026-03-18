@@ -1,6 +1,4 @@
-/* sentinel-disable-file limite-lineas — tabla de datos pura (CSS Named Colors Level 4).
- * No contiene lógica, solo un mapa de referencia que no puede reducirse. */
-
+﻿
 /*
  * Mapa de colores CSS nombrados a valores hexadecimales.
  * Lista completa de colores CSS Level 4.
