@@ -60,6 +60,55 @@ interface DiagnosticMetadata {
 const diagnosticMetadataMap = new WeakMap<vscode.Diagnostic, DiagnosticMetadata>();
 
 /*
+ * Parsea comentarios de supresión VarSense en el documento.
+ * Soporta:
+ *   /* varsense-disable-line *\/    → suprime diagnósticos en esa línea
+ *   /* varsense-disable-next-line *\/ → suprime diagnósticos en la línea siguiente
+ *   /* varsense-disable *\/  ...  /* varsense-enable *\/ → suprime un bloque
+ *
+ * El orden de las comprobaciones importa: las variantes más específicas
+ * (disable-next-line, disable-line) se evalúan antes que la genérica (disable)
+ * para evitar coincidencias parciales.
+ */
+function parsearSupresiones(documento: vscode.TextDocument): Set<number> {
+    const lineasSuprimidas = new Set<number>();
+    const totalLineas = documento.lineCount;
+    let enBloqueDeshabilitado = false;
+
+    for (let i = 0; i < totalLineas; i++) {
+        const textoLinea = documento.lineAt(i).text;
+
+        if (textoLinea.includes('varsense-disable-next-line')) {
+            if (i + 1 < totalLineas) {
+                lineasSuprimidas.add(i + 1);
+            }
+            continue;
+        }
+
+        if (textoLinea.includes('varsense-enable')) {
+            enBloqueDeshabilitado = false;
+            continue;
+        }
+
+        if (textoLinea.includes('varsense-disable-line')) {
+            lineasSuprimidas.add(i);
+            continue;
+        }
+
+        if (textoLinea.includes('varsense-disable')) {
+            enBloqueDeshabilitado = true;
+            continue;
+        }
+
+        if (enBloqueDeshabilitado) {
+            lineasSuprimidas.add(i);
+        }
+    }
+
+    return lineasSuprimidas;
+}
+
+/*
  * Provider de diagnósticos
  */
 export class DiagnosticProvider {
@@ -197,8 +246,13 @@ export class DiagnosticProvider {
             diagnosticos.push(diagnostic);
         }
 
-        /* Establecer diagnósticos */
-        this._coleccion.set(documento.uri, diagnosticos);
+        /* Filtrar diagnósticos suprimidos por comentarios varsense-disable */
+        const lineasSuprimidas = parsearSupresiones(documento);
+        const diagnosticosFiltrados = lineasSuprimidas.size > 0
+            ? diagnosticos.filter(d => !lineasSuprimidas.has(d.range.start.line))
+            : diagnosticos;
+
+        this._coleccion.set(documento.uri, diagnosticosFiltrados);
     }
 
     /*
