@@ -246,6 +246,15 @@ export class DiagnosticProvider {
             diagnosticos.push(diagnostic);
         }
 
+        /* 3. Detectar propiedades prohibidas (ej: box-shadow) */
+        for (const prohibida of resultadoParse.propiedadesProhibidas) {
+            const severidad = configService.obtenerConfigProhibidas().severidad;
+            const diagnostic = new vscode.Diagnostic(prohibida.rango, `Propiedad prohibida '${prohibida.propiedad}' — eliminar o reemplazar con alternativa permitida`, severidad);
+            diagnostic.code = DiagnosticType.PropiedadProhibida;
+            diagnostic.source = 'CSS Vars Validator';
+            diagnosticos.push(diagnostic);
+        }
+
         /* Filtrar diagnósticos suprimidos por comentarios varsense-disable */
         const lineasSuprimidas = parsearSupresiones(documento);
         const diagnosticosFiltrados = lineasSuprimidas.size > 0

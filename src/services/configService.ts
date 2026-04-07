@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import { ExtensionConfig, HardcodedDetectionConfig, InlineDetectionConfig, SEVERITY_MAP } from '../types';
+import { ExtensionConfig, HardcodedDetectionConfig, InlineDetectionConfig, BannedPropertyConfig, SEVERITY_MAP } from '../types';
 
 /*
  * Nombre de la sección de configuración en VS Code
@@ -45,6 +45,11 @@ const DEFAULT_CONFIG: ExtensionConfig = {
     deteccionInline: {
         habilitado: true,
         severidad: vscode.DiagnosticSeverity.Error
+    },
+    deteccionPropiedadesProhibidas: {
+        habilitado: true,
+        severidad: vscode.DiagnosticSeverity.Warning,
+        propiedades: ['box-shadow']
     },
     sugerenciasContextuales: {
         'font-size': ['font', 'size', 'fs', 'text', 'tipo'],
@@ -170,6 +175,13 @@ class ConfigService {
     }
 
     /*
+     * Obtiene la configuración de detección de propiedades prohibidas
+     */
+    public obtenerConfigProhibidas(): BannedPropertyConfig {
+        return this._config.deteccionPropiedadesProhibidas;
+    }
+
+    /*
      * Obtiene los patrones de exclusión
      */
     public obtenerPatronesExcluidos(): string[] {
@@ -227,6 +239,7 @@ class ConfigService {
             patronesIncluidos: config.get<string[]>('includePatterns', DEFAULT_CONFIG.patronesIncluidos),
             deteccionHardcoded: this.cargarConfigHardcoded(config),
             deteccionInline: this.cargarConfigInline(config),
+            deteccionPropiedadesProhibidas: this.cargarConfigProhibidas(config),
             sugerenciasContextuales: config.get<Record<string, string[]>>(
                 'contextualSuggestions',
                 DEFAULT_CONFIG.sugerenciasContextuales
@@ -273,6 +286,26 @@ class ConfigService {
                 DEFAULT_CONFIG.deteccionInline.habilitado
             ),
             severidad
+        };
+    }
+
+    /*
+     * Carga la configuración de detección de propiedades prohibidas
+     */
+    private cargarConfigProhibidas(config: vscode.WorkspaceConfiguration): BannedPropertyConfig {
+        const severidadStr = config.get<string>('bannedProperties.severity', 'warning');
+        const severidad = SEVERITY_MAP[severidadStr] ?? vscode.DiagnosticSeverity.Warning;
+
+        return {
+            habilitado: config.get<boolean>(
+                'bannedProperties.enabled',
+                DEFAULT_CONFIG.deteccionPropiedadesProhibidas.habilitado
+            ),
+            severidad,
+            propiedades: config.get<string[]>(
+                'bannedProperties.properties',
+                DEFAULT_CONFIG.deteccionPropiedadesProhibidas.propiedades
+            )
         };
     }
     

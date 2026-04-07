@@ -71,6 +71,8 @@ export interface ParseResult {
     usosVariables: VariableUsage[];
     /* Valores hardcodeados detectados */
     valoresHardcoded: HardcodedValue[];
+    /* Propiedades prohibidas detectadas (ej: box-shadow) */
+    propiedadesProhibidas: BannedPropertyUsage[];
     /* Errores de parsing si los hay */
     errores: ParseError[];
 }
@@ -93,6 +95,7 @@ export interface ExtensionConfig {
     patronesIncluidos: string[];
     deteccionHardcoded: HardcodedDetectionConfig;
     deteccionInline: InlineDetectionConfig;
+    deteccionPropiedadesProhibidas: BannedPropertyConfig;
     sugerenciasContextuales: Record<string, string[]>;
     patronesExcluidos: string[];
     escanearTodosArchivos: boolean;
@@ -154,7 +157,8 @@ export enum DiagnosticType {
     ValorHardcoded = 'valorHardcoded',
     FallbackHardcoded = 'fallbackHardcoded',
     CssInlineReact = 'cssInlineReact',
-    ClaseHuerfana = 'claseHuerfana'
+    ClaseHuerfana = 'claseHuerfana',
+    PropiedadProhibida = 'propiedadProhibida'
 }
 
 /*
@@ -308,3 +312,25 @@ export const SEVERITY_MAP: Record<string, vscode.DiagnosticSeverity> = {
     information: vscode.DiagnosticSeverity.Information,
     hint: vscode.DiagnosticSeverity.Hint
 };
+
+/*
+ * Uso de una propiedad CSS prohibida detectado
+ */
+export interface BannedPropertyUsage {
+    propiedad: string;
+    valor: string;
+    archivo: string;
+    linea: number;
+    columna: number;
+    rango: vscode.Range;
+}
+
+/*
+ * Configuración para detección de propiedades CSS prohibidas
+ */
+export interface BannedPropertyConfig {
+    habilitado: boolean;
+    severidad: vscode.DiagnosticSeverity;
+    /* Lista de propiedades prohibidas (ej: ['box-shadow', 'text-shadow']) */
+    propiedades: string[];
+}

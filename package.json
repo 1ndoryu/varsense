@@ -275,6 +275,27 @@
                     "enum": ["error", "warning", "information", "hint"],
                     "description": "Severidad para CSS inline detectado en React"
                 },
+                "cssVarsValidator.bannedProperties.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Detectar propiedades CSS prohibidas (ej: box-shadow)"
+                },
+                "cssVarsValidator.bannedProperties.severity": {
+                    "type": "string",
+                    "default": "warning",
+                    "enum": ["error", "warning", "information", "hint"],
+                    "description": "Severidad para propiedades CSS prohibidas"
+                },
+                "cssVarsValidator.bannedProperties.properties": {
+                    "type": "array",
+                    "default": [
+                        "box-shadow"
+                    ],
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Lista de propiedades CSS prohibidas que serán marcadas"
+                },
                 "cssVarsValidator.orphanClassDetection.minClassLength": {
                     "type": "number",
                     "default": 3,

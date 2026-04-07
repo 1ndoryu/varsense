@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import {CssVariable, CssDeclaration, CssRule, ParseResult, VariableUsage, HardcodedValue} from '../types';
+import {CssVariable, CssDeclaration, CssRule, ParseResult, VariableUsage, HardcodedValue, BannedPropertyUsage} from '../types';
 import {extraerVariablesDeValor, esDefinicionVariable, obtenerNombreVariable, esValorHardcodeado, extraerValorLimpio, crearUsosVariable} from './valueParser';
 import {esColor} from '../utils/colorUtils';
 import {obtenerConfigService} from '../services/configService';
@@ -47,6 +47,7 @@ export class CssParser {
             variablesDefinidas: [],
             usosVariables: [],
             valoresHardcoded: [],
+            propiedadesProhibidas: [],
             errores: []
         };
 
@@ -95,6 +96,10 @@ export class CssParser {
             /* Detectar valores hardcodeados en propiedades configuradas */
             const hardcoded = this.detectarHardcodeados(reglas);
             resultado.valoresHardcoded.push(...hardcoded);
+
+            /* Detectar propiedades prohibidas (ej: box-shadow) */
+            const prohibidas = this.detectarPropiedadesProhibidas(reglas);
+            resultado.propiedadesProhibidas.push(...prohibidas);
         } catch (error) {
             resultado.errores.push({
                 mensaje: `Error parseando CSS: ${error instanceof Error ? error.message : 'Error desconocido'}`,
@@ -261,6 +266,46 @@ export class CssParser {
         }
 
         return hardcodeados;
+    }
+
+    /*
+     * Detecta propiedades CSS prohibidas según la configuración
+     * Ejemplo: box-shadow está prohibido en proyectos que no usan sombras
+     */
+    private detectarPropiedadesProhibidas(reglas: CssRule[]): BannedPropertyUsage[] {
+        const detectadas: BannedPropertyUsage[] = [];
+        const configService = obtenerConfigService();
+        const configProhibidas = configService.obtenerConfigProhibidas();
+
+        if (!configProhibidas.habilitado || configProhibidas.propiedades.length === 0) {
+            return detectadas;
+        }
+
+        const propiedadesSet = new Set(configProhibidas.propiedades.map(p => p.toLowerCase()));
+
+        for (const regla of reglas) {
+            for (const declaracion of regla.declaraciones) {
+                if (declaracion.esDefinicionVariable) {
+                    continue;
+                }
+
+                if (propiedadesSet.has(declaracion.propiedad.toLowerCase())) {
+                    detectadas.push({
+                        propiedad: declaracion.propiedad,
+                        valor: declaracion.valor,
+                        archivo: this._documento.uri.fsPath,
+                        linea: declaracion.rangoPropiedad.start.line,
+                        columna: declaracion.rangoPropiedad.start.character,
+                        rango: new vscode.Range(
+                            declaracion.rangoPropiedad.start,
+                            declaracion.rangoValor.end
+                        )
+                    });
+                }
+            }
+        }
+
+        return detectadas;
     }
 
     /*
