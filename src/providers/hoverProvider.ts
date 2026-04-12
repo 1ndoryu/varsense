@@ -145,26 +145,25 @@ export class HoverProvider implements vscode.HoverProvider {
     
     /*
      * Busca variables con nombres similares
+     * [124A-AUDIT1] Usa top-N acotado en vez de recolectar todas las coincidencias
+     * y luego ordenar/slice. Evita arrays de miles de entradas en proyectos grandes.
      */
     private buscarVariablesSimilares(
         nombreBuscado: string,
         todasVariables: Array<{ nombre: string }>
     ): string[] {
         const nombreLower = nombreBuscado.toLowerCase();
-        const palabras = nombreLower.replace('--', '').split('-');
-        
-        const coincidencias: Array<{ nombre: string; puntuacion: number }> = [];
+        const palabras = nombreLower.replace('--', '').split('-').filter(p => p.length >= 2);
+        const TOP_N = 3;
+        const mejores: Array<{ nombre: string; puntuacion: number }> = [];
+        let minPuntuacion = 0;
         
         for (const variable of todasVariables) {
             const varNombre = variable.nombre.toLowerCase();
             let puntuacion = 0;
             
-            /* Verificar palabras en común */
             const varPalabras = varNombre.replace('--', '').split('-');
             for (const palabra of palabras) {
-                if (palabra.length < 2) {
-                    continue;
-                }
                 for (const varPalabra of varPalabras) {
                     if (varPalabra.includes(palabra) || palabra.includes(varPalabra)) {
                         puntuacion += 10;
@@ -172,19 +171,22 @@ export class HoverProvider implements vscode.HoverProvider {
                 }
             }
             
-            /* Verificar si comienza igual */
             if (varNombre.startsWith(nombreLower.substring(0, 5))) {
                 puntuacion += 5;
             }
             
-            if (puntuacion > 0) {
-                coincidencias.push({ nombre: variable.nombre, puntuacion });
+            if (puntuacion > minPuntuacion) {
+                mejores.push({ nombre: variable.nombre, puntuacion });
+                if (mejores.length > TOP_N) {
+                    mejores.sort((a, b) => b.puntuacion - a.puntuacion);
+                    mejores.length = TOP_N;
+                    minPuntuacion = mejores[mejores.length - 1].puntuacion;
+                }
             }
         }
         
-        return coincidencias
+        return mejores
             .sort((a, b) => b.puntuacion - a.puntuacion)
-            .slice(0, 3)
             .map(c => c.nombre);
     }
 }

@@ -31,11 +31,9 @@ const COMMENT_REGEX = /\/\*[\s\S]*?\*\//g;
 export class CssParser {
     private _documento: vscode.TextDocument;
     private _textoSinComentarios: string;
-    private _mapaOffsets: Map<number, number>;
 
     constructor(documento: vscode.TextDocument) {
         this._documento = documento;
-        this._mapaOffsets = new Map();
         this._textoSinComentarios = this.eliminarComentarios(documento.getText());
     }
 

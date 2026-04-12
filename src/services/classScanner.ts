@@ -118,13 +118,19 @@ async function escanearDefinicionesCss(
 }
 
 /*
- * Extrae todos los tokens (identificadores con guiones) de archivos consumidores
- * Incluye TSX, JSX, TS, JS, PHP, HTML para cubrir todos los patrones de uso:
- * - className="clase" (TSX/JSX)
- * - class="clase" (PHP/HTML)
- * - constantes de clase en archivos TS/JS auxiliares
- * Retorna un Set para busqueda O(1) por token
+ * [124A-AUDIT1] Extrae tokens de clase CSS de archivos consumidores.
+ * Solo extrae de atributos class/className para evitar explosión de RAM
+ * al extraer TODOS los identificadores de cada archivo.
+ * Incluye TSX, JSX, TS, JS, PHP, HTML.
+ * Retorna un Set para busqueda O(1) por token.
  */
+
+/* Regex precompiladas a nivel de módulo para evitar recreación por archivo */
+const REGEX_CLASS_ATTR = /(?:className|class)\s*=\s*["']([^"']+)["']/g;
+const REGEX_CLASS_TEMPLATE = /(?:className|class)\s*=\s*\{[`]([^`]+)[`]\}/g;
+const REGEX_TOKEN = /[a-zA-Z_][\w-]+/g;
+const MAX_TOKENS = 10000;
+
 async function extraerTokensConsumidores(
     excluidos: string[]
 ): Promise<{ tokens: Set<string>; totalArchivos: number }> {
@@ -147,18 +153,32 @@ async function extraerTokensConsumidores(
     }
 
     const tokens = new Set<string>();
-    const regexToken = /[a-zA-Z_][\w-]*/g;
 
     for (const uri of urisUnicos.values()) {
+        if (tokens.size >= MAX_TOKENS) { break; }
+
         try {
             const doc = await vscode.workspace.openTextDocument(uri);
             const texto = doc.getText();
 
+            /* Extraer solo de class/className atributos */
             let match: RegExpExecArray | null;
-            while ((match = regexToken.exec(texto)) !== null) {
-                tokens.add(match[0]);
+
+            REGEX_CLASS_ATTR.lastIndex = 0;
+            while ((match = REGEX_CLASS_ATTR.exec(texto)) !== null) {
+                for (const clase of match[1].split(/\s+/)) {
+                    if (clase.length > 1) { tokens.add(clase); }
+                }
             }
-            regexToken.lastIndex = 0;
+
+            REGEX_CLASS_TEMPLATE.lastIndex = 0;
+            while ((match = REGEX_CLASS_TEMPLATE.exec(texto)) !== null) {
+                REGEX_TOKEN.lastIndex = 0;
+                let tokenMatch: RegExpExecArray | null;
+                while ((tokenMatch = REGEX_TOKEN.exec(match[1])) !== null) {
+                    tokens.add(tokenMatch[0]);
+                }
+            }
         } catch {
             /* Ignorar archivos que no se pueden abrir */
         }

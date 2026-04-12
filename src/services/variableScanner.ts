@@ -89,9 +89,14 @@ export class VariableScanner {
             this._cache.variablesPorArchivo.clear();
             this._cache.indice.archivosEscaneados = [];
 
-            /* Procesar archivos en paralelo para mejor rendimiento */
-            const promesas = archivos.map(uri => this.procesarArchivo(uri));
-            await Promise.all(promesas);
+            /* [124A-AUDIT1] Procesar archivos con concurrencia limitada para evitar
+             * exhaustar file descriptors y generar memory spikes.
+             * Antes: Promise.all(archivos.map(...)) sin límite */
+            const MAX_CONCURRENT = 10;
+            for (let i = 0; i < archivos.length; i += MAX_CONCURRENT) {
+                const lote = archivos.slice(i, i + MAX_CONCURRENT);
+                await Promise.all(lote.map(uri => this.procesarArchivo(uri)));
+            }
 
             /* Actualizar metadata del caché */
             this._cache.indice.ultimaActualizacion = Date.now();

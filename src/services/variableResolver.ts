@@ -13,6 +13,9 @@ import { esColor, parsearColor } from '../utils/colorUtils';
  */
 const MAX_RESOLUCION_PROFUNDIDAD = 10;
 
+/* [124A-AUDIT1] Límite de caché para evitar crecimiento ilimitado en sesiones largas */
+const MAX_CACHE_ENTRIES = 200;
+
 /*
  * Clase para resolver variables CSS
  */
@@ -51,6 +54,14 @@ export class VariableResolver {
         }
         
         const resultado = this.resolverRecursivo(nombreVariable, [], 0);
+        
+        /* [124A-AUDIT1] Evicción LRU simple: borrar entrada más antigua si excede límite */
+        if (this._cacheResolucion.size >= MAX_CACHE_ENTRIES) {
+            const primeraKey = this._cacheResolucion.keys().next().value;
+            if (primeraKey) {
+                this._cacheResolucion.delete(primeraKey);
+            }
+        }
         
         /* Cachear resultado */
         this._cacheResolucion.set(nombreVariable, resultado);

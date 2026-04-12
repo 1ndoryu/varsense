@@ -20,6 +20,13 @@ import {esLenguajeSoportado, debounce, coincideConPatron} from '../utils/fileUti
 const LENGUAJES_REACT = ['typescriptreact', 'javascriptreact'];
 
 /*
+ * [124A-AUDIT1] Regex precompiladas para detección de inline CSS React.
+ * Antes se recreaban en cada llamada a detectarInlineCssReact (por keystroke).
+ */
+const REGEX_STYLE_OBJ = /style\s*=\s*\{\s*\{/g;
+const REGEX_STYLE_VAR = /style\s*=\s*\{(?!\s*\{)([^}]+)\}/g;
+
+/*
  * Nombre de la colección de diagnósticos
  */
 const DIAGNOSTIC_COLLECTION_NAME = 'cssVarsValidator';
@@ -180,10 +187,17 @@ export class DiagnosticProvider {
             })
         );
 
+        /* [124A-AUDIT1] Debounce para evitar event storm cuando muchos archivos cambian
+         * Variables changing fires once per file update; without debounce 50 file changes
+         * would trigger 50 × (all open docs) update cycles */
+        const actualizarTodosDebounced = debounce(() => {
+            void this.actualizarTodosDocumentos();
+        }, 1000);
+
         /* Actualizar todos los documentos cuando cambian las variables */
         this._disposables.push(
             obtenerScanner().onVariablesChange(() => {
-                void this.actualizarTodosDocumentos();
+                actualizarTodosDebounced();
             })
         );
 
@@ -428,10 +442,10 @@ export class DiagnosticProvider {
         const texto = documento.getText();
 
         /* Patrón 1: style={{ ... }} — objeto literal inline */
-        const styleObjRegex = /style\s*=\s*\{\s*\{/g;
+        REGEX_STYLE_OBJ.lastIndex = 0;
         let match: RegExpExecArray | null;
 
-        while ((match = styleObjRegex.exec(texto)) !== null) {
+        while ((match = REGEX_STYLE_OBJ.exec(texto)) !== null) {
             /* Encontrar el cierre correspondiente */
             let profundidad = 2; /* ya abrimos {{ */
             let i = match.index + match[0].length;
@@ -457,9 +471,9 @@ export class DiagnosticProvider {
         }
 
         /* Patrón 2: style={variable} — variable que contiene estilos */
-        const styleVarRegex = /style\s*=\s*\{(?!\s*\{)([^}]+)\}/g;
+        REGEX_STYLE_VAR.lastIndex = 0;
 
-        while ((match = styleVarRegex.exec(texto)) !== null) {
+        while ((match = REGEX_STYLE_VAR.exec(texto)) !== null) {
             /* Verificar que no sea un ternario o expresión compleja con className */
             const contenido = match[1].trim();
 
