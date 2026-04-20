@@ -5,11 +5,11 @@
  */
 
 import * as vscode from 'vscode';
-import { encontrarVariableEnPosicion } from '../parsers/cssParser';
-import { obtenerVariable, obtenerScanner } from '../services/variableScanner';
-import { obtenerResolver } from '../services/variableResolver';
-import { parsearColor, generarMarkdownColor } from '../utils/colorUtils';
-import { obtenerRutaRelativa } from '../utils/fileUtils';
+import { encontrarVariableEnPosicion } from '@/parsers/cssParser';
+import { VariableScanner } from '@/services/variableScanner';
+import { obtenerResolver } from '@/services/variableResolver';
+import { parsearColor, generarMarkdownColor } from '@/utils/colorUtils';
+import { obtenerRutaRelativa } from '@/utils/fileUtils';
 
 /*
  * Provider de hover para CSS
@@ -34,7 +34,7 @@ export class HoverProvider implements vscode.HoverProvider {
         const { nombre, rango } = variableEnPosicion;
         
         /* Obtener información de la variable */
-        const variable = obtenerVariable(nombre);
+        const variable = VariableScanner.obtenerInstancia().obtenerVariable(nombre);
         
         if (!variable) {
             /* Variable no encontrada - mostrar mensaje de error */
@@ -126,68 +126,17 @@ export class HoverProvider implements vscode.HoverProvider {
         md.appendMarkdown(`### ⚠️ Variable No Encontrada\n\n`);
         md.appendMarkdown(`La variable \`${nombreVariable}\` no está definida en ninguno de los archivos de variables configurados.\n\n`);
         
-        /* Sugerir variables similares */
-        const scanner = obtenerScanner();
-        const todasVariables = scanner.obtenerTodasVariables();
-        
-        /* Buscar variables con nombres similares */
-        const similares = this.buscarVariablesSimilares(nombreVariable, todasVariables);
+        /* Sugerir variables similares usando el scanner */
+        const similares = VariableScanner.obtenerInstancia().buscarSimilares(nombreVariable, 3);
         
         if (similares.length > 0) {
             md.appendMarkdown(`**¿Quisiste decir?**\n`);
-            for (const nombre of similares) {
-                md.appendMarkdown(`- \`${nombre}\`\n`);
+            for (const variable of similares) {
+                md.appendMarkdown(`- \`${variable.nombre}\`\n`);
             }
         }
         
         return md;
-    }
-    
-    /*
-     * Busca variables con nombres similares
-     * [124A-AUDIT1] Usa top-N acotado en vez de recolectar todas las coincidencias
-     * y luego ordenar/slice. Evita arrays de miles de entradas en proyectos grandes.
-     */
-    private buscarVariablesSimilares(
-        nombreBuscado: string,
-        todasVariables: Array<{ nombre: string }>
-    ): string[] {
-        const nombreLower = nombreBuscado.toLowerCase();
-        const palabras = nombreLower.replace('--', '').split('-').filter(p => p.length >= 2);
-        const TOP_N = 3;
-        const mejores: Array<{ nombre: string; puntuacion: number }> = [];
-        let minPuntuacion = 0;
-        
-        for (const variable of todasVariables) {
-            const varNombre = variable.nombre.toLowerCase();
-            let puntuacion = 0;
-            
-            const varPalabras = varNombre.replace('--', '').split('-');
-            for (const palabra of palabras) {
-                for (const varPalabra of varPalabras) {
-                    if (varPalabra.includes(palabra) || palabra.includes(varPalabra)) {
-                        puntuacion += 10;
-                    }
-                }
-            }
-            
-            if (varNombre.startsWith(nombreLower.substring(0, 5))) {
-                puntuacion += 5;
-            }
-            
-            if (puntuacion > minPuntuacion) {
-                mejores.push({ nombre: variable.nombre, puntuacion });
-                if (mejores.length > TOP_N) {
-                    mejores.sort((a, b) => b.puntuacion - a.puntuacion);
-                    mejores.length = TOP_N;
-                    minPuntuacion = mejores[mejores.length - 1].puntuacion;
-                }
-            }
-        }
-        
-        return mejores
-            .sort((a, b) => b.puntuacion - a.puntuacion)
-            .map(c => c.nombre);
     }
 }
 

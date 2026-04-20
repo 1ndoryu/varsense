@@ -6,6 +6,10 @@
     "types": ["node", "vscode"],
     "outDir": "dist",
     "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
     "sourceMap": true,
     "strict": true,
     "esModuleInterop": true,

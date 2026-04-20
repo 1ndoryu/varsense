@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import { ExtensionConfig, HardcodedDetectionConfig, InlineDetectionConfig, BannedPropertyConfig, SEVERITY_MAP } from '../types';
+import { ExtensionConfig, HardcodedDetectionConfig, InlineDetectionConfig, BannedPropertyConfig, SEVERITY_MAP } from '@/types';
 
 /*
  * Nombre de la sección de configuración en VS Code
