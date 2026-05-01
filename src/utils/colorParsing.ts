@@ -1,10 +1,10 @@
-﻿
+
 /*
  * Detección y parsing de valores de color CSS.
  * Soporta: hex (3/4/6/8), rgb/rgba, hsl/hsla, colores nombrados.
  */
 
-import { ColorInfo, ColorFormat } from '../types';
+import { ColorInfo, ColorFormat } from '@/types';
 import { NAMED_COLORS, COLOR_PATTERNS } from './colorConstants';
 import { hexARgb, rgbAHex, hslARgb } from './colorConversion';
 

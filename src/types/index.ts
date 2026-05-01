@@ -304,6 +304,23 @@ export interface VariableSearchResult {
 }
 
 /*
+ * Variable recomendada con una puntuación basada en la similitud
+ */
+export interface ScoredVariable {
+    variable: CssVariable;
+    puntuacion: number;
+}
+
+/*
+ * Estadísticas del escáner de variables
+ */
+export interface ScannerStatistics {
+    totalVariables: number;
+    archivosEscaneados: number;
+    ultimaActualizacion: Date;
+}
+
+/*
  * Mapeo de severidades de string a DiagnosticSeverity
  */
 export const SEVERITY_MAP: Record<string, vscode.DiagnosticSeverity> = {

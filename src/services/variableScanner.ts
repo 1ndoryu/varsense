@@ -5,10 +5,15 @@
  */
 
 import * as vscode from 'vscode';
-import {CssVariable, VariableIndex, CacheState} from '../types';
-import {buscarArchivos, crearFileWatcher, debounce} from '../utils/fileUtils';
-import {parsearDefiniciones} from '../parsers/cssParser';
-import {obtenerConfigService} from './configService';
+import { CssVariable, VariableIndex, CacheState, ScoredVariable, ScannerStatistics } from '@/types';
+import { buscarArchivos, crearFileWatcher, debounce } from '@/utils/fileUtils';
+import { parsearDefiniciones } from '@/parsers/cssParser';
+import { obtenerConfigService } from '@/services/configService';
+
+/*
+ * Patrones glob para escanear todos los archivos CSS del proyecto
+ */
+const PATRONES_CSS_GLOBALES = ['**/*.css', '**/*.scss', '**/*.less'];
 
 /*
  * Clase principal del escáner de variables
@@ -16,28 +21,31 @@ import {obtenerConfigService} from './configService';
  */
 export class VariableScanner {
     private static _instancia: VariableScanner;
-    private _cache: CacheState;
-    private _disposables: vscode.Disposable[] = [];
+
+    /* Constantes de configuración y escaneo */
+    private static readonly MAX_CONCURRENT = 10;
+    private static readonly DEBOUNCE_WATCHER_MS = 500;
+    private static readonly SIMILARITY_EXACT_SCORE = 10;
+    private static readonly SIMILARITY_PREFIX_SCORE = 5;
+    private static readonly SIMILARITY_PREFIX_LENGTH = 5;
+    private static readonly DEFAULT_SUGGESTION_LIMIT = 3;
+    private static readonly MIN_WORD_LENGTH = 2;
+
+    private _cache!: CacheState;
+    private _fileWatcherDisposables: vscode.Disposable[] = [];
+    private _globalDisposables: vscode.Disposable[] = [];
     private _onVariablesChange: vscode.EventEmitter<void>;
     private _escaneando: boolean = false;
 
     public readonly onVariablesChange: vscode.Event<void>;
 
     private constructor() {
-        this._cache = {
-            valido: false,
-            indice: {
-                variables: new Map(),
-                ultimaActualizacion: 0,
-                archivosEscaneados: []
-            },
-            variablesPorArchivo: new Map()
-        };
-
         this._onVariablesChange = new vscode.EventEmitter<void>();
         this.onVariablesChange = this._onVariablesChange.event;
 
-        this.configurarWatchers();
+        this.reiniciarEstadoCache();
+        this.configurarFileWatchers();
+        this.configurarListenersGlobales();
     }
 
     /*
@@ -52,6 +60,8 @@ export class VariableScanner {
 
     /*
      * Escanea todos los archivos de variables configurados
+     * Construye un índice temporal y lo intercambia atómicamente
+     * para evitar que consumidores lean un caché parcialmente vacío
      */
     public async escanear(forzar: boolean = false): Promise<VariableIndex> {
         /* Evitar escaneos concurrentes */
@@ -74,31 +84,30 @@ export class VariableScanner {
              * Si scanAllFiles está habilitado, escanear TODOS los archivos CSS del proyecto.
              * Caso contrario, usar solo los patrones de variableFiles.
              */
-            let patrones: string[];
-            if (configService.debeEscanearTodos()) {
-                patrones = ['**/*.css', '**/*.scss', '**/*.less'];
-            } else {
-                patrones = configService.obtenerPatronesVariables();
-            }
+            const patrones = configService.debeEscanearTodos()
+                ? PATRONES_CSS_GLOBALES
+                : configService.obtenerPatronesVariables();
 
             /* Buscar archivos que coincidan con los patrones */
             const archivos = await buscarArchivos(patrones, excluidos);
 
-            /* Limpiar caché anterior */
-            this._cache.indice.variables.clear();
-            this._cache.variablesPorArchivo.clear();
-            this._cache.indice.archivosEscaneados = [];
+            /* Construir índice temporal para swap atómico */
+            const nuevoIndice: Map<string, CssVariable> = new Map();
+            const nuevoPorArchivo: Map<string, CssVariable[]> = new Map();
 
             /* [124A-AUDIT1] Procesar archivos con concurrencia limitada para evitar
              * exhaustar file descriptors y generar memory spikes.
              * Antes: Promise.all(archivos.map(...)) sin límite */
-            const MAX_CONCURRENT = 10;
-            for (let i = 0; i < archivos.length; i += MAX_CONCURRENT) {
-                const lote = archivos.slice(i, i + MAX_CONCURRENT);
-                await Promise.all(lote.map(uri => this.procesarArchivo(uri)));
+            for (let i = 0; i < archivos.length; i += VariableScanner.MAX_CONCURRENT) {
+                const lote = archivos.slice(i, i + VariableScanner.MAX_CONCURRENT);
+                await Promise.all(lote.map(uri =>
+                    this.procesarArchivoEnIndice(uri, nuevoIndice, nuevoPorArchivo)
+                ));
             }
 
-            /* Actualizar metadata del caché */
+            /* Swap atómico: reemplazar el caché de una sola vez */
+            this._cache.indice.variables = nuevoIndice;
+            this._cache.variablesPorArchivo = nuevoPorArchivo;
             this._cache.indice.ultimaActualizacion = Date.now();
             this._cache.indice.archivosEscaneados = archivos.map(u => u.fsPath);
             this._cache.valido = true;
@@ -106,7 +115,7 @@ export class VariableScanner {
             /* Notificar cambios */
             this._onVariablesChange.fire();
 
-            console.log(`[CSS Vars Validator] Escaneadas ${this._cache.indice.variables.size} variables de ${archivos.length} archivos`);
+            console.log(`[CSS Vars Validator] Escaneadas ${nuevoIndice.size} variables de ${archivos.length} archivos`);
         } catch (error) {
             console.error('[CSS Vars Validator] Error escaneando variables:', error);
         } finally {
@@ -117,20 +126,25 @@ export class VariableScanner {
     }
 
     /*
-     * Procesa un archivo individual y extrae sus variables
+     * Procesa un archivo individual y agrega sus variables a los mapas proporcionados
+     * Usado durante el escaneo completo para construir índice temporal
      */
-    private async procesarArchivo(uri: vscode.Uri): Promise<void> {
+    private async procesarArchivoEnIndice(
+        uri: vscode.Uri,
+        indice: Map<string, CssVariable>,
+        porArchivo: Map<string, CssVariable[]>
+    ): Promise<void> {
         try {
             const documento = await vscode.workspace.openTextDocument(uri);
             const variables = parsearDefiniciones(documento);
 
             /* Guardar variables por archivo para invalidación parcial */
-            this._cache.variablesPorArchivo.set(uri.fsPath, variables);
+            porArchivo.set(uri.fsPath, variables);
 
-            /* Agregar al índice global */
+            /* Agregar al índice global (primera definición gana) */
             for (const variable of variables) {
-                if (!this._cache.indice.variables.has(variable.nombre)) {
-                    this._cache.indice.variables.set(variable.nombre, variable);
+                if (!indice.has(variable.nombre)) {
+                    indice.set(variable.nombre, variable);
                 }
             }
         } catch (error) {
@@ -139,21 +153,18 @@ export class VariableScanner {
     }
 
     /*
-     * Actualiza el caché cuando un archivo cambia
+     * Actualiza el caché cuando un archivo cambia (actualización incremental)
      */
     private async actualizarArchivo(uri: vscode.Uri): Promise<void> {
         /* Eliminar variables antiguas de este archivo */
-        const variablesAnteriores = this._cache.variablesPorArchivo.get(uri.fsPath) || [];
-        for (const variable of variablesAnteriores) {
-            /* Solo eliminar si esta es la fuente de la variable */
-            const varActual = this._cache.indice.variables.get(variable.nombre);
-            if (varActual && varActual.archivo === uri.fsPath) {
-                this._cache.indice.variables.delete(variable.nombre);
-            }
-        }
+        this.eliminarVariablesDeArchivo(uri.fsPath);
 
-        /* Procesar el archivo actualizado */
-        await this.procesarArchivo(uri);
+        /* Procesar el archivo actualizado directamente en el caché vivo */
+        await this.procesarArchivoEnIndice(
+            uri,
+            this._cache.indice.variables,
+            this._cache.variablesPorArchivo
+        );
 
         /* Actualizar timestamp */
         this._cache.indice.ultimaActualizacion = Date.now();
@@ -163,31 +174,52 @@ export class VariableScanner {
     }
 
     /*
-     * Elimina un archivo del caché
+     * Elimina las variables pertenecientes a un archivo del índice
      */
-    private eliminarArchivo(uri: vscode.Uri): void {
-        const variables = this._cache.variablesPorArchivo.get(uri.fsPath);
+    private eliminarVariablesDeArchivo(fsPath: string): void {
+        const variables = this._cache.variablesPorArchivo.get(fsPath);
 
-        if (variables) {
-            for (const variable of variables) {
-                const varActual = this._cache.indice.variables.get(variable.nombre);
-                if (varActual && varActual.archivo === uri.fsPath) {
-                    this._cache.indice.variables.delete(variable.nombre);
-                }
+        if (!variables) {
+            return;
+        }
+
+        for (const variable of variables) {
+            /* Solo eliminar si esta es la fuente actual de la variable */
+            const varActual = this._cache.indice.variables.get(variable.nombre);
+            if (varActual && varActual.archivo === fsPath) {
+                this._cache.indice.variables.delete(variable.nombre);
             }
-
-            this._cache.variablesPorArchivo.delete(uri.fsPath);
-            this._cache.indice.archivosEscaneados = this._cache.indice.archivosEscaneados.filter(f => f !== uri.fsPath);
-
-            /* Notificar cambios */
-            this._onVariablesChange.fire();
         }
     }
 
     /*
-     * Configura watchers para archivos de variables
+     * Elimina un archivo del caché completamente
      */
-    private configurarWatchers(): void {
+    private eliminarArchivo(uri: vscode.Uri): void {
+        const fsPath = uri.fsPath;
+
+        if (!this._cache.variablesPorArchivo.has(fsPath)) {
+            return;
+        }
+
+        this.eliminarVariablesDeArchivo(fsPath);
+        this._cache.variablesPorArchivo.delete(fsPath);
+        this._cache.indice.archivosEscaneados =
+            this._cache.indice.archivosEscaneados.filter(f => f !== fsPath);
+
+        /* Notificar cambios */
+        this._onVariablesChange.fire();
+    }
+
+    /*
+     * Configura watchers para archivos de variables (file system)
+     * Esta función puede ser llamada múltiples veces al cambiar la configuración
+     */
+    private configurarFileWatchers(): void {
+        /* Limpiar watchers previos */
+        this._fileWatcherDisposables.forEach(d => d.dispose());
+        this._fileWatcherDisposables = [];
+
         const configService = obtenerConfigService();
         const patrones = configService.obtenerPatronesVariables();
 
@@ -195,7 +227,7 @@ export class VariableScanner {
         const actualizarDebounced = debounce((...args: unknown[]) => {
             const uri = args[0] as vscode.Uri;
             void this.actualizarArchivo(uri);
-        }, 500);
+        }, VariableScanner.DEBOUNCE_WATCHER_MS);
 
         const watchers = crearFileWatcher(patrones, {
             onCrear: uri => {
@@ -205,25 +237,7 @@ export class VariableScanner {
             onEliminar: uri => this.eliminarArchivo(uri)
         });
 
-        this._disposables.push(...watchers);
-
-        /* Re-configurar watchers cuando cambie la configuración */
-        this._disposables.push(
-            configService.onConfigChange(() => {
-                /* Limpiar watchers existentes */
-                this._disposables.forEach(d => d.dispose());
-                this._disposables = [];
-
-                /* Invalidar caché */
-                this._cache.valido = false;
-
-                /* Re-configurar watchers */
-                this.configurarWatchers();
-
-                /* Re-escanear */
-                void this.escanear(true);
-            })
-        );
+        this._fileWatcherDisposables.push(...watchers);
 
         /* Configurar watcher para Git change (Branch switching) */
         const gitWatcher = vscode.workspace.createFileSystemWatcher('**/.git/HEAD');
@@ -232,13 +246,34 @@ export class VariableScanner {
             this.limpiarCache();
             void this.escanear(true);
         });
-        this._disposables.push(gitWatcher);
+        this._fileWatcherDisposables.push(gitWatcher);
     }
 
     /*
-     * Limpia completamente el caché
+     * Configura listeners globales que solo deben inicializarse una vez
+     * (onConfigChange se suscribe una sola vez y reconfigura los file watchers)
      */
-    public limpiarCache(): void {
+    private configurarListenersGlobales(): void {
+        const configService = obtenerConfigService();
+
+        this._globalDisposables.push(
+            configService.onConfigChange(() => {
+                /* Invalidar caché */
+                this._cache.valido = false;
+
+                /* Re-configurar solo los file watchers */
+                this.configurarFileWatchers();
+
+                /* Re-escanear */
+                void this.escanear(true);
+            })
+        );
+    }
+
+    /*
+     * Reinicia el estado interno del caché
+     */
+    private reiniciarEstadoCache(): void {
         this._cache = {
             valido: false,
             indice: {
@@ -248,6 +283,13 @@ export class VariableScanner {
             },
             variablesPorArchivo: new Map()
         };
+    }
+
+    /*
+     * Limpia completamente el caché y notifica
+     */
+    public limpiarCache(): void {
+        this.reiniciarEstadoCache();
         this._onVariablesChange.fire();
     }
 
@@ -277,35 +319,87 @@ export class VariableScanner {
      */
     public buscarVariables(busqueda: string): CssVariable[] {
         const busquedaLower = busqueda.toLowerCase();
-        const resultados: CssVariable[] = [];
-
-        for (const variable of this._cache.indice.variables.values()) {
-            if (variable.nombre.toLowerCase().includes(busquedaLower)) {
-                resultados.push(variable);
-            }
-        }
-
-        return resultados;
+        return this.buscar(variable => variable.nombre.toLowerCase().includes(busquedaLower));
     }
 
     /*
      * Busca variables que coincidan con palabras clave
      */
     public buscarPorPalabrasClave(palabrasClave: string[]): CssVariable[] {
-        const resultados: CssVariable[] = [];
         const palabrasLower = palabrasClave.map(p => p.toLowerCase());
+        return this.buscar(variable => {
+            const nombreLower = variable.nombre.toLowerCase();
+            return palabrasLower.some(w => nombreLower.includes(w));
+        });
+    }
+
+    /*
+     * Busca variables similares a un nombre dado (usado para sugerencias)
+     */
+    public buscarSimilares(
+        nombreBuscado: string,
+        limite: number = VariableScanner.DEFAULT_SUGGESTION_LIMIT
+    ): CssVariable[] {
+        const nombreLower = nombreBuscado.toLowerCase();
+        const palabras = nombreLower
+            .replace('--', '')
+            .split('-')
+            .filter(p => p.length >= VariableScanner.MIN_WORD_LENGTH);
+
+        const resultados: ScoredVariable[] = [];
 
         for (const variable of this._cache.indice.variables.values()) {
-            const nombreLower = variable.nombre.toLowerCase();
+            const puntuacion = this.calcularPuntuacionSimilitud(variable, palabras, nombreLower);
 
-            /* Verificar si alguna palabra clave está en el nombre */
-            const coincide = palabrasLower.some(palabra => nombreLower.includes(palabra));
-
-            if (coincide) {
-                resultados.push(variable);
+            if (puntuacion > 0) {
+                resultados.push({ variable, puntuacion });
             }
         }
 
+        return resultados
+            .sort((a, b) => b.puntuacion - a.puntuacion)
+            .slice(0, limite)
+            .map(r => r.variable);
+    }
+
+    /*
+     * Calcula la puntuación de similitud entre una variable y un conjunto de palabras
+     */
+    private calcularPuntuacionSimilitud(
+        variable: CssVariable,
+        palabras: string[],
+        nombreLower: string
+    ): number {
+        const varNombre = variable.nombre.toLowerCase();
+        let puntuacion = 0;
+
+        const varPalabras = varNombre.replace('--', '').split('-');
+        for (const palabra of palabras) {
+            for (const varPalabra of varPalabras) {
+                if (varPalabra.includes(palabra) || palabra.includes(varPalabra)) {
+                    puntuacion += VariableScanner.SIMILARITY_EXACT_SCORE;
+                }
+            }
+        }
+
+        /* Bonus por compartir prefijo */
+        if (varNombre.startsWith(nombreLower.substring(0, VariableScanner.SIMILARITY_PREFIX_LENGTH))) {
+            puntuacion += VariableScanner.SIMILARITY_PREFIX_SCORE;
+        }
+
+        return puntuacion;
+    }
+
+    /*
+     * Función genérica de búsqueda con predicate
+     */
+    private buscar(predicate: (variable: CssVariable) => boolean): CssVariable[] {
+        const resultados: CssVariable[] = [];
+        for (const variable of this._cache.indice.variables.values()) {
+            if (predicate(variable)) {
+                resultados.push(variable);
+            }
+        }
         return resultados;
     }
 
@@ -350,11 +444,7 @@ export class VariableScanner {
     /*
      * Obtiene estadísticas del escáner
      */
-    public obtenerEstadisticas(): {
-        totalVariables: number;
-        archivosEscaneados: number;
-        ultimaActualizacion: Date;
-    } {
+    public obtenerEstadisticas(): ScannerStatistics {
         return {
             totalVariables: this._cache.indice.variables.size,
             archivosEscaneados: this._cache.indice.archivosEscaneados.length,
@@ -366,26 +456,8 @@ export class VariableScanner {
      * Libera recursos
      */
     public dispose(): void {
-        this._disposables.forEach(d => d.dispose());
+        this._fileWatcherDisposables.forEach(d => d.dispose());
+        this._globalDisposables.forEach(d => d.dispose());
         this._onVariablesChange.dispose();
     }
-}
-
-/*
- * Funciones helper exportadas
- */
-export function obtenerScanner(): VariableScanner {
-    return VariableScanner.obtenerInstancia();
-}
-
-export async function escanearVariables(forzar: boolean = false): Promise<VariableIndex> {
-    return VariableScanner.obtenerInstancia().escanear(forzar);
-}
-
-export function obtenerVariable(nombre: string): CssVariable | undefined {
-    return VariableScanner.obtenerInstancia().obtenerVariable(nombre);
-}
-
-export function existeVariable(nombre: string): boolean {
-    return VariableScanner.obtenerInstancia().existeVariable(nombre);
 }

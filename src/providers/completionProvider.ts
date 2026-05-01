@@ -5,13 +5,13 @@
  */
 
 import * as vscode from 'vscode';
-import { CompletionInfo } from '../types';
-import { obtenerPropiedadEnPosicion } from '../parsers/cssParser';
-import { obtenerScanner } from '../services/variableScanner';
-import { obtenerResolver } from '../services/variableResolver';
-import { obtenerConfigService } from '../services/configService';
-import { parsearColor } from '../utils/colorUtils';
-import { obtenerRutaRelativa } from '../utils/fileUtils';
+import { CompletionInfo } from '@/types';
+import { obtenerPropiedadEnPosicion } from '@/parsers/cssParser';
+import { VariableScanner } from '@/services/variableScanner';
+import { obtenerResolver } from '@/services/variableResolver';
+import { obtenerConfigService } from '@/services/configService';
+import { parsearColor } from '@/utils/colorUtils';
+import { obtenerRutaRelativa } from '@/utils/fileUtils';
 
 /*
  * Provider de autocompletado para CSS
@@ -211,7 +211,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         limite: number,
         filtro: string = ''
     ): CompletionInfo[] {
-        const scanner = obtenerScanner();
+        const scanner = VariableScanner.obtenerInstancia();
         const configService = obtenerConfigService();
         const resolver = obtenerResolver();
         

@@ -3,10 +3,10 @@
  * Resuelve valores de variables, incluyendo referencias a otras variables
  */
 
-import { CssVariable, ResolvedVariable } from '../types';
-import { obtenerScanner, obtenerVariable } from './variableScanner';
-import { extraerVariablesDeValor } from '../parsers/valueParser';
-import { esColor, parsearColor } from '../utils/colorUtils';
+import { CssVariable, ResolvedVariable } from '@/types';
+import { VariableScanner } from '@/services/variableScanner';
+import { extraerVariablesDeValor } from '@/parsers/valueParser';
+import { esColor, parsearColor } from '@/utils/colorUtils';
 
 /*
  * Límite máximo de resolución recursiva para evitar bucles infinitos
@@ -27,7 +27,7 @@ export class VariableResolver {
         this._cacheResolucion = new Map();
         
         /* Limpiar caché cuando cambien las variables */
-        obtenerScanner().onVariablesChange(() => {
+        VariableScanner.obtenerInstancia().onVariablesChange(() => {
             this._cacheResolucion.clear();
         });
     }
@@ -95,7 +95,7 @@ export class VariableResolver {
         }
         
         /* Buscar la variable */
-        const variable = obtenerVariable(nombreVariable);
+        const variable = VariableScanner.obtenerInstancia().obtenerVariable(nombreVariable);
         if (!variable) {
             return {
                 encontrada: false,
@@ -246,8 +246,7 @@ export class VariableResolver {
         const valorLower = valor.toLowerCase().trim();
         const sugerencias: Array<{ variable: CssVariable; puntuacion: number }> = [];
         
-        const scanner = obtenerScanner();
-        const todasVariables = scanner.obtenerTodasVariables();
+        const todasVariables = VariableScanner.obtenerInstancia().obtenerTodasVariables();
         
         for (const variable of todasVariables) {
             const valorResuelto = this.obtenerValorResuelto(variable.nombre);

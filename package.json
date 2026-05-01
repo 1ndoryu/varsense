@@ -314,9 +314,9 @@
     },
     "scripts": {
         "vscode:prepublish": "npm run compile",
-        "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+        "compile": "node esbuild.config.mjs --minify",
         "compile:tests": "tsc -p ./tsconfig.json",
-        "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+        "watch": "node esbuild.config.mjs --watch",
         "pretest": "npm run compile && npm run compile:tests && npm run lint",
         "lint": "eslint src --ext ts",
         "lint:fix": "eslint src --ext ts --fix",

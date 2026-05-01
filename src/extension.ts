@@ -4,13 +4,13 @@
  */
 
 import * as vscode from 'vscode';
-import { DiagnosticProvider, DiagnosticCodeActionProvider, ResultadoEscaneoProyecto } from './providers/diagnosticProvider';
-import { crearHoverProvider } from './providers/hoverProvider';
-import { crearCompletionProvider } from './providers/completionProvider';
-import { obtenerScanner, escanearVariables } from './services/variableScanner';
-import { obtenerConfigService, estaExtensionHabilitada } from './services/configService';
-import { CssVariable, DiagnosticType } from './types';
-import { escanearClasesHuerfanas, ResultadoClasesHuerfanas } from './services/classScanner';
+import { DiagnosticProvider, DiagnosticCodeActionProvider, ResultadoEscaneoProyecto } from '@/providers/diagnosticProvider';
+import { crearHoverProvider } from '@/providers/hoverProvider';
+import { crearCompletionProvider } from '@/providers/completionProvider';
+import { VariableScanner } from '@/services/variableScanner';
+import { obtenerConfigService, estaExtensionHabilitada } from '@/services/configService';
+import { CssVariable, DiagnosticType } from '@/types';
+import { escanearClasesHuerfanas, ResultadoClasesHuerfanas } from '@/services/classScanner';
 
 /*
  * Colección de disposables para limpieza
@@ -90,7 +90,7 @@ export function deactivate(): void {
     }
     
     /* Limpiar servicios singleton */
-    obtenerScanner().dispose();
+    VariableScanner.obtenerInstancia().dispose();
     obtenerConfigService().dispose();
     
     console.log('[CSS Vars Validator] Extensión desactivada');
@@ -104,7 +104,7 @@ async function inicializarServicios(): Promise<void> {
     obtenerConfigService();
     
     /* Inicializar scanner de variables */
-    obtenerScanner();
+    VariableScanner.obtenerInstancia();
 }
 
 /*
@@ -220,12 +220,12 @@ async function escanearVariablesInicial(): Promise<void> {
             cancellable: false
         },
         async () => {
-            await escanearVariables(true);
+            await VariableScanner.obtenerInstancia().escanear(true);
         }
     );
     
     const duracion = Date.now() - inicio;
-    const stats = obtenerScanner().obtenerEstadisticas();
+    const stats = VariableScanner.obtenerInstancia().obtenerEstadisticas();
     
     console.log(`[CSS Vars Validator] Escaneo inicial completado en ${duracion}ms`);
     console.log(`[CSS Vars Validator] ${stats.totalVariables} variables en ${stats.archivosEscaneados} archivos`);
@@ -244,9 +244,9 @@ async function comandoRefrescarVariables(): Promise<void> {
         async (progress) => {
             progress.report({ message: 'Escaneando variables...' });
             
-            await escanearVariables(true);
+            await VariableScanner.obtenerInstancia().escanear(true);
             
-            const stats = obtenerScanner().obtenerEstadisticas();
+            const stats = VariableScanner.obtenerInstancia().obtenerEstadisticas();
             
             /* Actualizar diagnósticos */
             if (diagnosticProvider) {
@@ -265,7 +265,7 @@ async function comandoRefrescarVariables(): Promise<void> {
  * Comando: Mostrar todas las variables en Quick Pick
  */
 async function comandoMostrarVariables(): Promise<void> {
-    const scanner = obtenerScanner();
+    const scanner = VariableScanner.obtenerInstancia();
     const variables = scanner.obtenerVariablesOrdenadas();
     
     if (variables.length === 0) {
@@ -320,7 +320,7 @@ async function comandoIrADefinicion(): Promise<void> {
         
         if (posicion.character >= inicio && posicion.character <= fin) {
             const nombreVariable = match[1];
-            const variable = obtenerScanner().obtenerVariable(nombreVariable);
+            const variable = VariableScanner.obtenerInstancia().obtenerVariable(nombreVariable);
             
             if (variable) {
                 await navegarAVariable(variable);
@@ -381,7 +381,7 @@ async function comandoEscanearTodoProyecto(): Promise<void> {
         },
         async (progress) => {
             progress.report({ message: 'Escaneando variables...' });
-            await escanearVariables(true);
+            await VariableScanner.obtenerInstancia().escanear(true);
 
             progress.report({ message: 'Analizando todos los archivos del proyecto...' });
 
@@ -496,7 +496,7 @@ async function comandoAutoFixTodosLosCss(): Promise<void> {
         },
         async (progress) => {
             progress.report({ message: 'Escaneando proyecto completo...' });
-            await escanearVariables(true);
+            await VariableScanner.obtenerInstancia().escanear(true);
             const resultado = await provider.escanearTodoElProyecto();
 
             const archivosCss = resultado.archivosConProblemas.filter(a => /\.(css|scss|less)$/i.test(a.ruta));
@@ -627,7 +627,7 @@ async function comandoLimpiarCache(): Promise<void> {
             progress.report({ message: 'Limpiando caché...' });
 
             /* Limpiar caché del scanner */
-            obtenerScanner().limpiarCache();
+            VariableScanner.obtenerInstancia().limpiarCache();
 
             /* Limpiar diagnósticos */
             if (diagnosticProvider) {
@@ -635,14 +635,14 @@ async function comandoLimpiarCache(): Promise<void> {
             }
 
             progress.report({ message: 'Re-escaneando variables...' });
-            await escanearVariables(true);
+            await VariableScanner.obtenerInstancia().escanear(true);
 
             /* Actualizar diagnósticos en documentos abiertos */
             if (diagnosticProvider) {
                 await diagnosticProvider.actualizarTodosDocumentos();
             }
 
-            const stats = obtenerScanner().obtenerEstadisticas();
+            const stats = VariableScanner.obtenerInstancia().obtenerEstadisticas();
             vscode.window.showInformationMessage(
                 `CSS Vars: Caché limpiado. ${stats.totalVariables} variables re-escaneadas de ${stats.archivosEscaneados} archivos`
             );
@@ -671,7 +671,7 @@ async function comandoExportarReporte(): Promise<void> {
         },
         async (progress) => {
             progress.report({ message: 'Escaneando variables...' });
-            await escanearVariables(true);
+            await VariableScanner.obtenerInstancia().escanear(true);
 
             progress.report({ message: 'Analizando todos los archivos del proyecto...' });
             resultadoEscaneo = await provider.escanearTodoElProyecto((actual, total, rutaArchivo) => {

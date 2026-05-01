@@ -4,8 +4,8 @@
  */
 
 import * as vscode from 'vscode';
-import { VariableUsage } from '../types';
-import { esColor } from '../utils/colorUtils';
+import { VariableUsage } from '@/types';
+import { esColor } from '@/utils/colorUtils';
 
 /*
  * Regex para detectar uso de variables CSS: var(--nombre) o var(--nombre, fallback)

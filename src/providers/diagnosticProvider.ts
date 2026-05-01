@@ -7,12 +7,12 @@
  */
 
 import * as vscode from 'vscode';
-import {DiagnosticType} from '../types';
-import {ParseResult} from '../types';
-import {parsearDocumento} from '../parsers/cssParser';
-import {existeVariable, obtenerScanner} from '../services/variableScanner';
-import {obtenerConfigService} from '../services/configService';
-import {esLenguajeSoportado, debounce, coincideConPatron} from '../utils/fileUtils';
+import {DiagnosticType} from '@/types';
+import {ParseResult} from '@/types';
+import {parsearDocumento} from '@/parsers/cssParser';
+import {VariableScanner} from '@/services/variableScanner';
+import {obtenerConfigService} from '@/services/configService';
+import {esLenguajeSoportado, debounce, coincideConPatron} from '@/utils/fileUtils';
 
 /*
  * Lenguajes React para detección de inline CSS
@@ -196,7 +196,7 @@ export class DiagnosticProvider {
 
         /* Actualizar todos los documentos cuando cambian las variables */
         this._disposables.push(
-            obtenerScanner().onVariablesChange(() => {
+            VariableScanner.obtenerInstancia().onVariablesChange(() => {
                 actualizarTodosDebounced();
             })
         );
@@ -234,7 +234,7 @@ export class DiagnosticProvider {
         }
 
         /* Asegurar que el índice de variables global esté actualizado */
-        await obtenerScanner().escanear();
+        await VariableScanner.obtenerInstancia().escanear();
 
         /* Parsear documento actual */
         const resultadoParse = parsearDocumento(documento);
@@ -283,7 +283,7 @@ export class DiagnosticProvider {
      */
     private detectarVariablesNoDefinidas(resultadoParse: ParseResult): vscode.Diagnostic[] {
         const diagnosticos: vscode.Diagnostic[] = [];
-        const scanner = obtenerScanner();
+        const scanner = VariableScanner.obtenerInstancia();
 
         for (const uso of resultadoParse.usosVariables) {
             /* Verificar si la variable existe en el índice global */
@@ -564,7 +564,7 @@ export class DiagnosticCodeActionProvider implements vscode.CodeActionProvider {
         }
 
         /* Buscar variables sugeridas */
-        const {obtenerResolver} = require('../services/variableResolver') as typeof import('../services/variableResolver');
+        const {obtenerResolver} = require('@/services/variableResolver') as typeof import('@/services/variableResolver');
         const sugerencias = obtenerResolver().sugerirVariablesParaValor(data.valor, 3);
 
         for (const variable of sugerencias) {
@@ -596,7 +596,7 @@ export class DiagnosticCodeActionProvider implements vscode.CodeActionProvider {
         const nombreVariable = nombreMatch[1];
 
         /* Buscar variables similares */
-        const scanner = obtenerScanner();
+        const scanner = VariableScanner.obtenerInstancia();
         const todasVariables = scanner.obtenerTodasVariables();
 
         /* Encontrar variables con nombres similares */

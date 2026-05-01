@@ -3,7 +3,7 @@
  * Preview SVG para VS Code, markdown, contraste y nombre cercano.
  */
 
-import type { ColorInfo } from '../types';
+import type { ColorInfo } from '@/types';
 import { NAMED_COLORS } from './colorConstants';
 import { hexARgb } from './colorConversion';
 

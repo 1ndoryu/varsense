@@ -4,10 +4,10 @@
  */
 
 import * as vscode from 'vscode';
-import {CssVariable, CssDeclaration, CssRule, ParseResult, VariableUsage, HardcodedValue, BannedPropertyUsage} from '../types';
+import {CssVariable, CssDeclaration, CssRule, ParseResult, VariableUsage, HardcodedValue, BannedPropertyUsage} from '@/types';
 import {extraerVariablesDeValor, esDefinicionVariable, obtenerNombreVariable, esValorHardcodeado, extraerValorLimpio, crearUsosVariable} from './valueParser';
-import {esColor} from '../utils/colorUtils';
-import {obtenerConfigService} from '../services/configService';
+import {esColor} from '@/utils/colorUtils';
+import {obtenerConfigService} from '@/services/configService';
 
 /*
  * Regex para encontrar bloques de reglas CSS
