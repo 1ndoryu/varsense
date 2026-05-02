@@ -307,8 +307,22 @@ export class DiagnosticProvider {
         const diagnosticos: vscode.Diagnostic[] = [];
         const texto = documento.getText();
 
-        /* Eliminar comentarios para evitar falsos positivos */
+        /* Eliminar comentarios para evitar falsos positivos.
+         * IMPORTANTE: se preservan las líneas para mantener los índices de línea. */
         const textoSinComentarios = texto.replace(/\/\*[\s\S]*?\*\//g, match => '\n'.repeat((match.match(/\n/g) ?? []).length));
+
+        /* Construir set de líneas con comentario de desactivación.
+         * Soporta: sentinel-disable EstiloBotonEspecifico
+         *          varsense-disable: EstiloBotonEspecifico
+         *          varsense-disable (desactiva cualquier regla en la siguiente línea) */
+        const lineasConDisable = new Set<number>();
+        const REGEX_DISABLE = /\/\*[^*]*(?:sentinel-disable|varsense-disable)[^*]*\*\//g;
+        let disableMatch: RegExpExecArray | null;
+        while ((disableMatch = REGEX_DISABLE.exec(texto)) !== null) {
+            const lineaComentario = (texto.substring(0, disableMatch.index).match(/\n/g) ?? []).length;
+            /* La desactivación aplica a la clase en la línea siguiente al comentario */
+            lineasConDisable.add(lineaComentario + 1);
+        }
 
         /* Propiedades que indican implementación manual de botón */
         const PROPS_BOTON = /\b(padding|background(?:-color)?|border(?:-radius)?|cursor)\s*:/gi;
@@ -337,6 +351,12 @@ export class DiagnosticProvider {
             /* Calcular línea de inicio del selector en el texto original */
             const posInicio = match.index;
             const linea = (texto.substring(0, posInicio).match(/\n/g) ?? []).length;
+
+            /* Omitir si hay comentario de desactivación en la línea anterior o la misma */
+            if (lineasConDisable.has(linea) || lineasConDisable.has(linea + 1)) {
+                continue;
+            }
+
             const rango = new vscode.Range(linea, 0, linea, nombreClase.length);
 
             const diag = new vscode.Diagnostic(
