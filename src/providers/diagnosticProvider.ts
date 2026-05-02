@@ -269,6 +269,10 @@ export class DiagnosticProvider {
             diagnosticos.push(diagnostic);
         }
 
+        /* 4. Detectar estilos de botón específicos de componente */
+        const diagnosticosBoton = this.detectarEstilosBotonEspecificos(documento);
+        diagnosticos.push(...diagnosticosBoton);
+
         /* Filtrar diagnósticos suprimidos por comentarios varsense-disable */
         const lineasSuprimidas = parsearSupresiones(documento);
         const diagnosticosFiltrados = lineasSuprimidas.size > 0
@@ -276,6 +280,76 @@ export class DiagnosticProvider {
             : diagnosticos;
 
         this._coleccion.set(documento.uri, diagnosticosFiltrados);
+    }
+
+    /*
+     * Detecta clases CSS en archivos de componentes que reimplementan estilos de botón.
+     * Los componentes deben usar <Button variante=... tamano=...> en vez de clases propias.
+     *
+     * Criterio: archivo CSS dentro de components/ con una regla cuyo selector contiene
+     * 'btn' o 'button' (case-insensitive) Y define ≥2 propiedades estructurales de botón
+     * (padding, background, background-color, border, border-radius, cursor).
+     *
+     * Excepción: Button.css (el propio componente base).
+     */
+    private detectarEstilosBotonEspecificos(documento: vscode.TextDocument): vscode.Diagnostic[] {
+        const ruta = documento.uri.fsPath.replace(/\\/g, '/');
+
+        /* Solo CSS dentro de components/, excluir el propio Button.css */
+        if (!ruta.includes('/components/') || !ruta.endsWith('.css')) {
+            return [];
+        }
+        const nombreArchivo = ruta.split('/').pop() ?? '';
+        if (/^button/i.test(nombreArchivo)) {
+            return [];
+        }
+
+        const diagnosticos: vscode.Diagnostic[] = [];
+        const texto = documento.getText();
+
+        /* Eliminar comentarios para evitar falsos positivos */
+        const textoSinComentarios = texto.replace(/\/\*[\s\S]*?\*\//g, match => '\n'.repeat((match.match(/\n/g) ?? []).length));
+
+        /* Propiedades que indican implementación manual de botón */
+        const PROPS_BOTON = /\b(padding|background(?:-color)?|border(?:-radius)?|cursor)\s*:/gi;
+        /* Selector que contiene 'btn' o 'button' (case-insensitive) */
+        const REGEX_BTN_SELECTOR = /btn|button/i;
+        /* Regla CSS plana: .clase { ... } — no anidada */
+        const REGEX_REGLA = /(\.[a-zA-Z][a-zA-Z0-9_-]*)(?:[^{,]*?)\{([^}]*)\}/g;
+
+        let match: RegExpExecArray | null;
+        REGEX_REGLA.lastIndex = 0;
+
+        while ((match = REGEX_REGLA.exec(textoSinComentarios)) !== null) {
+            const nombreClase = match[1];
+            const cuerpo = match[2];
+
+            if (!REGEX_BTN_SELECTOR.test(nombreClase)) {
+                continue;
+            }
+
+            /* Contar propiedades estructurales de botón en el bloque */
+            const propsEncontradas = (cuerpo.match(PROPS_BOTON) ?? []).length;
+            if (propsEncontradas < 2) {
+                continue;
+            }
+
+            /* Calcular línea de inicio del selector en el texto original */
+            const posInicio = match.index;
+            const linea = (texto.substring(0, posInicio).match(/\n/g) ?? []).length;
+            const rango = new vscode.Range(linea, 0, linea, nombreClase.length);
+
+            const diag = new vscode.Diagnostic(
+                rango,
+                `Estilo de botón específico '${nombreClase}' en componente. Usar <Button variante=... tamano=...> en vez de clase local.`,
+                vscode.DiagnosticSeverity.Warning
+            );
+            diag.code = DiagnosticType.EstiloBotonEspecifico;
+            diag.source = 'CSS Vars Validator';
+            diagnosticos.push(diag);
+        }
+
+        return diagnosticos;
     }
 
     /*

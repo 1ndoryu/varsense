@@ -158,7 +158,10 @@ export enum DiagnosticType {
     FallbackHardcoded = 'fallbackHardcoded',
     CssInlineReact = 'cssInlineReact',
     ClaseHuerfana = 'claseHuerfana',
-    PropiedadProhibida = 'propiedadProhibida'
+    PropiedadProhibida = 'propiedadProhibida',
+    /* Clase CSS con nombre de botón definida en archivo de componente.
+     * Los componentes no deben reimplementar estilos de <Button> — usar variante/tamano. */
+    EstiloBotonEspecifico = 'estiloBotonEspecifico'
 }
 
 /*
