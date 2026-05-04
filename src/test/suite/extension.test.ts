@@ -6,6 +6,8 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 
+const EXTENSION_ID = '1ndoryu.varsense';
+
 /* 
  * Rutas de importación: desde dist/test/suite/ a dist/parsers/ y dist/utils/
  * La ruta correcta es ../../ (subir 2 niveles desde suite/)
@@ -15,7 +17,7 @@ suite('CSS Variables Validator Extension Test Suite', () => {
     vscode.window.showInformationMessage('Iniciando tests de CSS Variables Validator');
 
     test('Extension should be present', () => {
-        assert.ok(vscode.extensions.getExtension('glory.css-vars-validator'));
+        assert.ok(vscode.extensions.getExtension(EXTENSION_ID));
     });
 
     test('Extension should activate on CSS file', async () => {
@@ -30,7 +32,7 @@ suite('CSS Variables Validator Extension Test Suite', () => {
         /* Dar tiempo para activación */
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        const extension = vscode.extensions.getExtension('glory.css-vars-validator');
+        const extension = vscode.extensions.getExtension(EXTENSION_ID);
         assert.ok(extension?.isActive || extension !== undefined);
     });
 

@@ -45,7 +45,9 @@ function extraerClasesDeTexto(texto: string, rutaArchivo: string): ClaseCssDefin
         const linea = lineas[numLinea];
         const trimmed = linea.trim();
 
-        if (!trimmed) continue;
+        if (!trimmed) {
+            continue;
+        }
 
         /*
          * Detectar lineas de propiedades CSS: "property-name: value;"
@@ -54,10 +56,14 @@ function extraerClasesDeTexto(texto: string, rutaArchivo: string): ClaseCssDefin
          * y no contiene { (las propiedades no abren bloque)
          */
         const esPropiedad = /^\s*[\w-]+\s*:(?!:)/.test(linea) && !linea.includes('{');
-        if (esPropiedad) continue;
+        if (esPropiedad) {
+            continue;
+        }
 
         /* Saltar directivas sin bloque (@import, @charset, @namespace) */
-        if (trimmed.startsWith('@') && !trimmed.includes('{')) continue;
+        if (trimmed.startsWith('@') && !trimmed.includes('{')) {
+            continue;
+        }
 
         /* Extraer nombres de clase de selectores en esta linea */
         let match: RegExpExecArray | null;
@@ -237,10 +243,14 @@ export async function escanearClasesHuerfanas(
         }
 
         /* Filtrar por longitud minima */
-        if (nombre.length < longitudMinima) continue;
+        if (nombre.length < longitudMinima) {
+            continue;
+        }
 
         /* Filtrar por patrones excluidos */
-        if (regexExcluidos.some(r => r.test(nombre))) continue;
+        if (regexExcluidos.some(r => r.test(nombre))) {
+            continue;
+        }
 
         /* Verificar si el token existe en archivos consumidores */
         if (!tokensUsados.has(nombre)) {
@@ -254,7 +264,9 @@ export async function escanearClasesHuerfanas(
 
     /* Ordenar por archivo y linea para presentacion coherente */
     clasesHuerfanas.sort((a, b) => {
-        if (a.archivo !== b.archivo) return a.archivo.localeCompare(b.archivo);
+        if (a.archivo !== b.archivo) {
+            return a.archivo.localeCompare(b.archivo);
+        }
         return a.linea - b.linea;
     });
 

@@ -545,8 +545,11 @@ export class DiagnosticProvider {
             let i = match.index + match[0].length;
 
             while (i < texto.length && profundidad > 0) {
-                if (texto[i] === '{') profundidad++;
-                else if (texto[i] === '}') profundidad--;
+                if (texto[i] === '{') {
+                    profundidad++;
+                } else if (texto[i] === '}') {
+                    profundidad--;
+                }
                 i++;
             }
 
@@ -572,7 +575,9 @@ export class DiagnosticProvider {
             const contenido = match[1].trim();
 
             /* Saltar si ya fue capturado por el patrón 1 (doble llave) */
-            if (contenido.startsWith('{')) continue;
+            if (contenido.startsWith('{')) {
+                continue;
+            }
 
             const inicio = documento.positionAt(match.index);
             const fin = documento.positionAt(match.index + match[0].length);
