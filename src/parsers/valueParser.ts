@@ -3,8 +3,8 @@
  * Analiza valores CSS para detectar variables, colores, y valores hardcodeados
  */
 
-import * as vscode from 'vscode';
 import { VariableUsage } from '@/types';
+import { CoreTextDocument, createCoreRange } from '@/core/types';
 import { esColor } from '@/utils/colorUtils';
 
 /*
@@ -149,7 +149,7 @@ export function detectarTipoHardcodeado(valor: string): 'color' | 'numero' | 'ot
  */
 export function crearUsosVariable(
     matches: VariableMatch[],
-    documento: vscode.TextDocument,
+    documento: CoreTextDocument,
     lineaBase: number,
     columnaBase: number,
     texto: string
@@ -170,13 +170,10 @@ export function crearUsosVariable(
         
         return {
             nombreVariable: match.nombreVariable,
-            archivo: documento.uri.fsPath,
+            archivo: documento.fileName,
             linea: lineaReal,
             columna: columnaReal,
-            rango: new vscode.Range(
-                new vscode.Position(lineaReal, columnaReal),
-                new vscode.Position(lineaFinReal, columnaFinReal)
-            ),
+            rango: createCoreRange(lineaReal, columnaReal, lineaFinReal, columnaFinReal),
             fallback: match.fallback ?? undefined
         };
     });

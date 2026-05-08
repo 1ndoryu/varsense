@@ -9,6 +9,7 @@ import { CssVariable, VariableIndex, CacheState, ScoredVariable, ScannerStatisti
 import { buscarArchivos, crearFileWatcher, debounce } from '@/utils/fileUtils';
 import { parsearDefiniciones } from '@/parsers/cssParser';
 import { obtenerConfigService } from '@/services/configService';
+import { documentFromVsCode } from '@/core/vscodeAdapter';
 
 /*
  * Patrones glob para escanear todos los archivos CSS del proyecto
@@ -136,7 +137,7 @@ export class VariableScanner {
     ): Promise<void> {
         try {
             const documento = await vscode.workspace.openTextDocument(uri);
-            const variables = parsearDefiniciones(documento);
+            const variables = parsearDefiniciones(documentFromVsCode(documento));
 
             /* Guardar variables por archivo para invalidación parcial */
             porArchivo.set(uri.fsPath, variables);

@@ -10,6 +10,7 @@ import { VariableScanner } from '@/services/variableScanner';
 import { obtenerResolver } from '@/services/variableResolver';
 import { parsearColor, generarMarkdownColor } from '@/utils/colorUtils';
 import { obtenerRutaRelativa } from '@/utils/fileUtils';
+import { documentFromVsCode, rangeToVsCodeRange } from '@/core/vscodeAdapter';
 
 /*
  * Provider de hover para CSS
@@ -25,13 +26,14 @@ export class HoverProvider implements vscode.HoverProvider {
         _token: vscode.CancellationToken
     ): vscode.ProviderResult<vscode.Hover> {
         /* Buscar variable en la posición del cursor */
-        const variableEnPosicion = encontrarVariableEnPosicion(documento, posicion);
+        const variableEnPosicion = encontrarVariableEnPosicion(documentFromVsCode(documento), posicion);
         
         if (!variableEnPosicion) {
             return null;
         }
         
         const { nombre, rango } = variableEnPosicion;
+        const rangoVsCode = rangeToVsCodeRange(rango);
         
         /* Obtener información de la variable */
         const variable = VariableScanner.obtenerInstancia().obtenerVariable(nombre);
@@ -40,14 +42,14 @@ export class HoverProvider implements vscode.HoverProvider {
             /* Variable no encontrada - mostrar mensaje de error */
             return new vscode.Hover(
                 this.crearMensajeNoEncontrada(nombre),
-                rango
+                rangoVsCode
             );
         }
         
         /* Crear contenido del hover */
         const contenido = this.crearContenidoHover(variable.nombre);
         
-        return new vscode.Hover(contenido, rango);
+        return new vscode.Hover(contenido, rangoVsCode);
     }
     
     /*

@@ -3,7 +3,18 @@
  * Define todas las interfaces y tipos utilizados en el proyecto
  */
 
-import * as vscode from 'vscode';
+import { CoreRange } from '@/core/types';
+
+/* [085A-1] Los tipos compartidos usan CoreRange y severidad numerica compatible con VS Code.
+ * Gotcha: los providers convierten CoreRange a vscode.Range justo antes de publicar diagnostics. */
+export type DiagnosticSeverityValue = 0 | 1 | 2 | 3;
+
+export const DIAGNOSTIC_SEVERITY = {
+    Error: 0,
+    Warning: 1,
+    Information: 2,
+    Hint: 3
+} as const satisfies Record<string, DiagnosticSeverityValue>;
 
 /*
  * Representa una variable CSS definida en el proyecto
@@ -42,7 +53,7 @@ export interface VariableUsage {
     archivo: string;
     linea: number;
     columna: number;
-    rango: vscode.Range;
+    rango: CoreRange;
     /* Valor de fallback si existe: var(--color, #fff) */
     fallback?: string;
 }
@@ -56,7 +67,7 @@ export interface HardcodedValue {
     archivo: string;
     linea: number;
     columna: number;
-    rango: vscode.Range;
+    rango: CoreRange;
     /* Sugerencias de variables que podrían reemplazarlo */
     sugerencias: string[];
 }
@@ -106,7 +117,7 @@ export interface ExtensionConfig {
  */
 export interface HardcodedDetectionConfig {
     habilitado: boolean;
-    severidad: vscode.DiagnosticSeverity;
+    severidad: DiagnosticSeverityValue;
     propiedades: Record<string, boolean>;
     valoresPermitidos: string[];
 }
@@ -119,7 +130,7 @@ export interface HoverInfo {
     /* Representación visual del color si aplica */
     colorPreview?: string;
     /* Markdown formateado para mostrar */
-    contenido: vscode.MarkdownString;
+    contenido: unknown;
 }
 
 /*
@@ -139,8 +150,8 @@ export interface CompletionInfo {
 export interface CssDiagnostic {
     tipo: DiagnosticType;
     mensaje: string;
-    rango: vscode.Range;
-    severidad: vscode.DiagnosticSeverity;
+    rango: CoreRange;
+    severidad: DiagnosticSeverityValue;
     /* Nombre de variable si aplica */
     nombreVariable?: string;
     /* Valor hardcodeado si aplica */
@@ -181,7 +192,7 @@ export interface CacheState {
  */
 export interface InlineDetectionConfig {
     habilitado: boolean;
-    severidad: vscode.DiagnosticSeverity;
+    severidad: DiagnosticSeverityValue;
 }
 
 /*
@@ -228,8 +239,8 @@ export enum CssTokenType {
 export interface CssDeclaration {
     propiedad: string;
     valor: string;
-    rangoPropiedad: vscode.Range;
-    rangoValor: vscode.Range;
+    rangoPropiedad: CoreRange;
+    rangoValor: CoreRange;
     /* Variables usadas en el valor */
     variablesUsadas: VariableUsage[];
     /* Si es una definición de variable CSS */
@@ -241,7 +252,7 @@ export interface CssDeclaration {
  */
 export interface CssRule {
     selector: string;
-    rangoSelector: vscode.Range;
+    rangoSelector: CoreRange;
     declaraciones: CssDeclaration[];
     /* Reglas anidadas (para @media, etc) */
     reglasAnidadas?: CssRule[];
@@ -326,11 +337,11 @@ export interface ScannerStatistics {
 /*
  * Mapeo de severidades de string a DiagnosticSeverity
  */
-export const SEVERITY_MAP: Record<string, vscode.DiagnosticSeverity> = {
-    error: vscode.DiagnosticSeverity.Error,
-    warning: vscode.DiagnosticSeverity.Warning,
-    information: vscode.DiagnosticSeverity.Information,
-    hint: vscode.DiagnosticSeverity.Hint
+export const SEVERITY_MAP: Record<string, DiagnosticSeverityValue> = {
+    error: DIAGNOSTIC_SEVERITY.Error,
+    warning: DIAGNOSTIC_SEVERITY.Warning,
+    information: DIAGNOSTIC_SEVERITY.Information,
+    hint: DIAGNOSTIC_SEVERITY.Hint
 };
 
 /*
@@ -342,7 +353,7 @@ export interface BannedPropertyUsage {
     archivo: string;
     linea: number;
     columna: number;
-    rango: vscode.Range;
+    rango: CoreRange;
 }
 
 /*
@@ -350,7 +361,7 @@ export interface BannedPropertyUsage {
  */
 export interface BannedPropertyConfig {
     habilitado: boolean;
-    severidad: vscode.DiagnosticSeverity;
+    severidad: DiagnosticSeverityValue;
     /* Lista de propiedades prohibidas (ej: ['box-shadow', 'text-shadow']) */
     propiedades: string[];
 }

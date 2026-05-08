@@ -3,11 +3,10 @@
  * Analiza documentos CSS para extraer declaraciones, variables y usos
  */
 
-import * as vscode from 'vscode';
 import {CssVariable, CssDeclaration, CssRule, ParseResult, VariableUsage, HardcodedValue, BannedPropertyUsage} from '@/types';
+import { CorePosition, CoreRange, CoreTextDocument, createCoreRange, positionAtOffset } from '@/core/types';
 import {extraerVariablesDeValor, esDefinicionVariable, obtenerNombreVariable, esValorHardcodeado, extraerValorLimpio, crearUsosVariable} from './valueParser';
 import {esColor} from '@/utils/colorUtils';
-import {obtenerConfigService} from '@/services/configService';
 
 /*
  * Regex para encontrar bloques de reglas CSS
@@ -25,16 +24,29 @@ const DECLARATION_REGEX = /([a-zA-Z-]+)\s*:\s*([^;]+);?/g;
  */
 const COMMENT_REGEX = /\/\*[\s\S]*?\*\//g;
 
+/* [085A-1] Opciones inyectables para que el parser no importe configService ni vscode.
+ * Pendiente: los scanners recibiran providers de documentos/archivos en la siguiente fase. */
+export interface CssParserOptions {
+    debeVerificarPropiedad?: (propiedad: string) => boolean;
+    esValorPermitido?: (valor: string) => boolean;
+    propiedadesProhibidas?: {
+        habilitado: boolean;
+        propiedades: string[];
+    };
+}
+
 /*
  * Clase principal del parser CSS
  */
 export class CssParser {
-    private _documento: vscode.TextDocument;
+    private _documento: CoreTextDocument;
     private _textoSinComentarios: string;
+    private _opciones: CssParserOptions;
 
-    constructor(documento: vscode.TextDocument) {
+    constructor(documento: CoreTextDocument, opciones: CssParserOptions = {}) {
         this._documento = documento;
         this._textoSinComentarios = this.eliminarComentarios(documento.getText());
+        this._opciones = opciones;
     }
 
     /*
@@ -62,7 +74,7 @@ export class CssParser {
                             resultado.variablesDefinidas.push({
                                 nombre: nombreVar,
                                 valor: declaracion.valor,
-                                archivo: this._documento.uri.fsPath,
+                                archivo: this._documento.fileName,
                                 linea: declaracion.rangoPropiedad.start.line,
                                 columna: declaracion.rangoPropiedad.start.character,
                                 esColor: esColor(declaracion.valor),
@@ -80,7 +92,7 @@ export class CssParser {
                             resultado.valoresHardcoded.push({
                                 propiedad: declaracion.propiedad,
                                 valor: uso.fallback,
-                                archivo: this._documento.uri.fsPath,
+                                archivo: this._documento.fileName,
                                 linea: uso.linea,
                                 columna: uso.columna,
                                 rango: uso.rango,
@@ -122,13 +134,13 @@ export class CssParser {
         let match: RegExpExecArray | null;
 
         while ((match = varDefRegex.exec(texto)) !== null) {
-            const posicion = this._documento.positionAt(match.index);
+            const posicion = positionAtOffset(this._documento, match.index);
             const valorLimpio = extraerValorLimpio(match[2]);
 
             variables.push({
                 nombre: match[1],
                 valor: valorLimpio,
-                archivo: this._documento.uri.fsPath,
+                archivo: this._documento.fileName,
                 linea: posicion.line,
                 columna: posicion.character,
                 esColor: esColor(valorLimpio),
@@ -185,7 +197,7 @@ export class CssParser {
 
             /* Offset real del inicio del valor dentro del documento */
             const offsetValor = offsetBase + match.index + indiceValorEnMatch + espaciosInicioValor;
-            const posPropiedad = this._documento.positionAt(offsetPropiedad);
+            const posPropiedad = positionAtOffset(this._documento, offsetPropiedad);
             let rangoValor = this.crearRangoDesdeOffset(offsetValor, valor.length);
 
             /*
@@ -198,16 +210,18 @@ export class CssParser {
                 const indiceEnLinea = textoLinea.indexOf(valor, desdeColumna);
 
                 if (indiceEnLinea >= 0) {
-                    rangoValor = new vscode.Range(
-                        new vscode.Position(posPropiedad.line, indiceEnLinea),
-                        new vscode.Position(posPropiedad.line, indiceEnLinea + valor.length)
+                    rangoValor = createCoreRange(
+                        posPropiedad.line,
+                        indiceEnLinea,
+                        posPropiedad.line,
+                        indiceEnLinea + valor.length
                     );
                 }
             }
 
             /* Extraer variables usadas en el valor */
             const variablesMatch = extraerVariablesDeValor(valor);
-            const posValor = this._documento.positionAt(offsetValor);
+            const posValor = positionAtOffset(this._documento, offsetValor);
 
             const variablesUsadas = crearUsosVariable(variablesMatch, this._documento, posValor.line, posValor.character, valor);
 
@@ -229,7 +243,10 @@ export class CssParser {
      */
     private detectarHardcodeados(reglas: CssRule[]): HardcodedValue[] {
         const hardcodeados: HardcodedValue[] = [];
-        const configService = obtenerConfigService();
+
+        if (!this._opciones.debeVerificarPropiedad || !this._opciones.esValorPermitido) {
+            return hardcodeados;
+        }
 
         for (const regla of reglas) {
             for (const declaracion of regla.declaraciones) {
@@ -239,12 +256,12 @@ export class CssParser {
                 }
 
                 /* Verificar si la propiedad debe ser chequeada */
-                if (!configService.deberiVerificarPropiedad(declaracion.propiedad)) {
+                if (!this._opciones.debeVerificarPropiedad(declaracion.propiedad)) {
                     continue;
                 }
 
                 /* Verificar si el valor es permitido */
-                if (configService.esValorPermitido(declaracion.valor)) {
+                if (this._opciones.esValorPermitido(declaracion.valor)) {
                     continue;
                 }
 
@@ -253,7 +270,7 @@ export class CssParser {
                     hardcodeados.push({
                         propiedad: declaracion.propiedad,
                         valor: declaracion.valor,
-                        archivo: this._documento.uri.fsPath,
+                        archivo: this._documento.fileName,
                         linea: declaracion.rangoValor.start.line,
                         columna: declaracion.rangoValor.start.character,
                         rango: declaracion.rangoValor,
@@ -272,10 +289,9 @@ export class CssParser {
      */
     private detectarPropiedadesProhibidas(reglas: CssRule[]): BannedPropertyUsage[] {
         const detectadas: BannedPropertyUsage[] = [];
-        const configService = obtenerConfigService();
-        const configProhibidas = configService.obtenerConfigProhibidas();
+        const configProhibidas = this._opciones.propiedadesProhibidas;
 
-        if (!configProhibidas.habilitado || configProhibidas.propiedades.length === 0) {
+        if (!configProhibidas?.habilitado || configProhibidas.propiedades.length === 0) {
             return detectadas;
         }
 
@@ -291,13 +307,13 @@ export class CssParser {
                     detectadas.push({
                         propiedad: declaracion.propiedad,
                         valor: declaracion.valor,
-                        archivo: this._documento.uri.fsPath,
+                        archivo: this._documento.fileName,
                         linea: declaracion.rangoPropiedad.start.line,
                         columna: declaracion.rangoPropiedad.start.character,
-                        rango: new vscode.Range(
-                            declaracion.rangoPropiedad.start,
-                            declaracion.rangoValor.end
-                        )
+                        rango: {
+                            start: declaracion.rangoPropiedad.start,
+                            end: declaracion.rangoValor.end
+                        }
                     });
                 }
             }
@@ -341,27 +357,27 @@ export class CssParser {
     }
 
     /*
-     * Crea un Range de VS Code desde offset y longitud
+     * Crea un CoreRange desde offset y longitud
      */
-    private crearRangoDesdeOffset(offset: number, longitud: number): vscode.Range {
-        const inicio = this._documento.positionAt(offset);
-        const fin = this._documento.positionAt(offset + longitud);
-        return new vscode.Range(inicio, fin);
+    private crearRangoDesdeOffset(offset: number, longitud: number): CoreRange {
+        const inicio = positionAtOffset(this._documento, offset);
+        const fin = positionAtOffset(this._documento, offset + longitud);
+        return { start: inicio, end: fin };
     }
 }
 
 /*
  * Función helper para parsear un documento
  */
-export function parsearDocumento(documento: vscode.TextDocument): ParseResult {
-    const parser = new CssParser(documento);
+export function parsearDocumento(documento: CoreTextDocument, opciones: CssParserOptions = {}): ParseResult {
+    const parser = new CssParser(documento, opciones);
     return parser.parsear();
 }
 
 /*
  * Función helper para parsear solo definiciones de variables
  */
-export function parsearDefiniciones(documento: vscode.TextDocument): CssVariable[] {
+export function parsearDefiniciones(documento: CoreTextDocument): CssVariable[] {
     const parser = new CssParser(documento);
     return parser.parsearSoloDefiniciones();
 }
@@ -369,7 +385,7 @@ export function parsearDefiniciones(documento: vscode.TextDocument): CssVariable
 /*
  * Busca todos los usos de var() en un documento
  */
-export function buscarUsosVariables(documento: vscode.TextDocument): VariableUsage[] {
+export function buscarUsosVariables(documento: CoreTextDocument): VariableUsage[] {
     const texto = documento.getText();
     const usos: VariableUsage[] = [];
 
@@ -377,15 +393,15 @@ export function buscarUsosVariables(documento: vscode.TextDocument): VariableUsa
     let match: RegExpExecArray | null;
 
     while ((match = varRegex.exec(texto)) !== null) {
-        const posicionInicio = documento.positionAt(match.index);
-        const posicionFin = documento.positionAt(match.index + match[0].length);
+        const posicionInicio = positionAtOffset(documento, match.index);
+        const posicionFin = positionAtOffset(documento, match.index + match[0].length);
 
         usos.push({
             nombreVariable: match[1],
-            archivo: documento.uri.fsPath,
+            archivo: documento.fileName,
             linea: posicionInicio.line,
             columna: posicionInicio.character,
-            rango: new vscode.Range(posicionInicio, posicionFin),
+            rango: { start: posicionInicio, end: posicionFin },
             fallback: match[2]?.trim()
         });
     }
@@ -396,7 +412,7 @@ export function buscarUsosVariables(documento: vscode.TextDocument): VariableUsa
 /*
  * Encuentra la variable bajo el cursor en un documento
  */
-export function encontrarVariableEnPosicion(documento: vscode.TextDocument, posicion: vscode.Position): {nombre: string; rango: vscode.Range} | null {
+export function encontrarVariableEnPosicion(documento: CoreTextDocument, posicion: CorePosition): {nombre: string; rango: CoreRange} | null {
     const lineaTexto = documento.lineAt(posicion.line).text;
 
     /* Buscar var(--...) en la línea */
@@ -415,7 +431,7 @@ export function encontrarVariableEnPosicion(documento: vscode.TextDocument, posi
 
             return {
                 nombre: match[1],
-                rango: new vscode.Range(new vscode.Position(posicion.line, nombreInicio), new vscode.Position(posicion.line, nombreFin))
+                rango: createCoreRange(posicion.line, nombreInicio, posicion.line, nombreFin)
             };
         }
     }
@@ -429,7 +445,7 @@ export function encontrarVariableEnPosicion(documento: vscode.TextDocument, posi
         if (posicion.character >= inicio && posicion.character <= fin) {
             return {
                 nombre: match[1],
-                rango: new vscode.Range(new vscode.Position(posicion.line, inicio), new vscode.Position(posicion.line, fin))
+                rango: createCoreRange(posicion.line, inicio, posicion.line, fin)
             };
         }
     }
@@ -441,7 +457,7 @@ export function encontrarVariableEnPosicion(documento: vscode.TextDocument, posi
  * Obtiene la propiedad CSS en una posición del documento
  * Útil para autocompletado contextual
  */
-export function obtenerPropiedadEnPosicion(documento: vscode.TextDocument, posicion: vscode.Position): string | null {
+export function obtenerPropiedadEnPosicion(documento: CoreTextDocument, posicion: CorePosition): string | null {
     const lineaTexto = documento.lineAt(posicion.line).text;
 
     /* Buscar propiedad: valor en la línea */

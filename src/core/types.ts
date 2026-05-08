@@ -92,6 +92,18 @@ export function createCoreDocument(input: CreateCoreDocumentInput): CoreTextDocu
   };
 }
 
+export function positionAtOffset(document: CoreTextDocument, offset: number): CorePosition {
+  const text = document.getText();
+  const boundedOffset = Math.max(0, Math.min(offset, text.length));
+  const before = text.slice(0, boundedOffset);
+  const lines = before.split(/\r\n|\r|\n/);
+
+  return {
+    line: lines.length - 1,
+    character: lines[lines.length - 1]?.length ?? 0,
+  };
+}
+
 export function serializeCoreFindings(findings: CoreFinding[]): string {
   return JSON.stringify(findings, null, 2);
 }

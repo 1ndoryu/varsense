@@ -13,6 +13,7 @@ import {parsearDocumento} from '@/parsers/cssParser';
 import {VariableScanner} from '@/services/variableScanner';
 import {obtenerConfigService} from '@/services/configService';
 import {esLenguajeSoportado, debounce, coincideConPatron} from '@/utils/fileUtils';
+import { documentFromVsCode, rangeToVsCodeRange } from '@/core/vscodeAdapter';
 
 /*
  * Lenguajes React para detección de inline CSS
@@ -237,7 +238,11 @@ export class DiagnosticProvider {
         await VariableScanner.obtenerInstancia().escanear();
 
         /* Parsear documento actual */
-        const resultadoParse = parsearDocumento(documento);
+        const resultadoParse = parsearDocumento(documentFromVsCode(documento), {
+            debeVerificarPropiedad: propiedad => configService.deberiVerificarPropiedad(propiedad),
+            esValorPermitido: valor => configService.esValorPermitido(valor),
+            propiedadesProhibidas: configService.obtenerConfigProhibidas(),
+        });
         const diagnosticos: vscode.Diagnostic[] = [];
 
         /* 1. Detectar variables no definidas */
@@ -248,7 +253,7 @@ export class DiagnosticProvider {
         // Usamos los detectados por el parser directamente
         for (const hardcoded of resultadoParse.valoresHardcoded) {
             const severidad = configService.obtenerConfigHardcoded().severidad;
-            const diagnostic = new vscode.Diagnostic(hardcoded.rango, `Valor hardcodeado '${hardcoded.valor}' en '${hardcoded.propiedad}' - considera usar una variable CSS`, severidad);
+            const diagnostic = new vscode.Diagnostic(rangeToVsCodeRange(hardcoded.rango), `Valor hardcodeado '${hardcoded.valor}' en '${hardcoded.propiedad}' - considera usar una variable CSS`, severidad);
             diagnostic.code = DiagnosticType.ValorHardcoded;
             diagnostic.source = 'CSS Vars Validator';
 
@@ -263,7 +268,7 @@ export class DiagnosticProvider {
         /* 3. Detectar propiedades prohibidas (ej: box-shadow) */
         for (const prohibida of resultadoParse.propiedadesProhibidas) {
             const severidad = configService.obtenerConfigProhibidas().severidad;
-            const diagnostic = new vscode.Diagnostic(prohibida.rango, `Propiedad prohibida '${prohibida.propiedad}' — eliminar o reemplazar con alternativa permitida`, severidad);
+            const diagnostic = new vscode.Diagnostic(rangeToVsCodeRange(prohibida.rango), `Propiedad prohibida '${prohibida.propiedad}' — eliminar o reemplazar con alternativa permitida`, severidad);
             diagnostic.code = DiagnosticType.PropiedadProhibida;
             diagnostic.source = 'CSS Vars Validator';
             diagnosticos.push(diagnostic);
@@ -382,7 +387,7 @@ export class DiagnosticProvider {
         for (const uso of resultadoParse.usosVariables) {
             /* Verificar si la variable existe en el índice global */
             if (!scanner.existeVariable(uso.nombreVariable)) {
-                const diagnostic = new vscode.Diagnostic(uso.rango, `Variable '${uso.nombreVariable}' no está definida`, vscode.DiagnosticSeverity.Error);
+                const diagnostic = new vscode.Diagnostic(rangeToVsCodeRange(uso.rango), `Variable '${uso.nombreVariable}' no está definida`, vscode.DiagnosticSeverity.Error);
 
                 diagnostic.code = DiagnosticType.VariableNoDefinida;
                 diagnostic.source = 'CSS Vars Validator';

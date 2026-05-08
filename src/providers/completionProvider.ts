@@ -12,6 +12,7 @@ import { obtenerResolver } from '@/services/variableResolver';
 import { obtenerConfigService } from '@/services/configService';
 import { parsearColor } from '@/utils/colorUtils';
 import { obtenerRutaRelativa } from '@/utils/fileUtils';
+import { documentFromVsCode } from '@/core/vscodeAdapter';
 
 /*
  * Provider de autocompletado para CSS
@@ -50,7 +51,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         }
         
         /* Obtener la propiedad CSS actual para contexto */
-        const propiedad = obtenerPropiedadEnPosicion(documento, posicion);
+        const propiedad = obtenerPropiedadEnPosicion(documentFromVsCode(documento), posicion);
         
         /* Obtener todas las variables y filtrar/ordenar según contexto */
         const completionItems = this.generarCompletionItems(propiedad, textoAntesCursor);
@@ -148,7 +149,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         documento: vscode.TextDocument,
         posicion: vscode.Position
     ): vscode.CompletionItem[] {
-        const propiedad = obtenerPropiedadEnPosicion(documento, posicion);
+        const propiedad = obtenerPropiedadEnPosicion(documentFromVsCode(documento), posicion);
         const items: vscode.CompletionItem[] = [];
         
         /* Sugerir las variables más relevantes para esta propiedad */

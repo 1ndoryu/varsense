@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import { createCoreDocument, createCoreRange, serializeCoreFindings, CoreFinding } from '../../core/types';
 import { findingToDiagnostic } from '../../core/vscodeAdapter';
+import { parsearDocumento } from '../../parsers/cssParser';
 
 suite('VarSense editor-agnostic core contracts', () => {
   test('creates a document with stable line helpers', () => {
@@ -46,5 +47,24 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(diagnostic.source, 'VarSense');
     assert.strictEqual(diagnostic.range.start.line, 1);
     assert.strictEqual(diagnostic.range.end.character, 24);
+  });
+
+  test('parses CSS using core ranges without editor objects', () => {
+    const document = createCoreDocument({
+      uri: 'file:///workspace/src/styles.css',
+      fileName: '/workspace/src/styles.css',
+      languageId: 'css',
+      content: ':root {\n  --colorPrincipal: #fff;\n}\n.boton { color: var(--colorPrincipal); }',
+    });
+
+    const result = parsearDocumento(document, {
+      debeVerificarPropiedad: propiedad => propiedad === 'color',
+      esValorPermitido: () => false,
+      propiedadesProhibidas: { habilitado: false, propiedades: [] },
+    });
+
+    assert.strictEqual(result.variablesDefinidas[0].nombre, '--colorPrincipal');
+    assert.strictEqual(result.usosVariables[0].rango.start.line, 3);
+    assert.doesNotThrow(() => JSON.stringify(result.usosVariables[0].rango));
   });
 });

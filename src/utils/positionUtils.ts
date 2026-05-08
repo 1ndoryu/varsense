@@ -1,9 +1,9 @@
 /*
- * Utilidades de posición y rangos para documentos VS Code
+ * Utilidades de posición y rangos para documentos core
  * Conversiones entre offsets y posiciones línea/columna
  */
 
-import * as vscode from 'vscode';
+import { CoreRange, createCoreRange } from '@/core/types';
 
 /*
  * Obtiene información de posición (línea/columna) desde un offset en texto
@@ -42,16 +42,13 @@ export function posicionAOffset(texto: string, linea: number, columna: number): 
 }
 
 /*
- * Crea un Range de VS Code desde información de posición
+ * Crea un CoreRange desde información de posición
  */
 export function crearRango(
     lineaInicio: number,
     columnaInicio: number,
     lineaFin: number,
     columnaFin: number
-): vscode.Range {
-    return new vscode.Range(
-        new vscode.Position(lineaInicio, columnaInicio),
-        new vscode.Position(lineaFin, columnaFin)
-    );
+): CoreRange {
+    return createCoreRange(lineaInicio, columnaInicio, lineaFin, columnaFin);
 }
