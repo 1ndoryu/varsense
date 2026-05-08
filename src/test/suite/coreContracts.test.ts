@@ -2,6 +2,34 @@ import * as assert from 'assert';
 import { createCoreDocument, createCoreRange, serializeCoreFindings, CoreFinding } from '../../core/types';
 import { findingToDiagnostic } from '../../core/vscodeAdapter';
 import { parsearDocumento } from '../../parsers/cssParser';
+import { VariableIndexBuilder } from '../../core/variableIndexBuilder';
+import { ClassIndexBuilder } from '../../core/classIndexBuilder';
+import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../core/workspaceProviders';
+
+class MemoryWorkspaceProvider implements WorkspaceFileProvider, DocumentProvider {
+  constructor(private readonly files: Record<string, { languageId: string; content: string }>) {}
+
+  async findFiles(patterns: string[]): Promise<WorkspaceFile[]> {
+    const extensions = patterns.map(pattern => pattern.replace('**/*', ''));
+    return Object.keys(this.files)
+      .filter(filePath => extensions.some(extension => filePath.endsWith(extension)))
+      .map(filePath => ({ uri: `file://${filePath}`, fsPath: filePath }));
+  }
+
+  async openTextDocument(file: WorkspaceFile) {
+    const entry = this.files[file.fsPath];
+    if (!entry) {
+      throw new Error(`Missing fixture ${file.fsPath}`);
+    }
+
+    return createCoreDocument({
+      uri: file.uri,
+      fileName: file.fsPath,
+      languageId: entry.languageId,
+      content: entry.content,
+    });
+  }
+}
 
 suite('VarSense editor-agnostic core contracts', () => {
   test('creates a document with stable line helpers', () => {
@@ -66,5 +94,39 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(result.variablesDefinidas[0].nombre, '--colorPrincipal');
     assert.strictEqual(result.usosVariables[0].rango.start.line, 3);
     assert.doesNotThrow(() => JSON.stringify(result.usosVariables[0].rango));
+  });
+
+  test('builds a variable index through core providers', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: ':root { --colorPrincipal: #fff; }',
+      },
+    });
+    const builder = new VariableIndexBuilder(provider, provider);
+
+    const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
+
+    assert.ok(result.indice.variables.has('--colorPrincipal'));
+    assert.deepStrictEqual(result.indice.archivosEscaneados, ['/workspace/src/styles.css']);
+  });
+
+  test('detects orphan classes through core providers', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: '.botonPrimario { color: red; }\n.panelOculto { color: blue; }',
+      },
+      '/workspace/src/App.tsx': {
+        languageId: 'typescriptreact',
+        content: '<button className="botonPrimario" />',
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelOculto');
   });
 });

@@ -3,6 +3,8 @@
 
 import * as vscode from 'vscode';
 import { CoreFinding, CoreRange, CoreSeverity, CoreTextDocument, createCoreDocument } from './types';
+import { buscarArchivos } from '@/utils/fileUtils';
+import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
 
 export function documentFromVsCode(document: vscode.TextDocument): CoreTextDocument {
   return createCoreDocument({
@@ -11,6 +13,27 @@ export function documentFromVsCode(document: vscode.TextDocument): CoreTextDocum
     languageId: document.languageId,
     content: document.getText(),
   });
+}
+
+export function workspaceFileFromVsCodeUri(uri: vscode.Uri): WorkspaceFile {
+  return {
+    uri: uri.toString(),
+    fsPath: uri.fsPath,
+  };
+}
+
+export class VscodeWorkspaceFileProvider implements WorkspaceFileProvider {
+  public async findFiles(patterns: string[], exclude: string[]): Promise<WorkspaceFile[]> {
+    const archivos = await buscarArchivos(patterns, exclude);
+    return archivos.map(workspaceFileFromVsCodeUri);
+  }
+}
+
+export class VscodeDocumentProvider implements DocumentProvider {
+  public async openTextDocument(file: WorkspaceFile): Promise<CoreTextDocument> {
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file.fsPath));
+    return documentFromVsCode(document);
+  }
 }
 
 export function severityToDiagnosticSeverity(severity: CoreSeverity): vscode.DiagnosticSeverity {

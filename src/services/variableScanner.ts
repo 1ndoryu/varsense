@@ -6,10 +6,11 @@
 
 import * as vscode from 'vscode';
 import { CssVariable, VariableIndex, CacheState, ScoredVariable, ScannerStatistics } from '@/types';
-import { buscarArchivos, crearFileWatcher, debounce } from '@/utils/fileUtils';
-import { parsearDefiniciones } from '@/parsers/cssParser';
+import { crearFileWatcher, debounce } from '@/utils/fileUtils';
 import { obtenerConfigService } from '@/services/configService';
-import { documentFromVsCode } from '@/core/vscodeAdapter';
+import { VscodeDocumentProvider, VscodeWorkspaceFileProvider, workspaceFileFromVsCodeUri } from '@/core/vscodeAdapter';
+import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
+import { WorkspaceFile } from '@/core/workspaceProviders';
 
 /*
  * Patrones glob para escanear todos los archivos CSS del proyecto
@@ -36,6 +37,7 @@ export class VariableScanner {
     private _fileWatcherDisposables: vscode.Disposable[] = [];
     private _globalDisposables: vscode.Disposable[] = [];
     private _onVariablesChange: vscode.EventEmitter<void>;
+    private readonly _indexBuilder: VariableIndexBuilder;
     private _escaneando: boolean = false;
 
     public readonly onVariablesChange: vscode.Event<void>;
@@ -43,6 +45,10 @@ export class VariableScanner {
     private constructor() {
         this._onVariablesChange = new vscode.EventEmitter<void>();
         this.onVariablesChange = this._onVariablesChange.event;
+        this._indexBuilder = new VariableIndexBuilder(
+            new VscodeWorkspaceFileProvider(),
+            new VscodeDocumentProvider()
+        );
 
         this.reiniciarEstadoCache();
         this.configurarFileWatchers();
@@ -89,34 +95,21 @@ export class VariableScanner {
                 ? PATRONES_CSS_GLOBALES
                 : configService.obtenerPatronesVariables();
 
-            /* Buscar archivos que coincidan con los patrones */
-            const archivos = await buscarArchivos(patrones, excluidos);
-
-            /* Construir índice temporal para swap atómico */
-            const nuevoIndice: Map<string, CssVariable> = new Map();
-            const nuevoPorArchivo: Map<string, CssVariable[]> = new Map();
-
-            /* [124A-AUDIT1] Procesar archivos con concurrencia limitada para evitar
-             * exhaustar file descriptors y generar memory spikes.
-             * Antes: Promise.all(archivos.map(...)) sin límite */
-            for (let i = 0; i < archivos.length; i += VariableScanner.MAX_CONCURRENT) {
-                const lote = archivos.slice(i, i + VariableScanner.MAX_CONCURRENT);
-                await Promise.all(lote.map(uri =>
-                    this.procesarArchivoEnIndice(uri, nuevoIndice, nuevoPorArchivo)
-                ));
-            }
+            const resultado = await this._indexBuilder.build({
+                patterns: patrones,
+                exclude: excluidos,
+                maxConcurrent: VariableScanner.MAX_CONCURRENT
+            });
 
             /* Swap atómico: reemplazar el caché de una sola vez */
-            this._cache.indice.variables = nuevoIndice;
-            this._cache.variablesPorArchivo = nuevoPorArchivo;
-            this._cache.indice.ultimaActualizacion = Date.now();
-            this._cache.indice.archivosEscaneados = archivos.map(u => u.fsPath);
+            this._cache.indice = resultado.indice;
+            this._cache.variablesPorArchivo = resultado.variablesPorArchivo;
             this._cache.valido = true;
 
             /* Notificar cambios */
             this._onVariablesChange.fire();
 
-            console.log(`[CSS Vars Validator] Escaneadas ${nuevoIndice.size} variables de ${archivos.length} archivos`);
+            console.log(`[CSS Vars Validator] Escaneadas ${resultado.indice.variables.size} variables de ${resultado.indice.archivosEscaneados.length} archivos`);
         } catch (error) {
             console.error('[CSS Vars Validator] Error escaneando variables:', error);
         } finally {
@@ -131,25 +124,14 @@ export class VariableScanner {
      * Usado durante el escaneo completo para construir índice temporal
      */
     private async procesarArchivoEnIndice(
-        uri: vscode.Uri,
+        file: WorkspaceFile,
         indice: Map<string, CssVariable>,
         porArchivo: Map<string, CssVariable[]>
     ): Promise<void> {
         try {
-            const documento = await vscode.workspace.openTextDocument(uri);
-            const variables = parsearDefiniciones(documentFromVsCode(documento));
-
-            /* Guardar variables por archivo para invalidación parcial */
-            porArchivo.set(uri.fsPath, variables);
-
-            /* Agregar al índice global (primera definición gana) */
-            for (const variable of variables) {
-                if (!indice.has(variable.nombre)) {
-                    indice.set(variable.nombre, variable);
-                }
-            }
+            await this._indexBuilder.addFileToIndex(file, indice, porArchivo);
         } catch (error) {
-            console.error(`[CSS Vars Validator] Error procesando ${uri.fsPath}:`, error);
+            console.error(`[CSS Vars Validator] Error procesando ${file.fsPath}:`, error);
         }
     }
 
@@ -162,7 +144,7 @@ export class VariableScanner {
 
         /* Procesar el archivo actualizado directamente en el caché vivo */
         await this.procesarArchivoEnIndice(
-            uri,
+            workspaceFileFromVsCodeUri(uri),
             this._cache.indice.variables,
             this._cache.variablesPorArchivo
         );
@@ -178,19 +160,11 @@ export class VariableScanner {
      * Elimina las variables pertenecientes a un archivo del índice
      */
     private eliminarVariablesDeArchivo(fsPath: string): void {
-        const variables = this._cache.variablesPorArchivo.get(fsPath);
-
-        if (!variables) {
-            return;
-        }
-
-        for (const variable of variables) {
-            /* Solo eliminar si esta es la fuente actual de la variable */
-            const varActual = this._cache.indice.variables.get(variable.nombre);
-            if (varActual && varActual.archivo === fsPath) {
-                this._cache.indice.variables.delete(variable.nombre);
-            }
-        }
+        this._indexBuilder.removeFileFromIndex(
+            fsPath,
+            this._cache.indice.variables,
+            this._cache.variablesPorArchivo
+        );
     }
 
     /*
