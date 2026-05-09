@@ -5,6 +5,15 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-05-08
+
+### Agregado
+- **CLI editor-agnóstico**: nuevo binario `varsense` con `scan` y `orphan-classes`, usando los mismos indexadores y contratos core que la extensión.
+- **Reporte Markdown/JSON desde Node**: `scan` puede escribir `.varsense-report.md` o imprimir JSON estructurado sin depender de VS Code.
+
+### Mejorado
+- **Build dual extension/CLI**: esbuild genera `dist/extension.js` y `dist/cli/index.js`, evitando fugas de aliases `@/` en runtime.
+
 ## [2.0.0] - 2026-02-16
 
 ### Agregado

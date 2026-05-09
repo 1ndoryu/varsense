@@ -31,6 +31,9 @@
         "onLanguage:javascriptreact"
     ],
     "main": "./dist/extension.js",
+    "bin": {
+        "varsense": "./dist/cli/index.js"
+    },
     "contributes": {
         "commands": [
             {
@@ -315,7 +318,8 @@
     "scripts": {
         "vscode:prepublish": "npm run compile",
         "compile": "node esbuild.config.mjs --minify",
-        "compile:tests": "tsc -p ./tsconfig.json",
+        "cli": "npm run compile && node ./dist/cli/index.js",
+        "compile:tests": "tsc -p ./tsconfig.json && node esbuild.config.mjs --minify",
         "watch": "node esbuild.config.mjs --watch",
         "pretest": "npm run compile && npm run compile:tests && npm run lint",
         "lint": "eslint src --ext ts",

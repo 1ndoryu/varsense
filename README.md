@@ -68,6 +68,18 @@ npm run compile
 
 Presiona F5 para abrir una ventana de VS Code con la extensión cargada.
 
+### CLI editor-agnóstico
+
+El mismo núcleo de análisis se puede ejecutar fuera de VS Code:
+
+```bash
+npm run compile
+node ./dist/cli/index.js scan --workspace . --format markdown --output .varsense-report.md
+node ./dist/cli/index.js orphan-classes --workspace . --format json
+```
+
+`scan` valida variables no definidas, valores hardcodeados, propiedades prohibidas y CSS inline en React. `orphan-classes` usa los mismos indexadores core para reportar clases CSS definidas pero no consumidas.
+
 ## Configuración
 
 Agrega estas opciones a tu `settings.json`:
