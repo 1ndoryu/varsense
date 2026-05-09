@@ -15,6 +15,7 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Mejorado
 - **Build dual extension/CLI**: esbuild genera `dist/extension.js` y `dist/cli/index.js`, evitando fugas de aliases `@/` en runtime.
+- **Guard de core editor-agnóstico**: `npm test` ejecuta `check:core` y falla si `src/core/**` importa `vscode` fuera del adaptador permitido.
 
 ## [2.0.0] - 2026-02-16
 
