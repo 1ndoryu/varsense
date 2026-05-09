@@ -87,9 +87,28 @@ VarSense tambien expone un servidor LSP stdio para editores compatibles:
 ```bash
 npm run compile
 node ./dist/lsp/server.js --stdio
+npm run smoke:lsp
 ```
 
-El servidor publica diagnostics desde el mismo core que usa el CLI. La integracion de cada editor solo debe lanzar este binario y registrar los lenguajes CSS/SCSS/LESS/TSX/JSX.
+El servidor publica diagnostics desde el mismo core que usa el CLI. `npm run smoke:lsp` levanta el server compilado por stdio y falla si el bundle ejecuta la ayuda de la CLI en lugar de publicar `textDocument/publishDiagnostics`. La integracion de cada editor solo debe lanzar este binario y registrar los lenguajes CSS/SCSS/LESS/TSX/JSX.
+
+### Zed
+
+La integracion de Zed vive en `integrations/zed/`. Es una extension Rust/WASM fina: no contiene reglas ni analiza archivos, solo localiza `varsense-lsp` y lo arranca por stdio.
+
+```bash
+npm run compile
+npm run smoke:lsp
+cargo check --manifest-path integrations/zed/Cargo.toml --target wasm32-wasip2
+```
+
+Despues, en Zed usa `zed: install dev extension` y selecciona `integrations/zed`. El adaptador busca el LSP en este orden:
+
+- `VARSENSE_LSP_PATH`, si necesitas apuntar a un script o binario concreto.
+- `varsense-lsp` disponible en el `PATH` del worktree.
+- `../../dist/lsp/server.js`, para desarrollo local despues de `npm run compile`.
+
+La raiz incluye `.zed/tasks.json` con tareas para ejecutar `varsense scan` y `varsense orphan-classes` desde Zed sin pasar por VS Code.
 
 ## Configuración
 

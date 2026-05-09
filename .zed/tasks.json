@@ -1,0 +1,32 @@
+[
+  {
+    "label": "VarSense: reporte Markdown",
+    "command": "npm",
+    "args": [
+      "run",
+      "cli",
+      "--",
+      "scan",
+      "--workspace",
+      ".",
+      "--format",
+      "markdown",
+      "--output",
+      ".varsense-report.md"
+    ]
+  },
+  {
+    "label": "VarSense: clases huerfanas JSON",
+    "command": "npm",
+    "args": [
+      "run",
+      "cli",
+      "--",
+      "orphan-classes",
+      "--workspace",
+      ".",
+      "--format",
+      "json"
+    ]
+  }
+]

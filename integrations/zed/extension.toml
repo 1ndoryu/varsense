@@ -1,0 +1,20 @@
+id = "varsense"
+name = "VarSense"
+version = "0.1.0"
+schema_version = 1
+authors = ["1ndoryu"]
+description = "Runs the VarSense language server in Zed for CSS variable and design-token diagnostics."
+repository = "https://github.com/1ndoryu/varsense"
+
+[language_servers.varsense-lsp]
+name = "VarSense LSP"
+languages = ["CSS", "SCSS", "LESS", "TSX", "JSX", "TypeScript", "JavaScript"]
+
+[language_servers.varsense-lsp.language_ids]
+"CSS" = "css"
+"SCSS" = "scss"
+"LESS" = "less"
+"TSX" = "typescriptreact"
+"JSX" = "javascriptreact"
+"TypeScript" = "typescript"
+"JavaScript" = "javascript"

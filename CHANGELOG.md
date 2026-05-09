@@ -10,11 +10,15 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 ### Agregado
 - **CLI editor-agnóstico**: nuevo binario `varsense` con `scan` y `orphan-classes`, usando los mismos indexadores y contratos core que la extensión.
 - **LSP stdio**: nuevo binario `varsense-lsp` que publica diagnostics desde el core para editores compatibles.
+- **Integración Zed dev**: nueva carpeta `integrations/zed/` con adaptador Rust/WASM que registra `varsense-lsp` para CSS/SCSS/LESS/TSX/JSX/TS/JS sin duplicar reglas.
+- **Tareas Zed**: `.zed/tasks.json` permite ejecutar reportes CLI desde Zed.
 - **Reporte Markdown/JSON desde Node**: `scan` puede escribir `.varsense-report.md` o imprimir JSON estructurado sin depender de VS Code.
 - **Fixtures de equivalencia**: casos versionados que comparan hallazgos core vs CLI para `scan` y `orphan-classes`.
 
 ### Mejorado
 - **Build dual extension/CLI**: esbuild genera `dist/extension.js` y `dist/cli/index.js`, evitando fugas de aliases `@/` en runtime.
+- **Boundary CLI/LSP**: los defaults de analisis viven en `core/config`, evitando que el LSP importe o ejecute el entrypoint CLI al bundlear.
+- **Smoke LSP stdio**: `npm test` ejecuta `npm run smoke:lsp` para confirmar que `dist/lsp/server.js --stdio` publica diagnostics reales.
 - **Guard de core editor-agnóstico**: `npm test` ejecuta `check:core` y falla si `src/core/**` importa `vscode` fuera del adaptador permitido.
 
 ## [2.0.0] - 2026-02-16

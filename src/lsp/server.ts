@@ -21,7 +21,7 @@ import {
     buildAnalysisConfig,
     DEFAULT_EXCLUDE_PATTERNS,
     DEFAULT_VARIABLE_PATTERNS,
-} from '@/cli';
+} from '@/core/config';
 import { findingToLspDiagnostic } from './diagnostics';
 
 const connection = createConnection(ProposedFeatures.all);
