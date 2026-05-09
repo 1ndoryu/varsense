@@ -1,0 +1,10 @@
+[
+  {
+    "file": "src/styles.css",
+    "ruleId": "claseHuerfana",
+    "severity": "warning",
+    "line": 4,
+    "character": 0,
+    "message": "Clase CSS 'huerfana' definida pero no usada"
+  }
+]

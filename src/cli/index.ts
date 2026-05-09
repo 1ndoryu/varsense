@@ -52,16 +52,16 @@ export interface CliAnalysisResult {
     hasErrors: boolean;
 }
 
-const DEFAULT_VARIABLE_PATTERNS = [
+export const DEFAULT_VARIABLE_PATTERNS = [
     '**/variables.css',
     '**/vars.css',
     '**/_variables.scss',
     '**/tokens.css',
 ];
-const DEFAULT_CSS_PATTERNS = ['**/*.css', '**/*.scss', '**/*.less'];
-const DEFAULT_REACT_PATTERNS = ['**/*.tsx', '**/*.jsx'];
-const DEFAULT_INCLUDE_PATTERNS = ['**/*'];
-const DEFAULT_EXCLUDE_PATTERNS = [
+export const DEFAULT_CSS_PATTERNS = ['**/*.css', '**/*.scss', '**/*.less'];
+export const DEFAULT_REACT_PATTERNS = ['**/*.tsx', '**/*.jsx'];
+export const DEFAULT_INCLUDE_PATTERNS = ['**/*'];
+export const DEFAULT_EXCLUDE_PATTERNS = [
     '**/node_modules/**',
     '**/vendor/**',
     '**/*.min.css',
@@ -182,7 +182,7 @@ function severityOrDefault(value: CoreSeverity | undefined, fallback: CoreSeveri
     return value && VALID_SEVERITIES.has(value) ? value : fallback;
 }
 
-function buildAnalysisConfig(config: VarsenseCliConfigFile): VarsenseDocumentAnalysisConfig {
+export function buildAnalysisConfig(config: VarsenseCliConfigFile): VarsenseDocumentAnalysisConfig {
     return {
         hardcoded: {
             habilitado: config.hardcodedDetection?.enabled ?? true,
