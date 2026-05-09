@@ -57,7 +57,18 @@ const cliOptions = {
     plugins: [aliasPlugin],
 };
 
-const builds = [extensionOptions, cliOptions];
+const lspOptions = {
+    entryPoints: ['./src/lsp/server.ts'],
+    bundle: true,
+    outfile: 'dist/lsp/server.js',
+    format: 'cjs',
+    platform: 'node',
+    minify: isMinify,
+    sourcemap: !isMinify,
+    plugins: [aliasPlugin],
+};
+
+const builds = [extensionOptions, cliOptions, lspOptions];
 
 if (isWatch) {
     const contexts = await Promise.all(builds.map(options => esbuild.context(options)));

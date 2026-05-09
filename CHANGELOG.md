@@ -9,6 +9,7 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ### Agregado
 - **CLI editor-agnóstico**: nuevo binario `varsense` con `scan` y `orphan-classes`, usando los mismos indexadores y contratos core que la extensión.
+- **LSP stdio**: nuevo binario `varsense-lsp` que publica diagnostics desde el core para editores compatibles.
 - **Reporte Markdown/JSON desde Node**: `scan` puede escribir `.varsense-report.md` o imprimir JSON estructurado sin depender de VS Code.
 - **Fixtures de equivalencia**: casos versionados que comparan hallazgos core vs CLI para `scan` y `orphan-classes`.
 

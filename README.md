@@ -80,6 +80,17 @@ node ./dist/cli/index.js orphan-classes --workspace . --format json
 
 `scan` valida variables no definidas, valores hardcodeados, propiedades prohibidas y CSS inline en React. `orphan-classes` usa los mismos indexadores core para reportar clases CSS definidas pero no consumidas.
 
+### Language Server
+
+VarSense tambien expone un servidor LSP stdio para editores compatibles:
+
+```bash
+npm run compile
+node ./dist/lsp/server.js --stdio
+```
+
+El servidor publica diagnostics desde el mismo core que usa el CLI. La integracion de cada editor solo debe lanzar este binario y registrar los lenguajes CSS/SCSS/LESS/TSX/JSX.
+
 ## Configuración
 
 Agrega estas opciones a tu `settings.json`:
