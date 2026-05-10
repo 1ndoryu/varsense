@@ -4,7 +4,7 @@
 import * as vscode from 'vscode';
 import { CoreFinding, CoreRange, CoreSeverity, CoreTextDocument, createCoreDocument } from './types';
 import { buscarArchivos } from '@/utils/fileUtils';
-import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
+import { DocumentProvider, FileWatcher, FileWatcherCallbacks, FileWatcherProvider, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
 
 export function documentFromVsCode(document: vscode.TextDocument): CoreTextDocument {
   return createCoreDocument({
@@ -33,6 +33,30 @@ export class VscodeDocumentProvider implements DocumentProvider {
   public async openTextDocument(file: WorkspaceFile): Promise<CoreTextDocument> {
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file.fsPath));
     return documentFromVsCode(document);
+  }
+}
+
+export class VscodeFileWatcherProvider implements FileWatcherProvider {
+  public createWatchers(patterns: string[], callbacks: FileWatcherCallbacks): FileWatcher[] {
+    const watchers: vscode.Disposable[] = [];
+
+    for (const pattern of patterns) {
+      const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+
+      if (callbacks.onCreate) {
+        watchers.push(watcher.onDidCreate(uri => callbacks.onCreate?.(workspaceFileFromVsCodeUri(uri))));
+      }
+      if (callbacks.onChange) {
+        watchers.push(watcher.onDidChange(uri => callbacks.onChange?.(workspaceFileFromVsCodeUri(uri))));
+      }
+      if (callbacks.onDelete) {
+        watchers.push(watcher.onDidDelete(uri => callbacks.onDelete?.(workspaceFileFromVsCodeUri(uri))));
+      }
+
+      watchers.push(watcher);
+    }
+
+    return watchers;
   }
 }
 

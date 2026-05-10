@@ -6,11 +6,11 @@
 
 import * as vscode from 'vscode';
 import { CssVariable, VariableIndex, CacheState, ScoredVariable, ScannerStatistics } from '@/types';
-import { crearFileWatcher, debounce } from '@/utils/fileUtils';
+import { debounce } from '@/utils/fileUtils';
 import { obtenerConfigService } from '@/services/configService';
-import { VscodeDocumentProvider, VscodeWorkspaceFileProvider, workspaceFileFromVsCodeUri } from '@/core/vscodeAdapter';
+import { VscodeDocumentProvider, VscodeFileWatcherProvider, VscodeWorkspaceFileProvider } from '@/core/vscodeAdapter';
 import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
-import { WorkspaceFile } from '@/core/workspaceProviders';
+import { FileWatcher, FileWatcherProvider, WorkspaceFile } from '@/core/workspaceProviders';
 
 /*
  * Patrones glob para escanear todos los archivos CSS del proyecto
@@ -34,10 +34,11 @@ export class VariableScanner {
     private static readonly MIN_WORD_LENGTH = 2;
 
     private _cache!: CacheState;
-    private _fileWatcherDisposables: vscode.Disposable[] = [];
+    private _fileWatcherDisposables: FileWatcher[] = [];
     private _globalDisposables: vscode.Disposable[] = [];
     private _onVariablesChange: vscode.EventEmitter<void>;
     private readonly _indexBuilder: VariableIndexBuilder;
+    private readonly _fileWatcherProvider: FileWatcherProvider;
     private _escaneando: boolean = false;
 
     public readonly onVariablesChange: vscode.Event<void>;
@@ -49,6 +50,7 @@ export class VariableScanner {
             new VscodeWorkspaceFileProvider(),
             new VscodeDocumentProvider()
         );
+        this._fileWatcherProvider = new VscodeFileWatcherProvider();
 
         this.reiniciarEstadoCache();
         this.configurarFileWatchers();
@@ -138,13 +140,13 @@ export class VariableScanner {
     /*
      * Actualiza el caché cuando un archivo cambia (actualización incremental)
      */
-    private async actualizarArchivo(uri: vscode.Uri): Promise<void> {
+    private async actualizarArchivo(file: WorkspaceFile): Promise<void> {
         /* Eliminar variables antiguas de este archivo */
-        this.eliminarVariablesDeArchivo(uri.fsPath);
+        this.eliminarVariablesDeArchivo(file.fsPath);
 
         /* Procesar el archivo actualizado directamente en el caché vivo */
         await this.procesarArchivoEnIndice(
-            workspaceFileFromVsCodeUri(uri),
+            file,
             this._cache.indice.variables,
             this._cache.variablesPorArchivo
         );
@@ -170,8 +172,8 @@ export class VariableScanner {
     /*
      * Elimina un archivo del caché completamente
      */
-    private eliminarArchivo(uri: vscode.Uri): void {
-        const fsPath = uri.fsPath;
+    private eliminarArchivo(file: WorkspaceFile): void {
+        const fsPath = file.fsPath;
 
         if (!this._cache.variablesPorArchivo.has(fsPath)) {
             return;
@@ -200,28 +202,29 @@ export class VariableScanner {
 
         /* Crear función debounced para actualizaciones */
         const actualizarDebounced = debounce((...args: unknown[]) => {
-            const uri = args[0] as vscode.Uri;
-            void this.actualizarArchivo(uri);
+            const file = args[0] as WorkspaceFile;
+            void this.actualizarArchivo(file);
         }, VariableScanner.DEBOUNCE_WATCHER_MS);
 
-        const watchers = crearFileWatcher(patrones, {
-            onCrear: uri => {
-                void this.actualizarArchivo(uri);
+        const watchers = this._fileWatcherProvider.createWatchers(patrones, {
+            onCreate: file => {
+                void this.actualizarArchivo(file);
             },
-            onCambiar: actualizarDebounced,
-            onEliminar: uri => this.eliminarArchivo(uri)
+            onChange: file => actualizarDebounced(file),
+            onDelete: file => this.eliminarArchivo(file)
         });
 
         this._fileWatcherDisposables.push(...watchers);
 
         /* Configurar watcher para Git change (Branch switching) */
-        const gitWatcher = vscode.workspace.createFileSystemWatcher('**/.git/HEAD');
-        gitWatcher.onDidChange(() => {
-            console.log('[CSS Vars Validator] Cambio en Git detectado. Limpiando caché...');
-            this.limpiarCache();
-            void this.escanear(true);
+        const gitWatchers = this._fileWatcherProvider.createWatchers(['**/.git/HEAD'], {
+            onChange: () => {
+                console.log('[CSS Vars Validator] Cambio en Git detectado. Limpiando caché...');
+                this.limpiarCache();
+                void this.escanear(true);
+            }
         });
-        this._fileWatcherDisposables.push(gitWatcher);
+        this._fileWatcherDisposables.push(...gitWatchers);
     }
 
     /*
