@@ -13,9 +13,11 @@ import {
     DEFAULT_EXCLUDE_PATTERNS,
     DEFAULT_INCLUDE_PATTERNS,
     DEFAULT_REACT_PATTERNS,
+    DEFAULT_SCRIPT_PATTERNS,
     DEFAULT_VARIABLE_PATTERNS,
     VarsenseConfigFile,
     buildAnalysisConfig,
+    validateVarsenseConfig,
 } from '@/core/config';
 
 export {
@@ -23,8 +25,10 @@ export {
     DEFAULT_EXCLUDE_PATTERNS,
     DEFAULT_INCLUDE_PATTERNS,
     DEFAULT_REACT_PATTERNS,
+    DEFAULT_SCRIPT_PATTERNS,
     DEFAULT_VARIABLE_PATTERNS,
     buildAnalysisConfig,
+    validateVarsenseConfig,
 } from '@/core/config';
 
 export type VarsenseCliCommand = 'scan' | 'orphan-classes';
@@ -44,19 +48,25 @@ export interface CliAnalysisResult {
     entries: VarsenseReportEntry[];
     totalArchivos: number;
     hasErrors: boolean;
+    durationMs: number;
 }
+
+export const VARSENSE_JSON_SCHEMA_VERSION = '1';
 
 function usage(): string {
     return [
         'Uso:',
         '  varsense scan --workspace . --format markdown --output .varsense-report.md',
         '  varsense orphan-classes --workspace . --format json',
+        '  varsense --version',
         '',
         'Opciones:',
         '  --workspace <path>  Analiza un workspace. Por defecto: cwd',
         '  --format <type>     markdown | json. Por defecto: markdown',
         '  --output <path>     Escribe salida en archivo; si falta, imprime en stdout',
         '  --config <path>     Carga varsense.config.json',
+        '  --help              Muestra esta ayuda',
+        '  --version           Muestra la version instalada',
     ].join('\n');
 }
 
@@ -136,7 +146,9 @@ async function readConfig(configPath: string | undefined, workspacePath: string)
     }
 
     const raw = await fs.readFile(candidate, 'utf8');
-    return JSON.parse(raw) as VarsenseConfigFile;
+    const parsed: unknown = JSON.parse(raw);
+    validateVarsenseConfig(parsed);
+    return parsed;
 }
 
 function isIncluded(filePath: string, workspacePath: string, includePatterns: string[]): boolean {
@@ -159,6 +171,7 @@ function groupFindingsByFile(findings: Array<{ ruta: string; finding: CoreFindin
 }
 
 export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
+    const startedAt = Date.now();
     const configFile = await readConfig(args.configPath, args.workspacePath);
     const analysisConfig = buildAnalysisConfig(configFile);
     const includePatterns = configFile.includePatterns ?? DEFAULT_INCLUDE_PATTERNS;
@@ -175,7 +188,10 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
         exclude: excludePatterns,
     });
 
-    const candidates = await fileProvider.findFiles([...DEFAULT_CSS_PATTERNS, ...DEFAULT_REACT_PATTERNS], excludePatterns);
+    const candidates = await fileProvider.findFiles(
+        [...DEFAULT_CSS_PATTERNS, ...DEFAULT_REACT_PATTERNS, ...DEFAULT_SCRIPT_PATTERNS],
+        excludePatterns
+    );
     const includedCandidates = candidates.filter(file => isIncluded(file.fsPath, args.workspacePath, includePatterns));
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
 
@@ -192,10 +208,12 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
         entries,
         totalArchivos: includedCandidates.length,
         hasErrors: entries.some(entry => entry.findings.some(finding => finding.severity === 'error')),
+        durationMs: Date.now() - startedAt,
     };
 }
 
 export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
+    const startedAt = Date.now();
     const configFile = await readConfig(args.configPath, args.workspacePath);
     const excludePatterns = configFile.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS;
     const fileProvider = new NodeWorkspaceFileProvider(args.workspacePath);
@@ -209,13 +227,14 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
 
     const entries = groupFindingsByFile(result.clasesHuerfanas.map(clase => ({
         ruta: clase.archivo,
-        finding: orphanClassToFinding(clase),
+        finding: orphanClassToFinding(clase, configFile.orphanClassDetection?.severity ?? 'warning'),
     })));
 
     return {
         entries,
         totalArchivos: result.archivosAnalizadosCss + result.archivosAnalizadosConsumo,
-        hasErrors: false,
+        hasErrors: entries.some(entry => entry.findings.some(finding => finding.severity === 'error')),
+        durationMs: Date.now() - startedAt,
     };
 }
 
@@ -225,9 +244,23 @@ export async function analyzeCliTarget(args: ParsedCliArgs): Promise<CliAnalysis
         : analyzeOrphanClassesTarget(args);
 }
 
-function renderOutput(result: CliAnalysisResult, args: ParsedCliArgs): string {
+function severityCounts(result: CliAnalysisResult): Record<string, number> {
+    const counts: Record<string, number> = { error: 0, warning: 0, information: 0, hint: 0 };
+    for (const finding of result.entries.flatMap(entry => entry.findings)) {
+        counts[finding.severity] = (counts[finding.severity] ?? 0) + 1;
+    }
+    return counts;
+}
+
+function renderOutput(result: CliAnalysisResult, args: ParsedCliArgs, toolVersion: string): string {
     if (args.format === 'json') {
         return `${JSON.stringify({
+            schemaVersion: VARSENSE_JSON_SCHEMA_VERSION,
+            tool: { name: 'varsense', version: toolVersion },
+            scope: 'workspace',
+            command: args.command,
+            durationMs: result.durationMs,
+            severityCounts: severityCounts(result),
             totalArchivos: result.totalArchivos,
             totalArchivosConHallazgos: result.entries.length,
             entries: result.entries,
@@ -239,6 +272,15 @@ function renderOutput(result: CliAnalysisResult, args: ParsedCliArgs): string {
         totalArchivos: result.totalArchivos,
         rutaBase: args.workspacePath,
     })}\n`;
+}
+
+async function readPackageVersion(): Promise<string> {
+    const packagePath = path.resolve(__dirname, '../../package.json');
+    const packageJson = JSON.parse(await fs.readFile(packagePath, 'utf8')) as { version?: unknown };
+    if (typeof packageJson.version !== 'string') {
+        throw new Error('package.json no contiene una version valida');
+    }
+    return packageJson.version;
 }
 
 async function writeOrPrint(output: string, outputPath?: string): Promise<void> {
@@ -253,9 +295,17 @@ async function writeOrPrint(output: string, outputPath?: string): Promise<void> 
 }
 
 export async function runCli(rawArgs: string[]): Promise<number> {
+    if (rawArgs.length === 1 && (rawArgs[0] === '--help' || rawArgs[0] === '-h')) {
+        process.stdout.write(`${usage()}\n`);
+        return 0;
+    }
+    if (rawArgs.length === 1 && rawArgs[0] === '--version') {
+        process.stdout.write(`${await readPackageVersion()}\n`);
+        return 0;
+    }
     const args = parseCliArgs(rawArgs);
     const result = await analyzeCliTarget(args);
-    await writeOrPrint(renderOutput(result, args), args.outputPath);
+    await writeOrPrint(renderOutput(result, args, await readPackageVersion()), args.outputPath);
     return result.hasErrors ? 1 : 0;
 }
 

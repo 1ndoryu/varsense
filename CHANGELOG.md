@@ -5,6 +5,16 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-07-29
+
+### Agregado
+- Validación estricta de `varsense.config.json` y salida JSON versionada con conteos por severidad.
+- Detección de estilos inline en Vanilla TypeScript/JavaScript.
+- `--help` y `--version` aptos para automatización.
+
+### Corregido
+- `orphan-classes` respeta una severidad configurable y devuelve fallo cuando existen huérfanos configurados como `error`.
+
 ## [2.0.1] - 2026-05-08
 
 ### Agregado

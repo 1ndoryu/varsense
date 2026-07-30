@@ -2,7 +2,7 @@
     "name": "varsense",
     "displayName": "VarSense",
     "description": "Extensión de VS Code para validación y gestión de variables CSS. Detecta errores, sugiere variables y mejora el flujo de trabajo con CSS custom properties.",
-    "version": "2.1.0",
+    "version": "2.2.0",
     "publisher": "1ndoryu",
     "icon": "icon.jpg",
     "repository": {

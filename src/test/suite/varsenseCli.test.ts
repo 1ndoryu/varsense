@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { analyzeCliTarget, parseCliArgs } from '../../cli';
+import { validateVarsenseConfig } from '../../core/config';
 
 function crearWorkspaceTemporal(prefix: string): string {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -59,5 +60,56 @@ suite('VarSense CLI editor-agnostic', () => {
         } finally {
             fs.rmSync(root, { recursive: true, force: true });
         }
+    });
+
+    test('scan detecta CSS inline en Vanilla TypeScript', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-vanilla-');
+        escribir(root, 'src/variables.css', ':root { --colorPrimary: #fff; }');
+        escribir(root, 'src/view.ts', 'element.style.color = "red";');
+
+        try {
+            const result = await analyzeCliTarget(parseCliArgs(['scan', '--workspace', root, '--format', 'json']));
+            const findings = result.entries.flatMap(entry => entry.findings);
+            assert.ok(findings.some(finding => finding.ruleId === 'cssInlineScript'));
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('scan permite setProperty para custom properties', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-custom-property-');
+        escribir(root, 'src/variables.css', ':root { --colorPrimary: #fff; }');
+        escribir(root, 'src/view.ts', 'root.style.setProperty("--colorPrimary", value);');
+
+        try {
+            const result = await analyzeCliTarget(parseCliArgs(['scan', '--workspace', root, '--format', 'json']));
+            const findings = result.entries.flatMap(entry => entry.findings);
+            assert.ok(!findings.some(finding => finding.ruleId === 'cssInlineScript'));
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('orphan-classes bloquea cuando la severidad local es error', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-orphan-error-');
+        escribir(root, 'src/styles.css', '.huerfana { color: red; }');
+        escribir(root, 'varsense.config.json', JSON.stringify({
+            orphanClassDetection: { severity: 'error' },
+        }));
+
+        try {
+            const result = await analyzeCliTarget(parseCliArgs(['orphan-classes', '--workspace', root, '--format', 'json']));
+            assert.strictEqual(result.hasErrors, true);
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('rechaza claves desconocidas en config', () => {
+        assert.throws(() => validateVarsenseConfig({ unknown: true }), /clave desconocida/);
+        assert.throws(
+            () => validateVarsenseConfig({ inlineDetection: { typo: true } }),
+            /clave desconocida/,
+        );
     });
 });

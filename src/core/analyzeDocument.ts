@@ -27,9 +27,11 @@ export interface VarsenseDocumentAnalysisConfig {
 }
 
 const REACT_LANGUAGE_IDS = new Set(['typescriptreact', 'javascriptreact']);
+const SCRIPT_LANGUAGE_IDS = new Set(['typescript', 'javascript']);
 const CSS_LANGUAGE_IDS = new Set(['css', 'scss', 'less']);
 const REGEX_STYLE_OBJ = /style\s*=\s*\{\s*\{/g;
 const REGEX_STYLE_VAR = /style\s*=\s*\{(?!\s*\{)([^}]+)\}/g;
+const REGEX_SCRIPT_INLINE_STYLE = /(?:\.style\.[a-zA-Z][\w]*\s*=|\.style\.setProperty\s*\(|\.setAttribute\s*\(\s*['"]style['"])/g;
 
 function shouldCheckProperty(config: VarsenseHardcodedConfig, property: string): boolean {
     if (!config.habilitado) {
@@ -180,6 +182,39 @@ function analyzeReactInlineStyles(
     return findings;
 }
 
+function analyzeScriptInlineStyles(
+    document: CoreTextDocument,
+    config: VarsenseDocumentAnalysisConfig
+): CoreFinding[] {
+    if (!config.inline.habilitado) {
+        return [];
+    }
+
+    const text = document.getText();
+    const findings: CoreFinding[] = [];
+    let match: RegExpExecArray | null;
+    REGEX_SCRIPT_INLINE_STYLE.lastIndex = 0;
+
+    while ((match = REGEX_SCRIPT_INLINE_STYLE.exec(text)) !== null) {
+        if (match[0].includes('.style.setProperty')) {
+            const firstArgument = text.slice(match.index + match[0].length);
+            if (/^\s*['"]--[\w-]+['"]/.test(firstArgument)) {
+                continue;
+            }
+        }
+        findings.push(finding(
+            DiagnosticType.CssInlineScript,
+            'CSS inline detectado en script - usa una clase CSS y variables del sistema',
+            config.inline.severidad,
+            {
+                start: positionAtOffset(document, match.index),
+                end: positionAtOffset(document, match.index + match[0].length),
+            }
+        ));
+    }
+    return findings;
+}
+
 export function analyzeVarsenseDocument(
     document: CoreTextDocument,
     variableIndex: VariableIndex,
@@ -193,6 +228,10 @@ export function analyzeVarsenseDocument(
         return analyzeReactInlineStyles(document, config);
     }
 
+    if (SCRIPT_LANGUAGE_IDS.has(document.languageId)) {
+        return analyzeScriptInlineStyles(document, config);
+    }
+
     return [];
 }
 
@@ -202,11 +241,11 @@ export function orphanClassToFinding(input: {
     linea: number;
     columna: number;
     selector: string;
-}): CoreFinding {
+}, severity: CoreSeverity = 'warning'): CoreFinding {
     return finding(
         DiagnosticType.ClaseHuerfana,
         `Clase CSS '${input.nombre}' definida pero no usada`,
-        'warning',
+        severity,
         createCoreRange(input.linea, input.columna, input.linea, input.columna + input.nombre.length),
         { selector: input.selector }
     );
