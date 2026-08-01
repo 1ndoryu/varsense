@@ -82,6 +82,21 @@ suite('VarSense CLI editor-agnostic', () => {
         }
     });
 
+    test('all detecta tokens duplicados y no usados con el snapshot compartido', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-tokens-');
+        escribir(root, 'src/variables.css', ':root { --colorA: #fff; --colorB: #fff; --sinUso: 2px; }');
+        escribir(root, 'src/App.css', '.app { color: var(--colorA); }');
+
+        try {
+            const result = await analyzeCliTarget(parseCliArgs(['all', '--workspace', root, '--format', 'json']));
+            const ruleIds = result.entries.flatMap(entry => entry.findings).map(finding => finding.ruleId);
+            assert.ok(ruleIds.includes('token-duplicate'));
+            assert.ok(ruleIds.includes('token-unused'));
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
     test('scan detecta CSS inline en Vanilla TypeScript', async () => {
         const root = crearWorkspaceTemporal('varsense-cli-vanilla-');
         escribir(root, 'src/variables.css', ':root { --colorPrimary: #fff; }');

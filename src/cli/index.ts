@@ -2,11 +2,12 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { CoreFinding } from '@/core/types';
+import { CoreFinding, CoreTextDocument } from '@/core/types';
 import { CachedNodeDocumentProvider, NodeDocumentProvider, NodeWorkspaceFileProvider, matchesAnyGlob } from '@/core/nodeProviders';
 import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
 import { ClassIndexBuilder } from '@/core/classIndexBuilder';
 import { analyzeVarsenseDocument, orphanClassToFinding } from '@/core/analyzeDocument';
+import { analyzeTokenRules } from '@/core/tokenRules';
 import { VarsenseReportEntry, generarReporteMarkdown } from '@/core/report';
 import {
     DEFAULT_CSS_PATTERNS,
@@ -259,11 +260,16 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     const includedCandidates = candidates.filter(file => isIncluded(file.fsPath, args.workspacePath, includePatterns));
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
     const analysisConfig = buildAnalysisConfig(configFile);
+    const documents: Array<{ file: string; document: CoreTextDocument }> = [];
     for (const file of includedCandidates) {
         const document = await documentProvider.openTextDocument(file);
+        documents.push({ file: file.fsPath, document });
         for (const documentFinding of analyzeVarsenseDocument(document, variableResult.indice, analysisConfig)) {
             findings.push({ ruta: file.fsPath, finding: documentFinding });
         }
+    }
+    for (const finding of analyzeTokenRules(variableResult.variablesPorArchivo, documents, analysisConfig)) {
+        findings.push({ ruta: String(finding.metadata?.file ?? args.workspacePath), finding });
     }
     findings.push(...classResult.clasesHuerfanas.map(clase => ({
         ruta: clase.archivo,

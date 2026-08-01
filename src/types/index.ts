@@ -173,7 +173,9 @@ export enum DiagnosticType {
     PropiedadProhibida = 'propiedadProhibida',
     /* Clase CSS con nombre de botón definida en archivo de componente.
      * Los componentes no deben reimplementar estilos de <Button> — usar variante/tamano. */
-    EstiloBotonEspecifico = 'estiloBotonEspecifico'
+    EstiloBotonEspecifico = 'estiloBotonEspecifico',
+    TokenDuplicado = 'tokenDuplicado',
+    TokenNoUsado = 'tokenNoUsado'
 }
 
 /*

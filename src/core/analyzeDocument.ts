@@ -24,6 +24,10 @@ export interface VarsenseDocumentAnalysisConfig {
     hardcoded: VarsenseHardcodedConfig;
     inline: VarsenseInlineConfig;
     bannedProperties: VarsenseBannedPropertyConfig;
+    tokens: {
+        duplicate: { habilitado: boolean; severidad: CoreSeverity };
+        unused: { habilitado: boolean; severidad: CoreSeverity };
+    };
 }
 
 const REACT_LANGUAGE_IDS = new Set(['typescriptreact', 'javascriptreact']);
