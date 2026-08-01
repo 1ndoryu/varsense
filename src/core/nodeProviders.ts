@@ -141,3 +141,23 @@ export class NodeDocumentProvider implements DocumentProvider {
         });
     }
 }
+
+/* [018A-5] Todos los analizadores de una ejecución comparten el snapshot de
+ * documentos. Evita leer/parsing dos veces el mismo CSS/TS en scan combinado. */
+export class CachedNodeDocumentProvider extends NodeDocumentProvider {
+    private readonly cache = new Map<string, Promise<CoreTextDocument>>();
+
+    public override openTextDocument(file: WorkspaceFile): Promise<CoreTextDocument> {
+        const cached = this.cache.get(file.fsPath);
+        if (cached) {
+            return cached;
+        }
+        const pending = super.openTextDocument(file);
+        this.cache.set(file.fsPath, pending);
+        return pending;
+    }
+
+    public clear(): void {
+        this.cache.clear();
+    }
+}

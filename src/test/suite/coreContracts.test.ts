@@ -129,4 +129,84 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelOculto');
   });
+
+  test('recognizes vanilla DOM class contracts without hiding orphan classes', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.factoryPanel { color: red; }',
+          '.containerRow { color: red; }',
+          '.externalLink { color: red; }',
+          '.activeIcon { color: red; }',
+          '.contentFullBleed { color: red; }',
+          '.unusedPanel { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/view.ts': {
+        languageId: 'typescript',
+        content: [
+          "const view = createEl('div', { className: 'factoryPanel' });",
+          "const row = createContainer('containerRow');",
+          "const link = createExternalLink(url, 'ver', 'externalLink');",
+          "icon.classList.add('activeIcon');",
+          "const contentClass = entry.layout === 'full-bleed' ? 'contentFullBleed' : 'other';",
+          "const className = helper('unusedPanel');",
+          "const contentClass = \"factoryPanel\";",
+          "// createContainer('fakeComment');",
+          "const text = \"className: 'fakeString'\";",
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'unusedPanel');
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'contentFullBleed'), false);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'campoError'), false);
+  });
+
+  test('recognizes static classes inside template interpolations', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: '.campoError { color: red; }\n.unusedClass { color: blue; }',
+      },
+      '/workspace/src/view.ts': {
+        languageId: 'typescript',
+        content: "const className = `campo ${error ? 'campoError' : ''}`;",
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'unusedClass');
+  });
+
+  test('supports quoted object keys, templates and multiline consumers', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: '.quotedObject { color: red; }\n.templateClass { color: red; }\n.multilineRow { color: red; }\n.stillOrphan { color: blue; }',
+      },
+      '/workspace/src/view.ts': {
+        languageId: 'typescript',
+        content: [
+          "const view = createEl('div', {\n  'className': `templateClass ${state}`\n});",
+          "const row = createContainer(\n  'multilineRow'\n);",
+          "const other = { 'className': 'quotedObject' };",
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'stillOrphan');
+  });
 });

@@ -3,7 +3,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { CoreFinding } from '@/core/types';
-import { NodeDocumentProvider, NodeWorkspaceFileProvider, matchesAnyGlob } from '@/core/nodeProviders';
+import { CachedNodeDocumentProvider, NodeDocumentProvider, NodeWorkspaceFileProvider, matchesAnyGlob } from '@/core/nodeProviders';
 import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
 import { ClassIndexBuilder } from '@/core/classIndexBuilder';
 import { analyzeVarsenseDocument, orphanClassToFinding } from '@/core/analyzeDocument';
@@ -31,7 +31,7 @@ export {
     validateVarsenseConfig,
 } from '@/core/config';
 
-export type VarsenseCliCommand = 'scan' | 'orphan-classes';
+export type VarsenseCliCommand = 'scan' | 'orphan-classes' | 'all';
 export type VarsenseCliFormat = 'markdown' | 'json';
 
 export interface ParsedCliArgs {
@@ -58,6 +58,7 @@ function usage(): string {
         'Uso:',
         '  varsense scan --workspace . --format markdown --output .varsense-report.md',
         '  varsense orphan-classes --workspace . --format json',
+        '  varsense all --workspace . --format json',
         '  varsense --version',
         '',
         'Opciones:',
@@ -80,7 +81,7 @@ function takeValue(args: string[], index: number, option: string): string {
 
 export function parseCliArgs(args: string[]): ParsedCliArgs {
     const command = args[0];
-    if (command !== 'scan' && command !== 'orphan-classes') {
+    if (command !== 'scan' && command !== 'orphan-classes' && command !== 'all') {
         throw new Error(usage());
     }
 
@@ -238,10 +239,53 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
     };
 }
 
+export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
+    const startedAt = Date.now();
+    const configFile = await readConfig(args.configPath, args.workspacePath);
+    const excludePatterns = configFile.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS;
+    const fileProvider = new NodeWorkspaceFileProvider(args.workspacePath);
+    const documentProvider = new CachedNodeDocumentProvider();
+    const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider);
+    const variablePatterns = configFile.scanAllFiles ? DEFAULT_CSS_PATTERNS : (configFile.variableFiles ?? DEFAULT_VARIABLE_PATTERNS);
+    const variableResult = await variableBuilder.build({ patterns: variablePatterns, exclude: excludePatterns });
+    const classBuilder = new ClassIndexBuilder(fileProvider, documentProvider);
+    const classResult = await classBuilder.scan({
+        exclude: excludePatterns,
+        minLength: configFile.orphanClassDetection?.minClassLength ?? 3,
+        excludedClassPatterns: configFile.orphanClassDetection?.excludeClassPatterns ?? [],
+    });
+    const includePatterns = configFile.includePatterns ?? DEFAULT_INCLUDE_PATTERNS;
+    const candidates = await fileProvider.findFiles([...DEFAULT_CSS_PATTERNS, ...DEFAULT_REACT_PATTERNS, ...DEFAULT_SCRIPT_PATTERNS], excludePatterns);
+    const includedCandidates = candidates.filter(file => isIncluded(file.fsPath, args.workspacePath, includePatterns));
+    const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
+    const analysisConfig = buildAnalysisConfig(configFile);
+    for (const file of includedCandidates) {
+        const document = await documentProvider.openTextDocument(file);
+        for (const documentFinding of analyzeVarsenseDocument(document, variableResult.indice, analysisConfig)) {
+            findings.push({ ruta: file.fsPath, finding: documentFinding });
+        }
+    }
+    findings.push(...classResult.clasesHuerfanas.map(clase => ({
+        ruta: clase.archivo,
+        finding: orphanClassToFinding(clase, configFile.orphanClassDetection?.severity ?? 'warning'),
+    })));
+    const entries = groupFindingsByFile(findings);
+    return {
+        entries,
+        totalArchivos: includedCandidates.length + classResult.archivosAnalizadosCss + classResult.archivosAnalizadosConsumo,
+        hasErrors: entries.some(entry => entry.findings.some(finding => finding.severity === 'error')),
+        durationMs: Date.now() - startedAt,
+    };
+}
+
 export async function analyzeCliTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
-    return args.command === 'scan'
-        ? analyzeScanTarget(args)
-        : analyzeOrphanClassesTarget(args);
+    if (args.command === 'scan') {
+        return analyzeScanTarget(args);
+    }
+    if (args.command === 'orphan-classes') {
+        return analyzeOrphanClassesTarget(args);
+    }
+    return analyzeAllTarget(args);
 }
 
 function severityCounts(result: CliAnalysisResult): Record<string, number> {

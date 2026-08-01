@@ -25,6 +25,11 @@ suite('VarSense CLI editor-agnostic', () => {
         assert.strictEqual(args.format, 'json');
     });
 
+    test('parsea el comando combinado all', () => {
+        const args = parseCliArgs(['all', '--workspace', '.', '--format', 'json']);
+        assert.strictEqual(args.command, 'all');
+    });
+
     test('scan detecta variable no definida, hardcoded, propiedad prohibida e inline CSS', async () => {
         const root = crearWorkspaceTemporal('varsense-cli-scan-');
         escribir(root, 'src/variables.css', ':root { --colorPrimary: #fff; }');
@@ -57,6 +62,21 @@ suite('VarSense CLI editor-agnostic', () => {
 
             assert.strictEqual(result.hasErrors, false);
             assert.ok(findings.some(finding => finding.ruleId === 'claseHuerfana' && finding.message.includes('huerfana')));
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('all combina variables, CSS inline y clases huerfanas en una ejecución', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-all-');
+        escribir(root, 'src/variables.css', ':root { --colorPrimary: #fff; }\n.huerfana { color: red; }');
+        escribir(root, 'src/App.tsx', 'export function App() { return <div style={{ color: "red" }} />; }');
+
+        try {
+            const result = await analyzeCliTarget(parseCliArgs(['all', '--workspace', root, '--format', 'json']));
+            const ruleIds = result.entries.flatMap(entry => entry.findings).map(finding => finding.ruleId);
+            assert.ok(ruleIds.includes('cssInlineReact'));
+            assert.ok(ruleIds.includes('claseHuerfana'));
         } finally {
             fs.rmSync(root, { recursive: true, force: true });
         }
