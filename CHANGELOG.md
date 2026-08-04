@@ -11,6 +11,8 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - Validación estricta de `varsense.config.json` y salida JSON versionada con conteos por severidad.
 - Detección de estilos inline en Vanilla TypeScript/JavaScript.
 - `--help` y `--version` aptos para automatización.
+- Subcomando `all` que combina scan + orphan-classes en una sola pasada con snapshot compartido.
+- `tokenDetection` con hallazgos `token-duplicate` y `token-unused`.
 
 ### Corregido
 - `orphan-classes` respeta una severidad configurable y devuelve fallo cuando existen huérfanos configurados como `error`.
