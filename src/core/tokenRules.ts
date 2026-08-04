@@ -78,20 +78,25 @@ export function analyzeTokenRules(
 
     if (config.tokens.unused.habilitado) {
         const allText = variableUsageIndex ? null : documents.map(item => item.document.getText()).join('\n');
+        let usedNames: Set<string> | undefined;
         for (const entry of variables) {
             let used = false;
             if (variableUsageIndex) {
                 used = (variableUsageIndex.get(entry.variable.nombre) ?? []).length > 0;
             } else {
-                /* Fallback sin índice: busca var(--x) con boundary de nombre.
-                 * Evita regex dinámica (escapado frágil y coste O(texto) por
-                 * variable); la semántica equivale a var\\(\\s*name(?:\\s*[,)]|\\b). */
-                const needle = 'var(' + entry.variable.nombre;
-                const pos = allText!.indexOf(needle);
-                if (pos !== -1) {
-                    const siguiente = allText![pos + needle.length] ?? ')';
-                    used = !/[A-Za-z0-9_-]/.test(siguiente);
+                /* Fallback sin índice: extrae los nombres usados una sola vez
+                 * con la misma semántica que extraerUsoVariablesDeTexto
+                 * (var(\s*--name), tolera espacios). O(texto) total, no por
+                 * variable; evita regex dinámica (escapado frágil). */
+                if (!usedNames) {
+                    usedNames = new Set<string>();
+                    const regexVar = /var\(\s*(--[\w-]+)/g;
+                    let match: RegExpExecArray | null;
+                    while ((match = regexVar.exec(allText!)) !== null) {
+                        usedNames.add(match[1]);
+                    }
                 }
+                used = usedNames.has(entry.variable.nombre);
             }
             if (used) {
                 continue;

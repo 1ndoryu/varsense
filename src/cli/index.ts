@@ -69,7 +69,6 @@ export interface CliAnalysisResult {
         filesReused: number;
         cacheHitRate: number;
         peakRssMb: number;
-        scopeExpandedFiles: number;
     };
 }
 
@@ -396,8 +395,14 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     for (const file of analysisTargets) {
         const document = await documentProvider.openTextDocument(file);
         documents.push({ file: file.fsPath, document });
-        for (const documentFinding of analyzeVarsenseDocument(document, variableResult.indice, analysisConfig)) {
-            findings.push({ ruta: file.fsPath, finding: documentFinding });
+        /* [028A-8 tramo 4] Los hallazgos documentales solo se reportan para el
+         * alcance scoped (con usageIndex activo analysisTargets ya es scoped;
+         * sin indice se abren todos para el escaneo de texto de token-unused
+         * pero se reportan unicamente los del alcance). */
+        if (isScopedFile(file.fsPath, scopedFiles)) {
+            for (const documentFinding of analyzeVarsenseDocument(document, variableResult.indice, analysisConfig)) {
+                findings.push({ ruta: file.fsPath, finding: documentFinding });
+            }
         }
     }
     const analysisDurationMs = Date.now() - startedAnalysis;
@@ -438,7 +443,6 @@ function buildMetrics(input: { filesDiscovered: number; filesAnalyzed: number; r
         filesReused: input.reused,
         cacheHitRate: reusedTotal > 0 ? Math.round((input.reused / reusedTotal) * 1000) / 1000 : 0,
         peakRssMb: Math.round((process.memoryUsage().rss / 1024 / 1024) * 10) / 10,
-        scopeExpandedFiles: 0,
     };
 }
 
