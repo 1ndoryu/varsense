@@ -337,6 +337,7 @@
         "check:zed": "cargo check --manifest-path integrations/zed/Cargo.toml --target wasm32-wasip2",
         "smoke:lsp": "node scripts/smoke-lsp-stdio.mjs",
         "smoke:persistent-index": "node scripts/smoke-persistent-index.mjs",
+        "smoke:tramo4": "node scripts/smoke-tramo4.mjs",
         "pretest": "npm run compile && npm run compile:tests && npm run lint && npm run check:core && npm run smoke:lsp",
         "lint": "eslint src --ext ts",
         "lint:fix": "eslint src --ext ts --fix",

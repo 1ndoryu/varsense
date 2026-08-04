@@ -19,7 +19,7 @@ import type { VarsenseConfigFile } from './config';
 
 export const PERSISTENT_INDEX_SCHEMA_VERSION = 1;
 /* Bump al cambiar la semántica de parseo/extracción que alimenta el índice. */
-export const PARSER_VERSION = '1';
+export const PARSER_VERSION = '2';
 export const PERSISTENT_INDEX_FILENAME = 'varsense-index.json';
 
 export interface PersistentIndexEntry {
@@ -27,6 +27,9 @@ export interface PersistentIndexEntry {
     classDefinitions?: ClaseCssDefinida[];
     consumerTokens?: string[];
     variables?: CssVariable[];
+    /* [028A-8 tramo 4] Usos var(--x) referenciados por este archivo CSS: permite
+     * resolver consumidores de una definición sin recorrer el workspace. */
+    variableUsages?: string[];
 }
 
 export interface PersistentIndexSnapshot {
@@ -126,6 +129,25 @@ export function buildReverseIndex(snapshot: Pick<PersistentIndexSnapshot, 'entri
         }
     }
     return new Map([...index.entries()].map(([token, files]) => [token, [...files].sort()]));
+}
+
+/* [028A-8 tramo 4] Índice inverso variable → archivos que la consumen
+ * (var(--x)). Permite a token-unused saber si una variable se usa en el
+ * workspace consultando el índice, en lugar de escanear el texto completo de
+ * todos los documentos por cada variable (el cuello de botella del análisis). */
+export function buildVariableReverseIndex(snapshot: Pick<PersistentIndexSnapshot, 'entries'>): Map<string, string[]> {
+    const index = new Map<string, Set<string>>();
+    for (const [fsPath, entry] of Object.entries(snapshot.entries)) {
+        for (const usage of entry.variableUsages ?? []) {
+            let set = index.get(usage);
+            if (!set) {
+                set = new Set();
+                index.set(usage, set);
+            }
+            set.add(fsPath);
+        }
+    }
+    return new Map([...index.entries()].map(([variable, files]) => [variable, [...files].sort()]));
 }
 
 /* Implementación en memoria del store: base para el CLI y para los fixtures. */

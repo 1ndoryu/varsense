@@ -50,6 +50,18 @@ const REGEX_CLASS_DECLARATION = /\b(?:const|let|var)\s+(?:className|contentClass
 const REGEX_STRING_LITERAL = /['"`]([^'"`$]+)['"`]/g;
 const MAX_TOKENS = 10000;
 
+/* [028A-8 tramo 4] Nombres de variables referenciadas con var(--x) en un
+ * texto CSS. Permite al índice inverso de variables seleccionar consumidores. */
+export function extraerUsoVariablesDeTexto(texto: string): string[] {
+    const usos = new Set<string>();
+    const regexVar = /var\(\s*(--[\w-]+)/g;
+    let match: RegExpExecArray | null;
+    while ((match = regexVar.exec(texto)) !== null) {
+        usos.add(match[1]);
+    }
+    return [...usos].sort();
+}
+
 export function extraerClasesDeTexto(texto: string, rutaArchivo: string): ClaseCssDefinida[] {
     const clases: ClaseCssDefinida[] = [];
     const textoLimpio = texto.replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, ' '));
@@ -479,11 +491,20 @@ export class ClassIndexBuilder {
         }
         const document = await this.documentProvider.openTextDocument(file);
         throwIfCancelled(token);
-        const clases = extraerClasesDeTexto(document.getText(), file.fsPath);
+        const texto = document.getText();
+        const clases = extraerClasesDeTexto(texto, file.fsPath);
         this.cssFileCache.set(file.fsPath, clases);
         if (hash) {
             const previa = store?.getEntry(file.fsPath) ?? {};
-            store?.setEntry(file.fsPath, { ...previa, hash, classDefinitions: clases });
+            store?.setEntry(file.fsPath, {
+                ...previa,
+                hash,
+                classDefinitions: clases,
+                /* [028A-8 tramo 4] Los usos de variables se capturan junto a las
+                 * definiciones de clase: ambos salen del mismo texto CSS y el
+                 * hash ya validó el contenido. */
+                variableUsages: extraerUsoVariablesDeTexto(texto),
+            });
             if (store) {store.stats.reparsed++;}
         }
         return clases;

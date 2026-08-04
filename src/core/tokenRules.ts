@@ -32,6 +32,12 @@ export function analyzeTokenRules(
     variablesPorArchivo: Map<string, CssVariable[]>,
     documents: Array<{ file: string; document: CoreTextDocument }>,
     config: VarsenseDocumentAnalysisConfig,
+    /* [028A-8 tramo 4] Índice inverso variable → consumidores del snapshot
+     * persistente. Cuando está presente, token-unused consulta el índice en
+     * lugar de escanear el texto completo de todos los documentos por variable
+     * (O(vars × texto) → O(vars + usos)); sin el índice se conserva el
+     * comportamiento previo para LSP/editor. */
+    variableUsageIndex?: Map<string, string[]>,
 ): CoreFinding[] {
     const variables: IndexedVariable[] = [];
     for (const [file, definitions] of variablesPorArchivo) {
@@ -71,11 +77,23 @@ export function analyzeTokenRules(
     }
 
     if (config.tokens.unused.habilitado) {
-        const allText = documents.map(item => item.document.getText()).join('\n');
+        const allText = variableUsageIndex ? null : documents.map(item => item.document.getText()).join('\n');
         for (const entry of variables) {
-            const escaped = entry.variable.nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const usageCount = (allText.match(new RegExp(`var\\(\\s*${escaped}(?:\\s*[,)]|\\b)`, 'g')) ?? []).length;
-            if (usageCount > 0) {
+            let used = false;
+            if (variableUsageIndex) {
+                used = (variableUsageIndex.get(entry.variable.nombre) ?? []).length > 0;
+            } else {
+                /* Fallback sin índice: busca var(--x) con boundary de nombre.
+                 * Evita regex dinámica (escapado frágil y coste O(texto) por
+                 * variable); la semántica equivale a var\\(\\s*name(?:\\s*[,)]|\\b). */
+                const needle = 'var(' + entry.variable.nombre;
+                const pos = allText!.indexOf(needle);
+                if (pos !== -1) {
+                    const siguiente = allText![pos + needle.length] ?? ')';
+                    used = !/[A-Za-z0-9_-]/.test(siguiente);
+                }
+            }
+            if (used) {
                 continue;
             }
             findings.push(tokenFinding(
@@ -87,6 +105,5 @@ export function analyzeTokenRules(
             ));
         }
     }
-
     return findings;
 }

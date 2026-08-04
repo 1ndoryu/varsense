@@ -5,7 +5,7 @@ import * as path from 'path';
 import { CoreFinding, CoreTextDocument } from '@/core/types';
 import { CachedNodeDocumentProvider, NodeDocumentProvider, NodeWorkspaceFileProvider, matchesAnyGlob } from '@/core/nodeProviders';
 import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
-import { FilePersistentIndexStore, PARSER_VERSION, PERSISTENT_INDEX_FILENAME, configHashFor, indexIdentity } from '@/core/persistentIndex';
+import { FilePersistentIndexStore, PARSER_VERSION, PERSISTENT_INDEX_FILENAME, buildVariableReverseIndex, configHashFor, indexIdentity } from '@/core/persistentIndex';
 import { ClassIndexBuilder } from '@/core/classIndexBuilder';
 import { analyzeVarsenseDocument, orphanClassToFinding } from '@/core/analyzeDocument';
 import { analyzeTokenRules } from '@/core/tokenRules';
@@ -61,6 +61,15 @@ export interface CliAnalysisResult {
         reparsed: number;
         removed: number;
         entries: number;
+    };
+    /* [028A-8 Fase 0] Métricas por etapa publicadas en el JSON. */
+    metrics?: {
+        filesDiscovered: number;
+        filesAnalyzed: number;
+        filesReused: number;
+        cacheHitRate: number;
+        peakRssMb: number;
+        scopeExpandedFiles: number;
     };
 }
 
@@ -371,17 +380,28 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     const includedCandidates = candidates.filter(file => isIncluded(file.fsPath, args.workspacePath, includePatterns));
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
     const analysisConfig = buildAnalysisConfig(configFile);
+    /* [028A-8 tramo 4] Con índice persistente + alcance scoped, los usos de
+     * variables se resuelven desde el índice inverso (sin abrir todos los
+     * documentos): token-unused consulta el mapa y el análisis documental solo
+     * abre los archivos scoped. Sin índice, se conserva el recorrido completo
+     * (exactitud LSP/editor sin persistencia). */
+    const usageIndex = persistentStore && scopedFiles
+        ? buildVariableReverseIndex(persistentStore.toSnapshot(persistentStore.identity))
+        : undefined;
+    const analysisTargets = usageIndex
+        ? includedCandidates.filter(file => isScopedFile(file.fsPath, scopedFiles))
+        : includedCandidates;
     const documents: Array<{ file: string; document: CoreTextDocument }> = [];
-    for (const file of includedCandidates) {
+    const startedAnalysis = Date.now();
+    for (const file of analysisTargets) {
         const document = await documentProvider.openTextDocument(file);
         documents.push({ file: file.fsPath, document });
-        if (isScopedFile(file.fsPath, scopedFiles)) {
         for (const documentFinding of analyzeVarsenseDocument(document, variableResult.indice, analysisConfig)) {
             findings.push({ ruta: file.fsPath, finding: documentFinding });
         }
-        }
     }
-    for (const finding of analyzeTokenRules(variableResult.variablesPorArchivo, documents, analysisConfig)) {
+    const analysisDurationMs = Date.now() - startedAnalysis;
+    for (const finding of analyzeTokenRules(variableResult.variablesPorArchivo, documents, analysisConfig, usageIndex)) {
         if (isFindingScoped(finding, scopedFiles)) {
             findings.push({ ruta: String(finding.metadata?.file), finding });
         }
@@ -397,9 +417,29 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
         hasErrors: entries.some(entry => entry.findings.some(finding => finding.severity === 'error')),
         durationMs: Date.now() - startedAt,
         ...(persistentStore ? { cache: cacheStats(persistentStore) } : {}),
+        metrics: buildMetrics({
+            filesDiscovered: includedCandidates.length,
+            filesAnalyzed: analysisTargets.length,
+            reused: persistentStore?.stats.reused ?? 0,
+            reparsed: persistentStore?.stats.reparsed ?? 0,
+            durationMs: analysisDurationMs,
+        }),
     };
     await persistentStore?.save();
     return result;
+}
+
+/* [028A-8 Fase 0] Métricas publicables del análisis documental. */
+function buildMetrics(input: { filesDiscovered: number; filesAnalyzed: number; reused: number; reparsed: number; durationMs: number }): CliAnalysisResult['metrics'] {
+    const reusedTotal = input.reused + input.reparsed;
+    return {
+        filesDiscovered: input.filesDiscovered,
+        filesAnalyzed: input.filesAnalyzed,
+        filesReused: input.reused,
+        cacheHitRate: reusedTotal > 0 ? Math.round((input.reused / reusedTotal) * 1000) / 1000 : 0,
+        peakRssMb: Math.round((process.memoryUsage().rss / 1024 / 1024) * 10) / 10,
+        scopeExpandedFiles: 0,
+    };
 }
 
 /* [028A-8] Crea el store persistente cuando --index-dir está presente. La
@@ -460,6 +500,7 @@ function renderOutput(result: CliAnalysisResult, args: ParsedCliArgs, toolVersio
             totalArchivos: result.totalArchivos,
             totalArchivosConHallazgos: result.entries.length,
             cache: result.cache ?? null,
+            metrics: result.metrics ?? null,
             entries: result.entries,
         }, null, 2)}\n`;
     }
