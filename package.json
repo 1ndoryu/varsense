@@ -336,6 +336,7 @@
         "check:core": "node scripts/check-core-no-vscode.mjs",
         "check:zed": "cargo check --manifest-path integrations/zed/Cargo.toml --target wasm32-wasip2",
         "smoke:lsp": "node scripts/smoke-lsp-stdio.mjs",
+        "smoke:persistent-index": "node scripts/smoke-persistent-index.mjs",
         "pretest": "npm run compile && npm run compile:tests && npm run lint && npm run check:core && npm run smoke:lsp",
         "lint": "eslint src --ext ts",
         "lint:fix": "eslint src --ext ts --fix",

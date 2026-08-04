@@ -5,6 +5,7 @@ import * as path from 'path';
 import { CoreFinding, CoreTextDocument } from '@/core/types';
 import { CachedNodeDocumentProvider, NodeDocumentProvider, NodeWorkspaceFileProvider, matchesAnyGlob } from '@/core/nodeProviders';
 import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
+import { FilePersistentIndexStore, PARSER_VERSION, PERSISTENT_INDEX_FILENAME, configHashFor, indexIdentity } from '@/core/persistentIndex';
 import { ClassIndexBuilder } from '@/core/classIndexBuilder';
 import { analyzeVarsenseDocument, orphanClassToFinding } from '@/core/analyzeDocument';
 import { analyzeTokenRules } from '@/core/tokenRules';
@@ -42,6 +43,7 @@ export interface ParsedCliArgs {
     outputPath?: string;
     configPath?: string;
     filesFromPath?: string;
+    indexDir?: string;
 }
 
 export type VarsenseCliConfigFile = VarsenseConfigFile;
@@ -51,6 +53,15 @@ export interface CliAnalysisResult {
     totalArchivos: number;
     hasErrors: boolean;
     durationMs: number;
+    cache?: {
+        enabled: boolean;
+        identity: string;
+        loaded: number;
+        reused: number;
+        reparsed: number;
+        removed: number;
+        entries: number;
+    };
 }
 
 export const VARSENSE_JSON_SCHEMA_VERSION = '1';
@@ -69,6 +80,7 @@ function usage(): string {
         '  --output <path>     Escribe salida en archivo; si falta, imprime en stdout',
         '  --config <path>     Carga varsense.config.json',
         '  --files-from <path> Limita los archivos reportados a un manifiesto relativo',
+        '  --index-dir <path>   Persiste el índice entre ejecuciones (cache por rama)',
         '  --help              Muestra esta ayuda',
         '  --version           Muestra la version instalada',
     ].join('\n');
@@ -121,6 +133,10 @@ export function parseCliArgs(args: string[]): ParsedCliArgs {
                 break;
             case '--files-from':
                 parsed.filesFromPath = takeValue(args, index, arg);
+                index++;
+                break;
+            case '--index-dir':
+                parsed.indexDir = takeValue(args, index, arg);
                 index++;
                 break;
             case '--help':
@@ -262,7 +278,8 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
     const excludePatterns = configFile.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS;
     const fileProvider = new NodeWorkspaceFileProvider(args.workspacePath);
     const documentProvider = new NodeDocumentProvider();
-    const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider);
+    const persistentStore = await createIndexStore(args, configFile);
+    const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider, persistentStore);
     const variablePatterns = configFile.scanAllFiles
         ? DEFAULT_CSS_PATTERNS
         : (configFile.variableFiles ?? DEFAULT_VARIABLE_PATTERNS);
@@ -289,12 +306,15 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
     }
 
     const entries = groupFindingsByFile(findings);
-    return {
+    const result: CliAnalysisResult = {
         entries,
         totalArchivos: includedCandidates.length,
         hasErrors: entries.some(entry => entry.findings.some(finding => finding.severity === 'error')),
         durationMs: Date.now() - startedAt,
+        ...(persistentStore ? { cache: cacheStats(persistentStore) } : {}),
     };
+    await persistentStore?.save();
+    return result;
 }
 
 export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
@@ -304,7 +324,8 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
     const excludePatterns = configFile.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS;
     const fileProvider = new NodeWorkspaceFileProvider(args.workspacePath);
     const documentProvider = new NodeDocumentProvider();
-    const builder = new ClassIndexBuilder(fileProvider, documentProvider);
+    const persistentStore = await createIndexStore(args, configFile);
+    const builder = new ClassIndexBuilder(fileProvider, documentProvider, undefined, persistentStore);
     const result = await builder.scan({
         exclude: excludePatterns,
         minLength: configFile.orphanClassDetection?.minClassLength ?? 3,
@@ -316,12 +337,15 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
         finding: orphanClassToFinding(clase, configFile.orphanClassDetection?.severity ?? 'warning'),
     })));
 
-    return {
+    const output: CliAnalysisResult = {
         entries,
         totalArchivos: result.archivosAnalizadosCss + result.archivosAnalizadosConsumo,
         hasErrors: entries.some(entry => entry.findings.some(finding => finding.severity === 'error')),
         durationMs: Date.now() - startedAt,
+        ...(persistentStore ? { cache: cacheStats(persistentStore) } : {}),
     };
+    await persistentStore?.save();
+    return output;
 }
 
 export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
@@ -331,10 +355,11 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     const excludePatterns = configFile.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS;
     const fileProvider = new NodeWorkspaceFileProvider(args.workspacePath);
     const documentProvider = new CachedNodeDocumentProvider();
-    const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider);
+    const persistentStore = await createIndexStore(args, configFile);
+    const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider, persistentStore);
     const variablePatterns = configFile.scanAllFiles ? DEFAULT_CSS_PATTERNS : (configFile.variableFiles ?? DEFAULT_VARIABLE_PATTERNS);
     const variableResult = await variableBuilder.build({ patterns: variablePatterns, exclude: excludePatterns });
-    const classBuilder = new ClassIndexBuilder(fileProvider, documentProvider, documentProvider);
+    const classBuilder = new ClassIndexBuilder(fileProvider, documentProvider, documentProvider, persistentStore);
     const classResult = await classBuilder.scan({
         exclude: excludePatterns,
         minLength: configFile.orphanClassDetection?.minClassLength ?? 3,
@@ -366,11 +391,42 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
         finding: orphanClassToFinding(clase, configFile.orphanClassDetection?.severity ?? 'warning'),
     })));
     const entries = groupFindingsByFile(findings);
-    return {
+    const result: CliAnalysisResult = {
         entries,
         totalArchivos: includedCandidates.length + classResult.archivosAnalizadosCss + classResult.archivosAnalizadosConsumo,
         hasErrors: entries.some(entry => entry.findings.some(finding => finding.severity === 'error')),
         durationMs: Date.now() - startedAt,
+        ...(persistentStore ? { cache: cacheStats(persistentStore) } : {}),
+    };
+    await persistentStore?.save();
+    return result;
+}
+
+/* [028A-8] Crea el store persistente cuando --index-dir está presente. La
+ * identidad liga toolVersion + config efectiva + parser, por lo que un cambio
+ * de cualquiera invalida el snapshot completo. */
+async function createIndexStore(args: ParsedCliArgs, configFile: VarsenseConfigFile): Promise<FilePersistentIndexStore | undefined> {
+    if (!args.indexDir) {
+        return undefined;
+    }
+    const identity = indexIdentity(await readPackageVersion(), configHashFor(configFile), PARSER_VERSION);
+    const persistentStore = new FilePersistentIndexStore(
+        path.join(path.resolve(args.indexDir), PERSISTENT_INDEX_FILENAME),
+        identity
+    );
+    await persistentStore.load();
+    return persistentStore;
+}
+
+function cacheStats(store: FilePersistentIndexStore): CliAnalysisResult['cache'] {
+    return {
+        enabled: true,
+        identity: store.identity,
+        loaded: store.stats.loaded,
+        reused: store.stats.reused,
+        reparsed: store.stats.reparsed,
+        removed: store.stats.removed,
+        entries: store.entryCount,
     };
 }
 
@@ -403,6 +459,7 @@ function renderOutput(result: CliAnalysisResult, args: ParsedCliArgs, toolVersio
             severityCounts: severityCounts(result),
             totalArchivos: result.totalArchivos,
             totalArchivosConHallazgos: result.entries.length,
+            cache: result.cache ?? null,
             entries: result.entries,
         }, null, 2)}\n`;
     }

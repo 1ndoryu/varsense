@@ -1,6 +1,7 @@
 import { CssVariable, VariableIndex } from '@/types';
 import { parsearDefiniciones } from '@/parsers/cssParser';
 import { CancellationToken, DocumentProvider, throwIfCancelled, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
+import { PersistentIndexStore, sha256File } from './persistentIndex';
 
 export interface VariableIndexBuildResult {
     indice: VariableIndex;
@@ -29,7 +30,8 @@ function crearIndiceVacio(): VariableIndex {
 export class VariableIndexBuilder {
     constructor(
         private readonly fileProvider: WorkspaceFileProvider,
-        private readonly documentProvider: DocumentProvider
+        private readonly documentProvider: DocumentProvider,
+        private readonly persistentStore?: PersistentIndexStore
     ) {}
 
     public async build(options: VariableIndexBuildOptions): Promise<VariableIndexBuildResult> {
@@ -66,9 +68,25 @@ export class VariableIndexBuilder {
         token?: CancellationToken
     ): Promise<void> {
         throwIfCancelled(token);
-        const document = await this.documentProvider.openTextDocument(file);
-        throwIfCancelled(token);
-        const variables = parsearDefiniciones(document);
+        /* [028A-8] Reutiliza la entrada persistente cuando el hash coincide;
+         * solo abre y parsea el documento cuando no hay coincidencia. */
+        const store = this.persistentStore;
+        const hash = store ? await sha256File(file.fsPath) : null;
+        const stored = hash && store ? store.getEntry(file.fsPath) : undefined;
+        let variables: CssVariable[];
+        if (store && stored?.hash === hash && stored.variables) {
+            store.stats.reused++;
+            variables = stored.variables;
+        } else {
+            const document = await this.documentProvider.openTextDocument(file);
+            throwIfCancelled(token);
+            variables = parsearDefiniciones(document);
+            if (hash && store) {
+                const previa = store.getEntry(file.fsPath) ?? {};
+                store.setEntry(file.fsPath, { ...previa, hash, variables });
+                store.stats.reparsed++;
+            }
+        }
 
         variablesPorArchivo.set(file.fsPath, variables);
 

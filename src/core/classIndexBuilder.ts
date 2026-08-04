@@ -1,4 +1,5 @@
 import { CancellationError, CancellationToken, DocumentCacheProvider, DocumentProvider, throwIfCancelled, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
+import { PersistentIndexStore, sha256File } from './persistentIndex';
 
 export interface ClaseCssDefinida {
     nombre: string;
@@ -282,7 +283,8 @@ export class ClassIndexBuilder {
     constructor(
         private readonly fileProvider: WorkspaceFileProvider,
         private readonly documentProvider: DocumentProvider,
-        private readonly documentCacheProvider?: DocumentCacheProvider
+        private readonly documentCacheProvider?: DocumentCacheProvider,
+        private readonly persistentStore?: PersistentIndexStore
     ) {}
 
     /* The file cache is caller-driven: watchers/adapters must call this before
@@ -291,6 +293,9 @@ export class ClassIndexBuilder {
         this.cssFileCache.delete(fsPath);
         this.consumerFileCache.delete(fsPath);
         this.documentCacheProvider?.invalidate(fsPath);
+        /* [028A-8] La invalidación del caché en memoria también expulsa la
+         * entrada persistente del índice entre ejecuciones. */
+        this.persistentStore?.removeEntry(fsPath);
     }
 
     public clearCache(): void {
@@ -379,6 +384,9 @@ export class ClassIndexBuilder {
         for (const fsPath of this.cssFileCache.keys()) {
             if (!currentFiles.has(fsPath)) {
                 this.cssFileCache.delete(fsPath);
+                /* [028A-8] El archivo desapareció: la entrada persistente queda
+                 * obsoleta y no debe reutilizarse en la siguiente ejecución. */
+                this.persistentStore?.removeEntry(fsPath);
             }
         }
 
@@ -388,10 +396,7 @@ export class ClassIndexBuilder {
             try {
                 let clases = this.cssFileCache.get(file.fsPath);
                 if (!clases) {
-                    const document = await this.documentProvider.openTextDocument(file);
-                    throwIfCancelled(token);
-                    clases = extraerClasesDeTexto(document.getText(), file.fsPath);
-                    this.cssFileCache.set(file.fsPath, clases);
+                    clases = await this.loadCssDefinitions(file, token);
                 }
                 for (const clase of clases) {
                     const existentes = clasesMap.get(clase.nombre) ?? [];
@@ -424,6 +429,9 @@ export class ClassIndexBuilder {
         for (const fsPath of this.consumerFileCache.keys()) {
             if (!files.has(fsPath)) {
                 this.consumerFileCache.delete(fsPath);
+                /* [028A-8] Ídem: consumidor eliminado no puede reutilizar su
+                 * entrada persistente. */
+                this.persistentStore?.removeEntry(fsPath);
             }
         }
 
@@ -436,11 +444,7 @@ export class ClassIndexBuilder {
             try {
                 let fileTokens = this.consumerFileCache.get(file.fsPath);
                 if (!fileTokens) {
-                    const document = await this.documentProvider.openTextDocument(file);
-                    throwIfCancelled(token);
-                    fileTokens = new Set<string>();
-                    extraerTokensDeTexto(document.getText(), fileTokens);
-                    this.consumerFileCache.set(file.fsPath, fileTokens);
+                    fileTokens = await this.loadConsumerTokens(file, token);
                 }
                 for (const tokenValue of fileTokens) {
                     throwIfCancelled(token);
@@ -458,6 +462,56 @@ export class ClassIndexBuilder {
         }
 
         return { tokens, totalArchivos: files.size };
+    }
+
+    /* [028A-8] Carga las definiciones CSS de un archivo reutilizando el índice
+     * persistente cuando el hash de contenido coincide. Store-first: el hash se
+     * calcula del contenido real en disco antes de abrir/parsear el documento,
+     * por lo que un archivo sin cambios nunca se vuelve a parsear. */
+    private async loadCssDefinitions(file: WorkspaceFile, token?: CancellationToken): Promise<ClaseCssDefinida[]> {
+        const hash = this.persistentStore ? await sha256File(file.fsPath) : null;
+        const store = this.persistentStore;
+        const stored = hash ? store?.getEntry(file.fsPath) : undefined;
+        if (stored?.hash === hash && stored.classDefinitions) {
+            if (store) {store.stats.reused++;}
+            this.cssFileCache.set(file.fsPath, stored.classDefinitions);
+            return stored.classDefinitions;
+        }
+        const document = await this.documentProvider.openTextDocument(file);
+        throwIfCancelled(token);
+        const clases = extraerClasesDeTexto(document.getText(), file.fsPath);
+        this.cssFileCache.set(file.fsPath, clases);
+        if (hash) {
+            const previa = store?.getEntry(file.fsPath) ?? {};
+            store?.setEntry(file.fsPath, { ...previa, hash, classDefinitions: clases });
+            if (store) {store.stats.reparsed++;}
+        }
+        return clases;
+    }
+
+    /* [028A-8] Ídem para tokens de consumo: store-first, reutiliza la entrada
+     * persistente cuando el hash coincide y registra la nueva al cambiar. */
+    private async loadConsumerTokens(file: WorkspaceFile, token?: CancellationToken): Promise<Set<string>> {
+        const hash = this.persistentStore ? await sha256File(file.fsPath) : null;
+        const store = this.persistentStore;
+        const stored = hash ? store?.getEntry(file.fsPath) : undefined;
+        if (stored?.hash === hash && stored.consumerTokens) {
+            if (store) {store.stats.reused++;}
+            const fileTokens = new Set<string>(stored.consumerTokens);
+            this.consumerFileCache.set(file.fsPath, fileTokens);
+            return fileTokens;
+        }
+        const document = await this.documentProvider.openTextDocument(file);
+        throwIfCancelled(token);
+        const fileTokens = new Set<string>();
+        extraerTokensDeTexto(document.getText(), fileTokens);
+        this.consumerFileCache.set(file.fsPath, fileTokens);
+        if (hash) {
+            const previa = store?.getEntry(file.fsPath) ?? {};
+            store?.setEntry(file.fsPath, { ...previa, hash, consumerTokens: [...fileTokens] });
+            if (store) {store.stats.reparsed++;}
+        }
+        return fileTokens;
     }
 
     private async findUniqueFiles(patterns: string[], exclude: string[], token?: CancellationToken): Promise<Map<string, WorkspaceFile>> {
