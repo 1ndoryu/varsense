@@ -7,7 +7,10 @@ import { ClassIndexBuilder } from '../../core/classIndexBuilder';
 import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../core/workspaceProviders';
 
 class MemoryWorkspaceProvider implements WorkspaceFileProvider, DocumentProvider {
-  constructor(private readonly files: Record<string, { languageId: string; content: string }>) {}
+  constructor(
+    private readonly files: Record<string, { languageId: string; content: string }>,
+    private readonly onOpen?: (file: WorkspaceFile) => void
+  ) {}
 
   async findFiles(patterns: string[]): Promise<WorkspaceFile[]> {
     const extensions = patterns.map(pattern => pattern.replace('**/*', ''));
@@ -17,6 +20,7 @@ class MemoryWorkspaceProvider implements WorkspaceFileProvider, DocumentProvider
   }
 
   async openTextDocument(file: WorkspaceFile) {
+    this.onOpen?.(file);
     const entry = this.files[file.fsPath];
     if (!entry) {
       throw new Error(`Missing fixture ${file.fsPath}`);
@@ -109,6 +113,75 @@ suite('VarSense editor-agnostic core contracts', () => {
 
     assert.ok(result.indice.variables.has('--colorPrincipal'));
     assert.deepStrictEqual(result.indice.archivosEscaneados, ['/workspace/src/styles.css']);
+  });
+
+  test('cancels a variable index while a document is being opened', async () => {
+    const token = { isCancellationRequested: false };
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/first.css': { languageId: 'css', content: ':root { --first: #fff; }' },
+      '/workspace/src/second.css': { languageId: 'css', content: ':root { --second: #000; }' },
+    }, () => {
+      token.isCancellationRequested = true;
+    });
+    const builder = new VariableIndexBuilder(provider, provider);
+
+    await assert.rejects(
+      builder.build({ patterns: ['**/*.css'], exclude: [], maxConcurrent: 1, token }),
+      /Análisis cancelado/
+    );
+  });
+
+  test('cancels a class scan while a CSS document is being opened', async () => {
+    const token = { isCancellationRequested: false };
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/first.css': { languageId: 'css', content: '.firstClass { color: red; }' },
+      '/workspace/src/second.css': { languageId: 'css', content: '.secondClass { color: blue; }' },
+    }, () => {
+      token.isCancellationRequested = true;
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    await assert.rejects(
+      builder.scan({ exclude: [], token }),
+      /Análisis cancelado/
+    );
+  });
+
+  test('ignores ordinary consumer document errors', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': { languageId: 'css', content: '.unusedClass { color: red; }' },
+      '/workspace/src/view.ts': { languageId: 'typescript', content: 'const view = true;' },
+    }, file => {
+      if (file.fsPath.endsWith('.ts')) {
+        throw new Error('simulated read failure');
+      }
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [] });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'unusedClass');
+  });
+
+  test('propagates cancellation during consumer scanning', async () => {
+    const token = { isCancellationRequested: false };
+    let opened = 0;
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': { languageId: 'css', content: '.unusedClass { color: red; }' },
+      '/workspace/src/view.ts': { languageId: 'typescript', content: 'const view = true;' },
+    }, () => {
+      opened += 1;
+      if (opened === 2) {
+        token.isCancellationRequested = true;
+      }
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    await assert.rejects(
+      builder.scan({ exclude: [], token }),
+      /Análisis cancelado/
+    );
   });
 
   test('detects orphan classes through core providers', async () => {

@@ -1,4 +1,4 @@
-import { DocumentProvider, WorkspaceFileProvider } from './workspaceProviders';
+import { CancellationError, CancellationToken, DocumentProvider, throwIfCancelled, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
 
 export interface ClaseCssDefinida {
     nombre: string;
@@ -24,6 +24,7 @@ export interface ClassIndexScanOptions {
     excludedClassPatterns?: string[];
     cssPatterns?: string[];
     consumerPatterns?: string[];
+    token?: CancellationToken;
 }
 
 export type ClassScanProgress = (fase: string, actual: number, total: number) => void;
@@ -284,6 +285,7 @@ export class ClassIndexBuilder {
         options: ClassIndexScanOptions,
         onProgress?: ClassScanProgress
     ): Promise<ResultadoClasesHuerfanas> {
+        throwIfCancelled(options.token);
         const inicio = Date.now();
         const cssPatterns = options.cssPatterns ?? DEFAULT_CSS_PATTERNS;
         const consumerPatterns = options.consumerPatterns ?? DEFAULT_CONSUMER_PATTERNS;
@@ -292,20 +294,25 @@ export class ClassIndexBuilder {
         const { clasesMap, totalArchivos: archivosCss } = await this.scanCssDefinitions(
             cssPatterns,
             options.exclude,
-            (actual, total) => onProgress?.('Escaneando CSS', actual, total)
+            (actual, total) => onProgress?.('Escaneando CSS', actual, total),
+            options.token
         );
 
+        throwIfCancelled(options.token);
         onProgress?.('Extrayendo tokens de consumidores', 0, 1);
         const { tokens, totalArchivos: archivosConsumo } = await this.extractConsumerTokens(
             consumerPatterns,
-            options.exclude
+            options.exclude,
+            options.token
         );
 
+        throwIfCancelled(options.token);
         const regexExcluidos = compilarPatronesExcluidos(options.excludedClassPatterns ?? []);
         const clasesHuerfanas: ClaseCssDefinida[] = [];
         const nombresUnicos = Array.from(clasesMap.keys());
 
         for (let index = 0; index < nombresUnicos.length; index++) {
+            throwIfCancelled(options.token);
             const nombre = nombresUnicos[index];
 
             if (index % 100 === 0) {
@@ -345,14 +352,17 @@ export class ClassIndexBuilder {
     private async scanCssDefinitions(
         patterns: string[],
         exclude: string[],
-        onProgress?: (actual: number, total: number) => void
+        onProgress?: (actual: number, total: number) => void,
+        token?: CancellationToken
     ): Promise<{ clasesMap: Map<string, ClaseCssDefinida[]>; totalArchivos: number }> {
         const files = await this.fileProvider.findFiles(patterns, exclude);
         const clasesMap = new Map<string, ClaseCssDefinida[]>();
 
         for (let index = 0; index < files.length; index++) {
+            throwIfCancelled(token);
             try {
                 const document = await this.documentProvider.openTextDocument(files[index]);
+                throwIfCancelled(token);
                 const clases = extraerClasesDeTexto(document.getText(), files[index].fsPath);
 
                 for (const clase of clases) {
@@ -363,7 +373,10 @@ export class ClassIndexBuilder {
                         clasesMap.set(clase.nombre, existentes);
                     }
                 }
-            } catch {
+            } catch (error) {
+                if (error instanceof CancellationError) {
+                    throw error;
+                }
                 /* Mantiene el comportamiento historico: archivos no abribles no bloquean el reporte. */
             }
 
@@ -375,20 +388,26 @@ export class ClassIndexBuilder {
 
     private async extractConsumerTokens(
         patterns: string[],
-        exclude: string[]
+        exclude: string[],
+        token?: CancellationToken
     ): Promise<{ tokens: Set<string>; totalArchivos: number }> {
-        const files = await this.findUniqueFiles(patterns, exclude);
+        const files = await this.findUniqueFiles(patterns, exclude, token);
         const tokens = new Set<string>();
 
         for (const file of files.values()) {
+            throwIfCancelled(token);
             if (tokens.size >= MAX_TOKENS) {
                 break;
             }
 
             try {
                 const document = await this.documentProvider.openTextDocument(file);
+                throwIfCancelled(token);
                 extraerTokensDeTexto(document.getText(), tokens);
-            } catch {
+            } catch (error) {
+                if (error instanceof CancellationError) {
+                    throw error;
+                }
                 /* Mantiene el comportamiento historico: archivos no abribles no bloquean el reporte. */
             }
         }
@@ -396,12 +415,14 @@ export class ClassIndexBuilder {
         return { tokens, totalArchivos: files.size };
     }
 
-    private async findUniqueFiles(patterns: string[], exclude: string[]): Promise<Map<string, { uri: string; fsPath: string }>> {
+    private async findUniqueFiles(patterns: string[], exclude: string[], token?: CancellationToken): Promise<Map<string, WorkspaceFile>> {
         const files = new Map<string, { uri: string; fsPath: string }>();
 
         for (const pattern of patterns) {
+            throwIfCancelled(token);
             const matches = await this.fileProvider.findFiles([pattern], exclude);
             for (const file of matches) {
+                throwIfCancelled(token);
                 files.set(file.fsPath, file);
             }
         }

@@ -5,6 +5,23 @@ export interface WorkspaceFile {
     fsPath: string;
 }
 
+export interface CancellationToken {
+    readonly isCancellationRequested: boolean;
+}
+
+export class CancellationError extends Error {
+    public constructor() {
+        super('Análisis cancelado');
+        this.name = 'CancellationError';
+    }
+}
+
+export function throwIfCancelled(token?: CancellationToken): void {
+    if (token?.isCancellationRequested) {
+        throw new CancellationError();
+    }
+}
+
 export interface DocumentProvider {
     openTextDocument(file: WorkspaceFile): Promise<CoreTextDocument>;
 }
