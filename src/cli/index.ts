@@ -41,6 +41,7 @@ export interface ParsedCliArgs {
     format: VarsenseCliFormat;
     outputPath?: string;
     configPath?: string;
+    filesFromPath?: string;
 }
 
 export type VarsenseCliConfigFile = VarsenseConfigFile;
@@ -67,6 +68,7 @@ function usage(): string {
         '  --format <type>     markdown | json. Por defecto: markdown',
         '  --output <path>     Escribe salida en archivo; si falta, imprime en stdout',
         '  --config <path>     Carga varsense.config.json',
+        '  --files-from <path> Limita los archivos reportados a un manifiesto relativo',
         '  --help              Muestra esta ayuda',
         '  --version           Muestra la version instalada',
     ].join('\n');
@@ -117,6 +119,10 @@ export function parseCliArgs(args: string[]): ParsedCliArgs {
                 parsed.configPath = takeValue(args, index, arg);
                 index++;
                 break;
+            case '--files-from':
+                parsed.filesFromPath = takeValue(args, index, arg);
+                index++;
+                break;
             case '--help':
             case '-h':
                 throw new Error(usage());
@@ -153,6 +159,81 @@ async function readConfig(configPath: string | undefined, workspacePath: string)
     return parsed;
 }
 
+function pathKey(filePath: string): string {
+    const normalized = path.normalize(filePath);
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function isPathInside(rootPath: string, candidatePath: string): boolean {
+    const relative = path.relative(rootPath, candidatePath);
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+async function readFilesFromManifest(args: ParsedCliArgs): Promise<Set<string> | undefined> {
+    if (!args.filesFromPath) {
+        return undefined;
+    }
+
+    const manifestPath = path.resolve(args.workspacePath, args.filesFromPath);
+    const workspaceRealPath = await fs.realpath(args.workspacePath);
+    const manifestRealPath = await fs.realpath(manifestPath);
+    if (!isPathInside(workspaceRealPath, manifestRealPath)) {
+        throw new Error('--files-from debe estar dentro del workspace');
+    }
+
+    const raw = await fs.readFile(manifestPath, 'utf8');
+    const files = new Set<string>();
+    for (const rawLine of raw.split(/\r?\n/)) {
+        const line = rawLine.trim().replace(/\\/g, '/');
+        if (!line) {
+            continue;
+        }
+        if (path.isAbsolute(line) || /^[A-Za-z]:\//.test(line)) {
+            throw new Error('Ruta absoluta no permitida en --files-from: ' + line);
+        }
+        const resolved = path.resolve(args.workspacePath, line);
+        if (!isPathInside(args.workspacePath, resolved)) {
+            throw new Error('Ruta fuera del workspace en --files-from: ' + line);
+        }
+        const key = pathKey(resolved);
+        if (files.has(key)) {
+            throw new Error('Ruta duplicada en --files-from: ' + line);
+        }
+        try {
+            const stats = await fs.stat(resolved);
+            if (stats.isDirectory()) {
+                throw new Error('Ruta directorio no permitida en --files-from: ' + line);
+            }
+            const realPath = await fs.realpath(resolved);
+            if (!isPathInside(workspaceRealPath, realPath)) {
+                throw new Error('Ruta fuera del workspace en --files-from: ' + line);
+            }
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('directorio no permitida')) {
+                throw error;
+            }
+            const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+            if (code !== 'ENOENT') {
+                throw error;
+            }
+        }
+        files.add(key);
+    }
+    return files;
+}
+
+function isScopedFile(filePath: string, scopeKeys: Set<string> | undefined): boolean {
+    return !scopeKeys || scopeKeys.has(pathKey(filePath));
+}
+
+function isFindingScoped(finding: CoreFinding, scopeKeys: Set<string> | undefined): boolean {
+    if (!scopeKeys) {
+        return true;
+    }
+    const file = finding.metadata?.file;
+    return typeof file === 'string' && isScopedFile(file, scopeKeys);
+}
+
 function isIncluded(filePath: string, workspacePath: string, includePatterns: string[]): boolean {
     const relativePath = path.relative(workspacePath, filePath).replace(/\\/g, '/');
     return matchesAnyGlob(relativePath, includePatterns);
@@ -175,6 +256,7 @@ function groupFindingsByFile(findings: Array<{ ruta: string; finding: CoreFindin
 export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
     const startedAt = Date.now();
     const configFile = await readConfig(args.configPath, args.workspacePath);
+    const scopedFiles = await readFilesFromManifest(args);
     const analysisConfig = buildAnalysisConfig(configFile);
     const includePatterns = configFile.includePatterns ?? DEFAULT_INCLUDE_PATTERNS;
     const excludePatterns = configFile.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS;
@@ -194,7 +276,8 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
         [...DEFAULT_CSS_PATTERNS, ...DEFAULT_REACT_PATTERNS, ...DEFAULT_SCRIPT_PATTERNS],
         excludePatterns
     );
-    const includedCandidates = candidates.filter(file => isIncluded(file.fsPath, args.workspacePath, includePatterns));
+    /* --files-from limita findings reportados; los índices globales se mantienen para exactitud. */
+    const includedCandidates = candidates.filter(file => isIncluded(file.fsPath, args.workspacePath, includePatterns) && isScopedFile(file.fsPath, scopedFiles));
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
 
     for (const file of includedCandidates) {
@@ -217,6 +300,7 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
 export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
     const startedAt = Date.now();
     const configFile = await readConfig(args.configPath, args.workspacePath);
+    const scopedFiles = await readFilesFromManifest(args);
     const excludePatterns = configFile.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS;
     const fileProvider = new NodeWorkspaceFileProvider(args.workspacePath);
     const documentProvider = new NodeDocumentProvider();
@@ -227,7 +311,7 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
         excludedClassPatterns: configFile.orphanClassDetection?.excludeClassPatterns ?? [],
     });
 
-    const entries = groupFindingsByFile(result.clasesHuerfanas.map(clase => ({
+    const entries = groupFindingsByFile(result.clasesHuerfanas.filter(clase => isScopedFile(clase.archivo, scopedFiles)).map(clase => ({
         ruta: clase.archivo,
         finding: orphanClassToFinding(clase, configFile.orphanClassDetection?.severity ?? 'warning'),
     })));
@@ -243,6 +327,7 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
 export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
     const startedAt = Date.now();
     const configFile = await readConfig(args.configPath, args.workspacePath);
+    const scopedFiles = await readFilesFromManifest(args);
     const excludePatterns = configFile.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS;
     const fileProvider = new NodeWorkspaceFileProvider(args.workspacePath);
     const documentProvider = new CachedNodeDocumentProvider();
@@ -257,6 +342,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     });
     const includePatterns = configFile.includePatterns ?? DEFAULT_INCLUDE_PATTERNS;
     const candidates = await fileProvider.findFiles([...DEFAULT_CSS_PATTERNS, ...DEFAULT_REACT_PATTERNS, ...DEFAULT_SCRIPT_PATTERNS], excludePatterns);
+    /* --files-from limita findings reportados; los índices globales se mantienen para exactitud. */
     const includedCandidates = candidates.filter(file => isIncluded(file.fsPath, args.workspacePath, includePatterns));
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
     const analysisConfig = buildAnalysisConfig(configFile);
@@ -264,14 +350,18 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     for (const file of includedCandidates) {
         const document = await documentProvider.openTextDocument(file);
         documents.push({ file: file.fsPath, document });
+        if (isScopedFile(file.fsPath, scopedFiles)) {
         for (const documentFinding of analyzeVarsenseDocument(document, variableResult.indice, analysisConfig)) {
             findings.push({ ruta: file.fsPath, finding: documentFinding });
         }
+        }
     }
     for (const finding of analyzeTokenRules(variableResult.variablesPorArchivo, documents, analysisConfig)) {
-        findings.push({ ruta: String(finding.metadata?.file ?? args.workspacePath), finding });
+        if (isFindingScoped(finding, scopedFiles)) {
+            findings.push({ ruta: String(finding.metadata?.file), finding });
+        }
     }
-    findings.push(...classResult.clasesHuerfanas.map(clase => ({
+    findings.push(...classResult.clasesHuerfanas.filter(clase => isScopedFile(clase.archivo, scopedFiles)).map(clase => ({
         ruta: clase.archivo,
         finding: orphanClassToFinding(clase, configFile.orphanClassDetection?.severity ?? 'warning'),
     })));

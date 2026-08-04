@@ -146,5 +146,135 @@ suite('VarSense CLI editor-agnostic', () => {
             () => validateVarsenseConfig({ inlineDetection: { typo: true } }),
             /clave desconocida/,
         );
+
+    });
+    test('parsea --files-from', () => {
+        const parsed = parseCliArgs(['scan', '--workspace', '/tmp/workspace', '--files-from', 'scope.txt']);
+        assert.strictEqual(parsed.filesFromPath, 'scope.txt');
+    });
+
+    test('limita findings pero conserva el análisis global', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-files-from-');
+        try {
+            escribir(root, 'styles.css', '.orphanAlpha { color: red; } .orphanBeta { color: blue; }');
+            escribir(root, 'scope.txt', 'styles.css' + String.fromCharCode(10));
+            const first = await analyzeCliTarget(parseCliArgs([
+                'orphan-classes', '--workspace', root, '--files-from', 'scope.txt', '--format', 'json',
+            ]));
+            const firstFindings = first.entries.flatMap(entry => entry.findings);
+            assert.ok(firstFindings.some(finding => String(finding.message).includes('orphanAlpha')));
+            assert.ok(firstFindings.some(finding => String(finding.message).includes('orphanBeta')));
+
+            escribir(root, 'other.css', '.otherOrphan { color: green; }');
+            escribir(root, 'scope.txt', 'other.css' + String.fromCharCode(10));
+            const second = await analyzeCliTarget(parseCliArgs([
+                'orphan-classes', '--workspace', root, '--files-from', 'scope.txt', '--format', 'json',
+            ]));
+            const secondFindings = second.entries.flatMap(entry => entry.findings);
+            assert.ok(!secondFindings.some(finding => String(finding.message).includes('orphanAlpha')));
+            assert.ok(!secondFindings.some(finding => String(finding.message).includes('orphanBeta')));
+            assert.ok(secondFindings.some(finding => String(finding.message).includes('otherOrphan')));
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('acepta archivos eliminados como metadatos sin fallar', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-files-from-deleted-');
+        try {
+            escribir(root, 'scope.txt', 'src/deleted.css' + String.fromCharCode(10));
+            const result = await analyzeCliTarget(parseCliArgs([
+                'orphan-classes', '--workspace', root, '--files-from', 'scope.txt', '--format', 'json',
+            ]));
+            assert.strictEqual(result.entries.length, 0);
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('rechaza rutas inseguras del manifiesto', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-files-from-invalid-');
+        try {
+            const newline = String.fromCharCode(10);
+            const cases = [
+                { content: '../outside.css' + newline, pattern: /workspace|fuera/ },
+                { content: path.join(root, 'src', 'absolute.css') + newline, pattern: /Ruta absoluta|absoluta/ },
+                { content: 'src/a.css' + newline + 'src/a.css' + newline, pattern: /duplicada/ },
+            ];
+            escribir(root, 'src/a.css', '.aOrphan {}');
+            for (const currentCase of cases) {
+                escribir(root, 'scope.txt', currentCase.content);
+                await assert.rejects(
+                    analyzeCliTarget(parseCliArgs([
+                        'orphan-classes', '--workspace', root, '--files-from', 'scope.txt', '--format', 'json',
+                    ])),
+                    currentCase.pattern,
+                );
+            }
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('rechaza directorios del manifiesto', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-files-from-directory-');
+        try {
+            escribir(root, 'scope.txt', 'src' + String.fromCharCode(10));
+            await assert.rejects(
+                analyzeCliTarget(parseCliArgs([
+                    'orphan-classes', '--workspace', root, '--files-from', 'scope.txt', '--format', 'json',
+                ])),
+                /directorio/,
+            );
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('all filtra tokens fuera del alcance y conserva el índice global', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-files-from-all-');
+        try {
+            escribir(root, 'src/variables.css', ':root { --colorA: #fff; --colorB: #fff; }');
+            escribir(root, 'src/App.css', '.app { color: var(--colorA); }');
+            escribir(root, 'scope.txt', 'src/variables.css' + String.fromCharCode(10));
+            const result = await analyzeCliTarget(parseCliArgs([
+                'all', '--workspace', root, '--files-from', 'scope.txt', '--format', 'json',
+            ]));
+            const findings = result.entries.flatMap(entry => entry.findings);
+            const ruleIds = findings.map(finding => finding.ruleId);
+            assert.ok(ruleIds.includes('token-duplicate'));
+            assert.ok(findings.some(finding => finding.ruleId === 'token-unused' && String(finding.message).includes('--colorB')));
+            assert.ok(!findings.some(finding => finding.ruleId === 'token-unused' && String(finding.message).includes('--colorA')));
+            assert.ok(!result.entries.some(entry => entry.ruta.endsWith('App.css')));
+            assert.ok(!findings.some(finding => String(finding.metadata?.file ?? '').endsWith('App.css')));
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('rechaza symlink que sale del workspace', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-files-from-symlink-');
+        const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'varsense-cli-outside-'));
+        try {
+            escribir(outside, 'outside.css', '.outsideOrphan {}');
+            const link = path.join(root, 'linked.css');
+            try {
+                fs.symlinkSync(path.join(outside, 'outside.css'), link);
+            } catch (error) {
+                const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+                if (code === 'EPERM' || code === 'EACCES' || code === 'ENOSYS') return;
+                throw error;
+            }
+            escribir(root, 'scope.txt', 'linked.css' + String.fromCharCode(10));
+            await assert.rejects(
+                analyzeCliTarget(parseCliArgs([
+                    'orphan-classes', '--workspace', root, '--files-from', 'scope.txt', '--format', 'json',
+                ])),
+                /fuera del workspace/,
+            );
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+            fs.rmSync(outside, { recursive: true, force: true });
+        }
     });
 });
