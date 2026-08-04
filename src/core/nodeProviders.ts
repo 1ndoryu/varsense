@@ -143,7 +143,9 @@ export class NodeDocumentProvider implements DocumentProvider {
 }
 
 /* [018A-5] Todos los analizadores de una ejecución comparten el snapshot de
- * documentos. Evita leer/parsing dos veces el mismo CSS/TS en scan combinado. */
+ * documentos. Evita leer/parsing dos veces el mismo CSS/TS en scan combinado.
+ * El cache no detecta cambios por sí solo: un watcher/adaptador debe invalidar
+ * el fsPath antes de volver a analizarlo. */
 export class CachedNodeDocumentProvider extends NodeDocumentProvider {
     private readonly cache = new Map<string, Promise<CoreTextDocument>>();
 
@@ -155,6 +157,10 @@ export class CachedNodeDocumentProvider extends NodeDocumentProvider {
         const pending = super.openTextDocument(file);
         this.cache.set(file.fsPath, pending);
         return pending;
+    }
+
+    public invalidate(fsPath: string): void {
+        this.cache.delete(fsPath);
     }
 
     public clear(): void {

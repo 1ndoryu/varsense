@@ -26,6 +26,11 @@ export interface DocumentProvider {
     openTextDocument(file: WorkspaceFile): Promise<CoreTextDocument>;
 }
 
+export interface DocumentCacheProvider {
+    invalidate(fsPath: string): void;
+    clear(): void;
+}
+
 export interface WorkspaceFileProvider {
     findFiles(patterns: string[], exclude: string[]): Promise<WorkspaceFile[]>;
 }

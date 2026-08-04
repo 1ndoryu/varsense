@@ -1,4 +1,4 @@
-import { CancellationError, CancellationToken, DocumentProvider, throwIfCancelled, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
+import { CancellationError, CancellationToken, DocumentCacheProvider, DocumentProvider, throwIfCancelled, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
 
 export interface ClaseCssDefinida {
     nombre: string;
@@ -276,10 +276,28 @@ function compilarPatronesExcluidos(patterns: string[]): RegExp[] {
 /* [085A-2] Escanea clases huerfanas desde providers core, sin vscode.workspace.
  * Gotcha: los adaptadores deciden como abrir archivos; aqui solo se cruzan tokens y selectores. */
 export class ClassIndexBuilder {
+    private readonly cssFileCache = new Map<string, ClaseCssDefinida[]>();
+    private readonly consumerFileCache = new Map<string, Set<string>>();
+
     constructor(
         private readonly fileProvider: WorkspaceFileProvider,
-        private readonly documentProvider: DocumentProvider
+        private readonly documentProvider: DocumentProvider,
+        private readonly documentCacheProvider?: DocumentCacheProvider
     ) {}
+
+    /* The file cache is caller-driven: watchers/adapters must call this before
+     * rescanning a changed or deleted file. A scan does not stat/hash content. */
+    public invalidateFile(fsPath: string): void {
+        this.cssFileCache.delete(fsPath);
+        this.consumerFileCache.delete(fsPath);
+        this.documentCacheProvider?.invalidate(fsPath);
+    }
+
+    public clearCache(): void {
+        this.cssFileCache.clear();
+        this.consumerFileCache.clear();
+        this.documentCacheProvider?.clear();
+    }
 
     public async scan(
         options: ClassIndexScanOptions,
@@ -357,14 +375,24 @@ export class ClassIndexBuilder {
     ): Promise<{ clasesMap: Map<string, ClaseCssDefinida[]>; totalArchivos: number }> {
         const files = await this.fileProvider.findFiles(patterns, exclude);
         const clasesMap = new Map<string, ClaseCssDefinida[]>();
+        const currentFiles = new Set(files.map(file => file.fsPath));
+        for (const fsPath of this.cssFileCache.keys()) {
+            if (!currentFiles.has(fsPath)) {
+                this.cssFileCache.delete(fsPath);
+            }
+        }
 
         for (let index = 0; index < files.length; index++) {
             throwIfCancelled(token);
+            const file = files[index];
             try {
-                const document = await this.documentProvider.openTextDocument(files[index]);
-                throwIfCancelled(token);
-                const clases = extraerClasesDeTexto(document.getText(), files[index].fsPath);
-
+                let clases = this.cssFileCache.get(file.fsPath);
+                if (!clases) {
+                    const document = await this.documentProvider.openTextDocument(file);
+                    throwIfCancelled(token);
+                    clases = extraerClasesDeTexto(document.getText(), file.fsPath);
+                    this.cssFileCache.set(file.fsPath, clases);
+                }
                 for (const clase of clases) {
                     const existentes = clasesMap.get(clase.nombre) ?? [];
                     const duplicado = existentes.some(item => item.archivo === clase.archivo && item.linea === clase.linea);
@@ -393,6 +421,11 @@ export class ClassIndexBuilder {
     ): Promise<{ tokens: Set<string>; totalArchivos: number }> {
         const files = await this.findUniqueFiles(patterns, exclude, token);
         const tokens = new Set<string>();
+        for (const fsPath of this.consumerFileCache.keys()) {
+            if (!files.has(fsPath)) {
+                this.consumerFileCache.delete(fsPath);
+            }
+        }
 
         for (const file of files.values()) {
             throwIfCancelled(token);
@@ -401,9 +434,21 @@ export class ClassIndexBuilder {
             }
 
             try {
-                const document = await this.documentProvider.openTextDocument(file);
-                throwIfCancelled(token);
-                extraerTokensDeTexto(document.getText(), tokens);
+                let fileTokens = this.consumerFileCache.get(file.fsPath);
+                if (!fileTokens) {
+                    const document = await this.documentProvider.openTextDocument(file);
+                    throwIfCancelled(token);
+                    fileTokens = new Set<string>();
+                    extraerTokensDeTexto(document.getText(), fileTokens);
+                    this.consumerFileCache.set(file.fsPath, fileTokens);
+                }
+                for (const tokenValue of fileTokens) {
+                    throwIfCancelled(token);
+                    if (tokens.size >= MAX_TOKENS) {
+                        break;
+                    }
+                    tokens.add(tokenValue);
+                }
             } catch (error) {
                 if (error instanceof CancellationError) {
                     throw error;

@@ -184,6 +184,70 @@ suite('VarSense editor-agnostic core contracts', () => {
     );
   });
 
+  test('reuses class scan results until a file is invalidated', async () => {
+    const files = {
+      '/workspace/src/styles.css': { languageId: 'css', content: '.oldClass { color: red; }' },
+      '/workspace/src/view.ts': { languageId: 'typescript', content: "const className = 'oldClass';" },
+    };
+    const opened: string[] = [];
+    const provider = new MemoryWorkspaceProvider(files, file => {
+      opened.push(file.fsPath);
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const first = await builder.scan({ exclude: [] });
+    assert.strictEqual(first.totalClasesHuerfanas, 0);
+
+    opened.length = 0;
+    const second = await builder.scan({ exclude: [] });
+    assert.deepStrictEqual(opened, []);
+
+    files['/workspace/src/styles.css'].content = '.newClass { color: blue; }';
+    builder.invalidateFile('/workspace/src/styles.css');
+    opened.length = 0;
+    const third = await builder.scan({ exclude: [] });
+
+    assert.deepStrictEqual(opened, ['/workspace/src/styles.css']);
+    assert.strictEqual(third.totalClasesHuerfanas, 1);
+    assert.strictEqual(third.clasesHuerfanas[0].nombre, 'newClass');
+  });
+
+  test('clears class cache explicitly', async () => {
+    const files = {
+      '/workspace/src/styles.css': { languageId: 'css', content: '.cachedClass { color: red; }' },
+      '/workspace/src/view.ts': { languageId: 'typescript', content: "const className = 'cachedClass';" },
+    };
+    const opened: string[] = [];
+    const provider = new MemoryWorkspaceProvider(files, file => {
+      opened.push(file.fsPath);
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    await builder.scan({ exclude: [] });
+    opened.length = 0;
+    builder.clearCache();
+    await builder.scan({ exclude: [] });
+
+    assert.deepStrictEqual(opened.sort(), ['/workspace/src/styles.css', '/workspace/src/view.ts']);
+  });
+
+  test('delegates file cache invalidation and clear', () => {
+    const provider = new MemoryWorkspaceProvider({});
+    const invalidated: string[] = [];
+    let cleared = 0;
+    const cacheProvider = {
+      invalidate: (fsPath: string) => invalidated.push(fsPath),
+      clear: () => { cleared += 1; },
+    };
+    const builder = new ClassIndexBuilder(provider, provider, cacheProvider);
+
+    builder.invalidateFile('/workspace/src/styles.css');
+    builder.clearCache();
+
+    assert.deepStrictEqual(invalidated, ['/workspace/src/styles.css']);
+    assert.strictEqual(cleared, 1);
+  });
+
   test('detects orphan classes through core providers', async () => {
     const provider = new MemoryWorkspaceProvider({
       '/workspace/src/styles.css': {

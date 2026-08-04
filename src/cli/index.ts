@@ -249,7 +249,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider);
     const variablePatterns = configFile.scanAllFiles ? DEFAULT_CSS_PATTERNS : (configFile.variableFiles ?? DEFAULT_VARIABLE_PATTERNS);
     const variableResult = await variableBuilder.build({ patterns: variablePatterns, exclude: excludePatterns });
-    const classBuilder = new ClassIndexBuilder(fileProvider, documentProvider);
+    const classBuilder = new ClassIndexBuilder(fileProvider, documentProvider, documentProvider);
     const classResult = await classBuilder.scan({
         exclude: excludePatterns,
         minLength: configFile.orphanClassDetection?.minClassLength ?? 3,
