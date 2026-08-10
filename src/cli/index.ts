@@ -70,6 +70,11 @@ export interface CliAnalysisResult {
         cacheHitRate: number;
         peakRssMb: number;
     };
+    /* [108A-1 Fase 3] Duración por fase (ms) atribuible al cuello dominante:
+     * configMs, variableIndexMs, classIndexMs, discoveryMs, analyzeMs,
+     * tokenRulesMs, orphanMs, groupMs, saveMs. Las fases que no aplican al
+     * comando no aparecen (scan no tiene classIndexMs/orphanMs). */
+    phaseDurationMs?: Record<string, number>;
 }
 
 export const VARSENSE_JSON_SCHEMA_VERSION = '1';
@@ -277,8 +282,25 @@ function groupFindingsByFile(findings: Array<{ ruta: string; finding: CoreFindin
         .sort((first, second) => first.ruta.localeCompare(second.ruta));
 }
 
+/* [108A-1 Fase 3] Temporizador de fases: cada mark() acumula los ms desde el
+ * mark anterior (o desde el arranque). Publicado como phaseDurationMs para
+ * atribuir el coste del análisis a su cuello dominante. */
+function createPhaseTimer(): { mark: (name: string) => void; phases: Record<string, number> } {
+    let cursor = Date.now();
+    const phases: Record<string, number> = {};
+    return {
+        mark(name: string): void {
+            const now = Date.now();
+            phases[name] = now - cursor;
+            cursor = now;
+        },
+        phases,
+    };
+}
+
 export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
     const startedAt = Date.now();
+    const timer = createPhaseTimer();
     const configFile = await readConfig(args.configPath, args.workspacePath);
     const scopedFiles = await readFilesFromManifest(args);
     const analysisConfig = buildAnalysisConfig(configFile);
@@ -291,11 +313,13 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
     const variablePatterns = configFile.scanAllFiles
         ? DEFAULT_CSS_PATTERNS
         : (configFile.variableFiles ?? DEFAULT_VARIABLE_PATTERNS);
+    timer.mark('configMs');
 
     const variableResult = await variableBuilder.build({
         patterns: variablePatterns,
         exclude: excludePatterns,
     });
+    timer.mark('variableIndexMs');
 
     const candidates = await fileProvider.findFiles(
         [...DEFAULT_CSS_PATTERNS, ...DEFAULT_REACT_PATTERNS, ...DEFAULT_SCRIPT_PATTERNS],
@@ -303,6 +327,7 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
     );
     /* --files-from limita findings reportados; los índices globales se mantienen para exactitud. */
     const includedCandidates = candidates.filter(file => isIncluded(file.fsPath, args.workspacePath, includePatterns) && isScopedFile(file.fsPath, scopedFiles));
+    timer.mark('discoveryMs');
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
 
     for (const file of includedCandidates) {
@@ -312,16 +337,27 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
             findings.push({ ruta: file.fsPath, finding: documentFinding });
         }
     }
+    timer.mark('analyzeMs');
 
     const entries = groupFindingsByFile(findings);
+    timer.mark('groupMs');
     const result: CliAnalysisResult = {
         entries,
         totalArchivos: includedCandidates.length,
         hasErrors: entries.some(entry => entry.findings.some(finding => finding.severity === 'error')),
         durationMs: Date.now() - startedAt,
         ...(persistentStore ? { cache: cacheStats(persistentStore) } : {}),
+        metrics: buildMetrics({
+            filesDiscovered: candidates.length,
+            filesAnalyzed: includedCandidates.length,
+            reused: persistentStore?.stats.reused ?? 0,
+            reparsed: persistentStore?.stats.reparsed ?? 0,
+            durationMs: Date.now() - startedAt,
+        }),
+        phaseDurationMs: timer.phases,
     };
     await persistentStore?.save();
+    timer.mark('saveMs');
     return result;
 }
 
@@ -358,6 +394,7 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
 
 export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
     const startedAt = Date.now();
+    const timer = createPhaseTimer();
     const configFile = await readConfig(args.configPath, args.workspacePath);
     const scopedFiles = await readFilesFromManifest(args);
     const excludePatterns = configFile.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS;
@@ -366,17 +403,21 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     const persistentStore = await createIndexStore(args, configFile);
     const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider, persistentStore);
     const variablePatterns = configFile.scanAllFiles ? DEFAULT_CSS_PATTERNS : (configFile.variableFiles ?? DEFAULT_VARIABLE_PATTERNS);
+    timer.mark('configMs');
     const variableResult = await variableBuilder.build({ patterns: variablePatterns, exclude: excludePatterns });
+    timer.mark('variableIndexMs');
     const classBuilder = new ClassIndexBuilder(fileProvider, documentProvider, documentProvider, persistentStore);
     const classResult = await classBuilder.scan({
         exclude: excludePatterns,
         minLength: configFile.orphanClassDetection?.minClassLength ?? 3,
         excludedClassPatterns: configFile.orphanClassDetection?.excludeClassPatterns ?? [],
     });
+    timer.mark('classIndexMs');
     const includePatterns = configFile.includePatterns ?? DEFAULT_INCLUDE_PATTERNS;
     const candidates = await fileProvider.findFiles([...DEFAULT_CSS_PATTERNS, ...DEFAULT_REACT_PATTERNS, ...DEFAULT_SCRIPT_PATTERNS], excludePatterns);
     /* --files-from limita findings reportados; los índices globales se mantienen para exactitud. */
     const includedCandidates = candidates.filter(file => isIncluded(file.fsPath, args.workspacePath, includePatterns));
+    timer.mark('discoveryMs');
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
     const analysisConfig = buildAnalysisConfig(configFile);
     /* [028A-8 tramo 4] Con índice persistente + alcance scoped, los usos de
@@ -406,16 +447,20 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
         }
     }
     const analysisDurationMs = Date.now() - startedAnalysis;
+    timer.mark('analyzeMs');
     for (const finding of analyzeTokenRules(variableResult.variablesPorArchivo, documents, analysisConfig, usageIndex)) {
         if (isFindingScoped(finding, scopedFiles)) {
             findings.push({ ruta: String(finding.metadata?.file), finding });
         }
     }
+    timer.mark('tokenRulesMs');
     findings.push(...classResult.clasesHuerfanas.filter(clase => isScopedFile(clase.archivo, scopedFiles)).map(clase => ({
         ruta: clase.archivo,
         finding: orphanClassToFinding(clase, configFile.orphanClassDetection?.severity ?? 'warning'),
     })));
+    timer.mark('orphanMs');
     const entries = groupFindingsByFile(findings);
+    timer.mark('groupMs');
     const result: CliAnalysisResult = {
         entries,
         totalArchivos: includedCandidates.length + classResult.archivosAnalizadosCss + classResult.archivosAnalizadosConsumo,
@@ -429,8 +474,10 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
             reparsed: persistentStore?.stats.reparsed ?? 0,
             durationMs: analysisDurationMs,
         }),
+        phaseDurationMs: timer.phases,
     };
     await persistentStore?.save();
+    timer.mark('saveMs');
     return result;
 }
 
@@ -505,6 +552,7 @@ function renderOutput(result: CliAnalysisResult, args: ParsedCliArgs, toolVersio
             totalArchivosConHallazgos: result.entries.length,
             cache: result.cache ?? null,
             metrics: result.metrics ?? null,
+            phaseDurationMs: result.phaseDurationMs ?? null,
             entries: result.entries,
         }, null, 2)}\n`;
     }
