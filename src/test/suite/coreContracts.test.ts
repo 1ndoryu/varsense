@@ -9,10 +9,12 @@ import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../co
 class MemoryWorkspaceProvider implements WorkspaceFileProvider, DocumentProvider {
   constructor(
     private readonly files: Record<string, { languageId: string; content: string }>,
-    private readonly onOpen?: (file: WorkspaceFile) => void
+    private readonly onOpen?: (file: WorkspaceFile) => void,
+    private readonly onFind?: (patterns: string[]) => void
   ) {}
 
   async findFiles(patterns: string[]): Promise<WorkspaceFile[]> {
+    this.onFind?.(patterns);
     const extensions = patterns.map(pattern => pattern.replace('**/*', ''));
     return Object.keys(this.files)
       .filter(filePath => extensions.some(extension => filePath.endsWith(extension)))
@@ -162,6 +164,22 @@ suite('VarSense editor-agnostic core contracts', () => {
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'unusedClass');
+  });
+
+  test('discovers consumer files in one provider pass', async () => {
+    const findCalls: string[][] = [];
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': { languageId: 'css', content: '.unusedClass { color: red; }' },
+      '/workspace/src/view.ts': { languageId: 'typescript', content: "const className = 'unusedClass';" },
+    }, undefined, patterns => findCalls.push(patterns));
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    await builder.scan({ exclude: [] });
+
+    assert.strictEqual(findCalls.length, 2, 'CSS y consumidores deben descubrirse en dos recorridos');
+    assert.deepStrictEqual(findCalls[1], [
+      '**/*.tsx', '**/*.jsx', '**/*.ts', '**/*.js', '**/*.php', '**/*.html',
+    ]);
   });
 
   test('propagates cancellation during consumer scanning', async () => {

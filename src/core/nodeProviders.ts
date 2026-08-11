@@ -90,12 +90,29 @@ export function languageIdForFile(filePath: string): string {
 }
 
 export class NodeWorkspaceFileProvider implements WorkspaceFileProvider {
+    /* Una invocación CLI reutiliza el provider para variables, clases y
+     * archivos candidatos. Cachear el snapshot por exclusiones evita repetir
+     * el recorrido recursivo completo por cada etapa/patrón; el proceso es
+     * one-shot, por lo que no hay cambios externos que invalidar durante el
+     * análisis. Cada combinación de exclusiones conserva su propio snapshot
+     * para no mezclar contratos de llamadas distintas. */
+    private readonly snapshots = new Map<string, WorkspaceFile[]>();
+
     constructor(private readonly rootPath: string) {}
 
     public async findFiles(patterns: string[], exclude: string[]): Promise<WorkspaceFile[]> {
-        const files: WorkspaceFile[] = [];
-        await this.walk(this.rootPath, patterns, exclude, files);
-        return files;
+        const snapshotKey = JSON.stringify(exclude);
+        let snapshot = this.snapshots.get(snapshotKey);
+        if (!snapshot) {
+            snapshot = [];
+            await this.walk(this.rootPath, ['**/*'], exclude, snapshot);
+            this.snapshots.set(snapshotKey, snapshot);
+        }
+
+        return snapshot.filter(file => {
+            const relativePath = normalizarRuta(path.relative(this.rootPath, file.fsPath));
+            return matchesAnyGlob(relativePath, patterns);
+        });
     }
 
     private async walk(

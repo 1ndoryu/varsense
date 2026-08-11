@@ -5,6 +5,16 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-08-11
+
+### Mejorado
+- El índice de clases reutiliza un único recorrido del workspace para todos los patrones de consumidores.
+- El provider Node cachea snapshots por exclusiones durante una ejecución CLI, reduciendo el coste cold sin cambiar los hallazgos.
+
+### Verificado
+- Suite upstream: 61 pruebas PASS.
+- Benchmark sobre `glory-rust-template`: cold ~3.3 s y warm ~2.8 s, por debajo del presupuesto de 6 s.
+
 ## [2.2.0] - 2026-07-29
 
 ### Agregado

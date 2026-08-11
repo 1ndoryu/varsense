@@ -538,13 +538,15 @@ export class ClassIndexBuilder {
     private async findUniqueFiles(patterns: string[], exclude: string[], token?: CancellationToken): Promise<Map<string, WorkspaceFile>> {
         const files = new Map<string, { uri: string; fsPath: string }>();
 
-        for (const pattern of patterns) {
+        /* El provider recibe todos los patrones en una sola pasada. Hacer un
+         * recorrido por patrón multiplica el coste de readdir/glob en cada
+         * ejecución cold y no aporta deduplicación adicional: el Map ya la
+         * garantiza para providers que devuelvan coincidencias repetidas. */
+        throwIfCancelled(token);
+        const matches = await this.fileProvider.findFiles(patterns, exclude);
+        for (const file of matches) {
             throwIfCancelled(token);
-            const matches = await this.fileProvider.findFiles([pattern], exclude);
-            for (const file of matches) {
-                throwIfCancelled(token);
-                files.set(file.fsPath, file);
-            }
+            files.set(file.fsPath, file);
         }
 
         return files;
