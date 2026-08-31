@@ -39,16 +39,32 @@ const DEFAULT_CONSUMER_PATTERNS = [
 const DEFAULT_MIN_LENGTH = 3;
 const REGEX_CLASS_ATTR = /(?:className|class)\s*=\s*["']([^"']+)["']/g;
 const REGEX_CLASS_TEMPLATE = /(?:className|class)\s*=\s*\{[`]([^`]+)[`]\}/g;
+/* [J-8] JSX/TSX className={expr} con ternarios y literales: cubre
+ * className={cond ? 'a' : 'b'} y className={'a b'}. Los identificadores
+ * puros se resuelven por indirección de variables (ver recopilarDeclaraciones). */
+const REGEX_CLASS_JSX_EXPR = /(?:className|class)\s*=\s*\{([^{}]*)\}/g;
 /* Vanilla TS/DOM factories commonly pass classes as object attributes:
  * createEl('div', { className: 'panel panel--active' }). Keep this parser
  * framework-agnostic while covering the project's createEl contract. */
 const REGEX_CLASS_OBJECT = /(?:['"]?className['"]?|['"]?class['"]?)\s*:\s*(?:['"]([^'"]+)['"]|[`]([^`]+)[`])/g;
 const REGEX_CLASS_FACTORY = /createContainer\s*\(\s*['"]([^'"]+)['"]/g;
 const REGEX_EXTERNAL_LINK_CLASS = /createExternalLink\s*\([^,]+,[^,]+,\s*['"]([^'"]+)['"]/g;
-const REGEX_CLASS_LIST = /classList\.add\s*\(([^)]*)\)/g;
+/* [J-8] createElement(tag, 'clase') posicional: Glory-Laminal pasa la clase
+ * como segundo argumento (helper createElement(tag, className, text)). */
+const REGEX_CREATE_ELEMENT_CLASS = /createElement\s*\(\s*['"][^'"]+['"]\s*,\s*([^)]*)\)/g;
+/* [J-8] classList.add/toggle/remove: toggle('clase', cond) y remove('clase')
+ * son usos reales igual que add. */
+const REGEX_CLASS_LIST = /classList\.(?:add|toggle|remove)\s*\(([^)]*)\)/g;
 const REGEX_CLASS_DECLARATION = /\b(?:const|let|var)\s+(?:className|contentClass)\s*=\s*([\s\S]{0,240}?);/g;
+/* [J-8] Cualquier declaración de variable cuyo valor sea un literal de clase
+ * (string, template, ternario, array/objeto de literales). Permite resolver
+ * className={ident} y classList.add(ident) por indirección. */
+const REGEX_VAR_CLASS_DECLARATION = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]{0,240}?);/g;
 const REGEX_STRING_LITERAL = /['"`]([^'"`$]+)['"`]/g;
-const MAX_TOKENS = 10000;
+/* [J-8] El cap evita que un workspace enorme agote memoria, pero 10000 deja
+ * sin escanear archivos posteriores (MapaV2.tsx etc.) en proyectos medianos.
+ * 50k cubre la práctica real con RSS holgado (70MB en workspace-manager). */
+const MAX_TOKENS = 50000;
 
 /* [028A-8 tramo 4] Nombres de variables referenciadas con var(--x) en un
  * texto CSS. Permite al índice inverso de variables seleccionar consumidores. */
@@ -146,6 +162,78 @@ function addDeclarationClassTokens(value: string, tokens: Set<string>): void {
     }
 }
 
+/* [J-8] Recorta cadenas de métodos al final de un valor para reducir
+ * `\`campo ${x}\`.trim()` o `['a','b'].join(' ')` a su literal base. */
+function normalizarValorLiteral(value: string): string {
+    let current = value.trim();
+    for (;;) {
+        const recortado = current.replace(/\s*\.\s*\w+\s*\([^)]*\)\s*$/, '');
+        if (recortado === current) {
+            break;
+        }
+        current = recortado;
+    }
+    return current;
+}
+
+/* [J-8] Recopila declaraciones cuyo valor es un literal de clases: string,
+ * template, ternario con literales o array de literales. Permite resolver
+ * className={ident}, classList.add(ident) y createElement(tag, ident) por
+ * indirección de variable (const x = 'a b'; ...; className={x}). Solo
+ * literales: una llamada a función (helper('clase')) NO resuelve, manteniendo
+ * el contrato del test 'unusedPanel'. */
+function recopilarDeclaraciones(source: string): Map<string, Set<string>> {
+    const variables = new Map<string, Set<string>>();
+    let match: RegExpExecArray | null;
+
+    REGEX_VAR_CLASS_DECLARATION.lastIndex = 0;
+    while ((match = REGEX_VAR_CLASS_DECLARATION.exec(source)) !== null) {
+        if (!isCodeMatch(source, match.index)) {
+            continue;
+        }
+        const previous = previousCodeCharacter(source, match.index);
+        if (previous && /[\w'"`]/.test(previous)) {
+            continue;
+        }
+        const nombre = match[1];
+        /* className/contentClass ya se resuelven por REGEX_CLASS_DECLARATION. */
+        if (nombre === 'className' || nombre === 'contentClass') {
+            continue;
+        }
+        const valor = normalizarValorLiteral(match[2]);
+        const tokensVariable = new Set<string>();
+        if (/^(['"`])[\s\S]*\1$/.test(valor)) {
+            addClassTokens(valor.slice(1, -1), tokensVariable);
+            addQuotedClassTokens(valor, tokensVariable);
+        } else if (valor.includes('?')) {
+            addQuotedClassTokens(valor, tokensVariable);
+        } else if (valor.startsWith('[')) {
+            addQuotedClassTokens(valor, tokensVariable);
+        }
+        if (tokensVariable.size > 0) {
+            variables.set(nombre, tokensVariable);
+        }
+    }
+    return variables;
+}
+
+/* [J-8] Resuelve un identificador puro (className={clases}) contra el mapa de
+ * declaraciones; si no es un identificador, extrae los literales embebidos
+ * (ternarios, templates). */
+function resolverExpresionClase(body: string, variables: Map<string, Set<string>>, tokens: Set<string>): void {
+    const trimmed = body.trim();
+    if (/^[A-Za-z_$][\w$]*$/.test(trimmed)) {
+        const resuelto = variables.get(trimmed);
+        if (resuelto) {
+            for (const token of resuelto) {
+                tokens.add(token);
+            }
+        }
+        return;
+    }
+    addQuotedClassTokens(trimmed, tokens);
+}
+
 function removeComments(texto: string): string {
     let result = '';
     let quote = '';
@@ -157,12 +245,12 @@ function removeComments(texto: string): string {
         const next = texto[index + 1] ?? '';
 
         if (comment === 'line') {
-            result += current === '\\n' ? '\\n' : ' ';
-            if (current === '\\n') {comment = '';}
+            result += current === '\n' ? '\n' : ' ';
+            if (current === '\n') {comment = '';}
             continue;
         }
         if (comment === 'block') {
-            result += current === '\\n' ? '\\n' : ' ';
+            result += current === '\n' ? '\n' : ' ';
             if (current === '*' && next === '/') {
                 result += ' ';
                 index++;
@@ -220,6 +308,9 @@ function isCodeMatch(source: string, matchIndex: number): boolean {
 function extraerTokensDeTexto(texto: string, tokens: Set<string>): void {
     const source = removeComments(texto);
     let match: RegExpExecArray | null;
+    /* [J-8] La indirección requiere conocer las declaraciones antes de
+     * resolver los usos (className={ident}). Se recopila una vez por archivo. */
+    const variables = recopilarDeclaraciones(source);
 
     REGEX_CLASS_ATTR.lastIndex = 0;
     while ((match = REGEX_CLASS_ATTR.exec(source)) !== null) {
@@ -238,6 +329,14 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>): void {
         }
     }
 
+    /* [J-8] className={cond ? 'a' : 'b'} y className={'a b'}: expresiones
+     * JSX con literales o identificadores indirectos. */
+    REGEX_CLASS_JSX_EXPR.lastIndex = 0;
+    while ((match = REGEX_CLASS_JSX_EXPR.exec(source)) !== null) {
+        if (!isCodeMatch(source, match.index)) {continue;}
+        resolverExpresionClase(match[1], variables, tokens);
+    }
+
     REGEX_CLASS_OBJECT.lastIndex = 0;
     while ((match = REGEX_CLASS_OBJECT.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
@@ -254,6 +353,14 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>): void {
         addClassTokens(match[1], tokens);
     }
 
+    /* [J-8] createElement(tag, 'clase') posicional: el segundo argumento es
+     * la clase (o un ternario de literales / identificador indirecto). */
+    REGEX_CREATE_ELEMENT_CLASS.lastIndex = 0;
+    while ((match = REGEX_CREATE_ELEMENT_CLASS.exec(source)) !== null) {
+        if (!isCodeMatch(source, match.index)) {continue;}
+        resolverExpresionClase(match[1], variables, tokens);
+    }
+
     REGEX_EXTERNAL_LINK_CLASS.lastIndex = 0;
     while ((match = REGEX_EXTERNAL_LINK_CLASS.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
@@ -265,7 +372,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>): void {
     REGEX_CLASS_LIST.lastIndex = 0;
     while ((match = REGEX_CLASS_LIST.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index) || previousCodeCharacter(source, match.index) !== '.') {continue;}
-        addQuotedClassTokens(match[1], tokens);
+        resolverExpresionClase(match[1], variables, tokens);
     }
 
     REGEX_CLASS_DECLARATION.lastIndex = 0;
