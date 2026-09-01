@@ -2,6 +2,8 @@ import * as assert from 'assert';
 import { createCoreDocument, createCoreRange, serializeCoreFindings, CoreFinding } from '../../core/types';
 import { findingToDiagnostic } from '../../core/vscodeAdapter';
 import { parsearDocumento } from '../../parsers/cssParser';
+import { analyzeVarsenseDocument } from '../../core/analyzeDocument';
+import { buildAnalysisConfig } from '../../core/config';
 import { VariableIndexBuilder } from '../../core/variableIndexBuilder';
 import { ClassIndexBuilder } from '../../core/classIndexBuilder';
 import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../core/workspaceProviders';
@@ -577,5 +579,89 @@ suite('VarSense editor-agnostic core contracts', () => {
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelExpVida--muerta');
+  });
+
+  /* [318A-7V4] El core del CLI debe honrar los comentarios de supresion igual
+   * que el provider (paridad de conteo entre el editor y el CLI). El codigo de
+   * PT ya declara excepciones con `sentinel-disable inline-style-prohibido`
+   * inline en la misma linea del style={{}} — el CLI no debe contarlas. */
+  test('sentinel-disable inline suprime cssInlineReact en la misma linea', async () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/View.tsx',
+      fileName: '/workspace/src/View.tsx',
+      languageId: 'typescriptreact',
+      content: [
+        'const Vista = () => (',
+        '  <div style={{ /* sentinel-disable inline-style-prohibido */ background: color }} />',
+        ');',
+      ].join('\n'),
+    });
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
+
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+
+    assert.strictEqual(hallazgos.length, 0);
+  });
+
+  test('sentinel-disable suprime la linea siguiente (convencion CSS/reglas)', async () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/View.tsx',
+      fileName: '/workspace/src/View.tsx',
+      languageId: 'typescriptreact',
+      content: [
+        'const Vista = () => (',
+        '  /* sentinel-disable inline-style-prohibido */',
+        '  <div style={{ background: color }} />',
+        ');',
+      ].join('\n'),
+    });
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
+
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+
+    assert.strictEqual(hallazgos.length, 0);
+  });
+
+  test('varsense-disable-line suprime la misma linea y next-line la siguiente', async () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/View.tsx',
+      fileName: '/workspace/src/View.tsx',
+      languageId: 'typescriptreact',
+      content: [
+        'const A = () => <div style={{ /* varsense-disable-line */ width: 10 }} />;',
+        '/* varsense-disable-next-line */',
+        'const B = () => <div style={{ width: 11 }} />;',
+      ].join('\n'),
+    });
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
+
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+
+    assert.strictEqual(hallazgos.length, 0);
+  });
+
+  test('bloque varsense-disable/varsense-enable suprime lineas internas', async () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/View.tsx',
+      fileName: '/workspace/src/View.tsx',
+      languageId: 'typescriptreact',
+      content: [
+        '/* varsense-disable */',
+        'const A = () => <div style={{ width: 10 }} />;',
+        '/* varsense-enable */',
+        'const B = () => <div style={{ width: 11 }} />;',
+      ].join('\n'),
+    });
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
+
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+
+    assert.strictEqual(hallazgos.length, 1);
+    assert.strictEqual(hallazgos[0].ruleId, 'cssInlineReact');
+    assert.strictEqual(hallazgos[0].range.start.line, 3);
   });
 });

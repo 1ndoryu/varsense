@@ -219,21 +219,81 @@ function analyzeScriptInlineStyles(
     return findings;
 }
 
+/*
+ * Parsea comentarios de supresion y devuelve las lineas suprimidas.
+ * Replica la semantica del provider (parsearSupresiones) para que el CLI y
+ * el editor reporten el mismo conteo:
+ *   varsense-disable-next-line        → suprime la linea siguiente
+ *   varsense-enable                   → termina el bloque generico
+ *   varsense-disable-line             → suprime esa misma linea
+ *   varsense-disable                  → inicia bloque (suprime siguientes)
+ *   sentinel-disable                  → convencion inline usada en JSX/CSS:
+ *                                       suprime esa linea y la siguiente
+ * El orden importa: las variantes mas especificas (next-line, line) se
+ * evaluan antes que la generica para evitar coincidencias parciales.
+ */
+function parsearLineasSuprimidas(texto: string): Set<number> {
+    const lineasSuprimidas = new Set<number>();
+    const lineas = texto.split('\n');
+    let enBloqueDeshabilitado = false;
+
+    for (let i = 0; i < lineas.length; i++) {
+        const textoLinea = lineas[i];
+
+        if (textoLinea.includes('varsense-disable-next-line')) {
+            lineasSuprimidas.add(i + 1);
+            continue;
+        }
+
+        if (textoLinea.includes('varsense-enable')) {
+            enBloqueDeshabilitado = false;
+            continue;
+        }
+
+        if (textoLinea.includes('varsense-disable-line')) {
+            lineasSuprimidas.add(i);
+            continue;
+        }
+
+        if (textoLinea.includes('varsense-disable')) {
+            enBloqueDeshabilitado = true;
+            continue;
+        }
+
+        if (enBloqueDeshabilitado) {
+            lineasSuprimidas.add(i);
+        }
+
+        if (textoLinea.includes('sentinel-disable')) {
+            lineasSuprimidas.add(i);
+            lineasSuprimidas.add(i + 1);
+        }
+    }
+
+    return lineasSuprimidas;
+}
+
 export function analyzeVarsenseDocument(
     document: CoreTextDocument,
     variableIndex: VariableIndex,
     config: VarsenseDocumentAnalysisConfig
 ): CoreFinding[] {
+    const lineasSuprimidas = parsearLineasSuprimidas(document.getText());
+    const filtrar = (hallazgos: CoreFinding[]): CoreFinding[] =>
+        lineasSuprimidas.size > 0
+            ? hallazgos.filter(hallazgo => !lineasSuprimidas.has(hallazgo.range.start.line))
+            : hallazgos;
+
     if (CSS_LANGUAGE_IDS.has(document.languageId)) {
-        return analyzeCssDocument(document, variableIndex, config);
+        return filtrar(analyzeCssDocument(document, variableIndex, config));
     }
 
     if (REACT_LANGUAGE_IDS.has(document.languageId)) {
-        return analyzeReactInlineStyles(document, config);
+        return filtrar(analyzeReactInlineStyles(document, config));
     }
 
     if (SCRIPT_LANGUAGE_IDS.has(document.languageId)) {
-        return analyzeScriptInlineStyles(document, config);
+        return filtrar(analyzeScriptInlineStyles(document, config));
     }
 
     return [];
