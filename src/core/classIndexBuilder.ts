@@ -31,10 +31,17 @@ export interface ClassIndexScanOptions {
 export type ClassScanProgress = (fase: string, actual: number, total: number) => void;
 
 const DEFAULT_CSS_PATTERNS = ['**/*.css'];
+/* [318A-7V3] Los CSS también consumen clases: un selector compuesto en otro
+ * archivo (.dashboardGrid en movilBase.css refiriendo la definición de
+ * base.css) prueba que la clase se aplica en runtime; borrarla cambiaría el
+ * diseño. El scan() excluye el archivo de definición de cada clase (por eso
+ * el extractor devuelve tokens por archivo), así una clase solo pierde su
+ * reporte si aparece como selector en OTRO CSS. */
 const DEFAULT_CONSUMER_PATTERNS = [
     '**/*.tsx', '**/*.jsx',
     '**/*.ts', '**/*.js',
-    '**/*.php', '**/*.html'
+    '**/*.php', '**/*.html',
+    '**/*.css'
 ];
 const DEFAULT_MIN_LENGTH = 3;
 /* [318A-7V2] Props que portan clases en los design systems del área:
@@ -55,8 +62,12 @@ const REGEX_CLASS_TEMPLATE = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*\{[`]([^`
 const REGEX_CLASS_JSX_EXPR = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*\{([^{}]*)\}/g;
 /* Vanilla TS/DOM factories commonly pass classes as object attributes:
  * createEl('div', { className: 'panel panel--active' }). Keep this parser
- * framework-agnostic while covering the project's createEl contract. */
-const REGEX_CLASS_OBJECT = /(?:['"]?className['"]?|['"]?class['"]?)\s*:\s*(?:['"]([^'"]+)['"]|[`]([^`]+)[`])/g;
+ * framework-agnostic while covering the project's createEl contract.
+ * [318A-7V3] Misma familia de props portadoras que las atribuciones
+ * (verificada repo-wide): { clase: 'badgePremium' }, { claseAdicional: x } —
+ * el consumidor concatena el valor al className (FilaUsuario/ResumenAdmin
+ * de PT). Las props de datos (estado, tipo, texto) no casan con el patrón. */
+const REGEX_CLASS_OBJECT = /(?:['"]?(?:className|class|[Cc]lase[\w$]*)['"]?)\s*:\s*(?:['"]([^'"]+)['"]|[`]([^`]+)[`])/g;
 const REGEX_CLASS_FACTORY = /createContainer\s*\(\s*['"]([^'"]+)['"]/g;
 const REGEX_EXTERNAL_LINK_CLASS = /createExternalLink\s*\([^,]+,[^,]+,\s*['"]([^'"]+)['"]/g;
 /* [J-8] createElement(tag, 'clase') posicional: Glory-Laminal pasa la clase
@@ -73,7 +84,41 @@ const REGEX_CLASS_DECLARATION = /\b(?:const|let|var)\s+(?:className|contentClass
  * (string, template, ternario, array/objeto de literales). Permite resolver
  * className={ident} y classList.add(ident) por indirección. */
 const REGEX_VAR_CLASS_DECLARATION = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]{0,1000}?);/g;
-const REGEX_STRING_LITERAL = /['"`]([^'"`$]+)['"`]/g;
+/* [318A-7V5] Extracción de literales por pares de comillas. El regex de
+ * agrupación anterior (['"`]([^'"`$]+)['"`]) falla con literales vacíos
+ * seguidos de más texto: `: ''\n , estaX ? 'claseReal'` toma la comilla de
+ * cierre del vacío como apertura y se traga la clase real, emitiendo en su
+ * lugar el identificador (VistaCelda.tsx de PT). El escaneo respeta pares,
+ * escapes y el contenido de templates con ${...}. */
+function extraerLiterales(value: string): string[] {
+    const literales: string[] = [];
+    for (let index = 0; index < value.length; index++) {
+        const current = value[index];
+        if (current !== "'" && current !== '"' && current !== '`') {
+            continue;
+        }
+        const quote = current;
+        let contenido = '';
+        index++;
+        for (; index < value.length; index++) {
+            const c = value[index];
+            if (c === '\\') {
+                contenido += c;
+                if (index + 1 < value.length) {
+                    contenido += value[index + 1];
+                    index++;
+                }
+                continue;
+            }
+            if (c === quote) {
+                break;
+            }
+            contenido += c;
+        }
+        literales.push(contenido);
+    }
+    return literales;
+}
 /* [J-8] El cap evita que un workspace enorme agote memoria, pero 10000 deja
  * sin escanear archivos posteriores (MapaV2.tsx etc.) en proyectos medianos.
  * 50k cubre la práctica real con RSS holgado (70MB en workspace-manager). */
@@ -142,10 +187,82 @@ function addClassTokens(value: string, tokens: Set<string>): void {
      * `campo ${error ? 'campoError' : ''}`. Nunca agrega identificadores. */
     const interpolations = value.match(/\$\{[^}]*\}/g) ?? [];
     for (const interpolation of interpolations) {
-        const literals = interpolation.match(/["']([^"']+)["']/g) ?? [];
-        for (const literal of literals) {
-            addClassTokens(literal.slice(1, -1), tokens);
+        for (const literal of extraerLiterales(interpolation)) {
+            addClassTokens(literal, tokens);
         }
+    }
+}
+
+/* [J-8] Recopila declaraciones cuyo valor es un literal de clases: string,
+ * template, ternario con literales o array de literales. Permite resolver
+ * className={ident}, classList.add(ident) y createElement(tag, ident) por
+ * indirección de variable (const x = 'a b'; ...; className={x}). Solo
+ * literales: una llamada a función (helper('clase')) NO resuelve, manteniendo
+ * el contrato del test 'unusedPanel'. */
+const REGEX_SWITCH_SUBJECT = /\bswitch\s*\(\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\)/g;
+const REGEX_SWITCH_CASE = /\bcase\s*['"]([A-Za-z_][\w-]*)['"]\s*:/g;
+/* [318A-7V3] Resuelve interpolaciones de template className={\`... ${x.y} ...\`}:
+ * 1) identificador puro → mapa de declaraciones (VistaResizeHandle de PT);
+ * 2) cadenas con punto que también son sujeto de un switch en el MISMO
+ * archivo → los literales de sus case son los valores que en runtime se
+ * interpolan como clases (CabeceraArbitraje: switch (viabilidad.estado) +
+ * className={\`estadoViabilidad ${viabilidad.estado}\`}).
+ * La parte 2 se resuelve en extraerTokensDeTexto, que tiene el source. */
+function addTemplateClassTokens(value: string, variables: Map<string, Set<string>>, tokens: Set<string>): void {
+    const withoutInterpolation = value.replace(/\$\{[^}]*\}/g, ' ');
+    for (const clase of withoutInterpolation.split(/\s+/)) {
+        if (clase.length > 1 && /^[a-zA-Z_][\w-]*$/.test(clase)) {
+            tokens.add(clase);
+        }
+    }
+
+    const interpolations = value.match(/\$\{[^}]*\}/g) ?? [];
+    for (const interpolation of interpolations) {
+        const body = interpolation.slice(2, -1).trim();
+        if (/^[A-Za-z_$][\w$]*$/.test(body)) {
+            const resuelto = variables.get(body);
+            if (resuelto) {
+                for (const token of resuelto) {
+                    tokens.add(token);
+                }
+            }
+        }
+        for (const literal of extraerLiterales(interpolation)) {
+            addClassTokens(literal, tokens);
+        }
+    }
+}
+
+/* [318A-7V3] Si una cadena con punto interpolada en un className template
+ * coincide exactamente con el sujeto de un switch del mismo archivo, los
+ * literales de sus case son las clases aplicadas en runtime. */
+function resolverSwitchTemplate(template: string, source: string, tokens: Set<string>): void {
+    const interpolations = template.match(/\$\{[^}]*\}/g) ?? [];
+    const cadenas = new Set<string>();
+    for (const interpolation of interpolations) {
+        const body = interpolation.slice(2, -1).trim();
+        if (/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(body)) {
+            cadenas.add(body);
+        }
+    }
+    if (cadenas.size === 0) {
+        return;
+    }
+    REGEX_SWITCH_SUBJECT.lastIndex = 0;
+    let subjectMatch: RegExpExecArray | null;
+    while ((subjectMatch = REGEX_SWITCH_SUBJECT.exec(source)) !== null) {
+        if (!isCodeMatch(source, subjectMatch.index) || !cadenas.has(subjectMatch[1])) {
+            continue;
+        }
+        REGEX_SWITCH_CASE.lastIndex = 0;
+        let caseMatch: RegExpExecArray | null;
+        while ((caseMatch = REGEX_SWITCH_CASE.exec(source)) !== null) {
+            if (caseMatch.index < subjectMatch.index) {
+                continue;
+            }
+            tokens.add(caseMatch[1]);
+        }
+        break;
     }
 }
 
@@ -156,10 +273,8 @@ function previousCodeCharacter(source: string, index: number): string {
 }
 
 function addQuotedClassTokens(value: string, tokens: Set<string>): void {
-    REGEX_STRING_LITERAL.lastIndex = 0;
-    let literal: RegExpExecArray | null;
-    while ((literal = REGEX_STRING_LITERAL.exec(value)) !== null) {
-        addClassTokens(literal[1], tokens);
+    for (const literal of extraerLiterales(value)) {
+        addClassTokens(literal, tokens);
     }
 }
 
@@ -338,7 +453,8 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>): void {
     REGEX_CLASS_TEMPLATE.lastIndex = 0;
     while ((match = REGEX_CLASS_TEMPLATE.exec(source)) !== null) {
         if (isCodeMatch(source, match.index)) {
-            addClassTokens(match[1], tokens);
+            addTemplateClassTokens(match[1], variables, tokens);
+            resolverSwitchTemplate(match[1], source, tokens);
         }
     }
 
@@ -455,7 +571,7 @@ export class ClassIndexBuilder {
 
         throwIfCancelled(options.token);
         onProgress?.('Extrayendo tokens de consumidores', 0, 1);
-        const { tokens, totalArchivos: archivosConsumo } = await this.extractConsumerTokens(
+        const { filesTokens, totalArchivos: archivosConsumo } = await this.extractConsumerTokens(
             consumerPatterns,
             options.exclude,
             options.token
@@ -465,6 +581,14 @@ export class ClassIndexBuilder {
         const regexExcluidos = compilarPatronesExcluidos(options.excludedClassPatterns ?? []);
         const clasesHuerfanas: ClaseCssDefinida[] = [];
         const nombresUnicos = Array.from(clasesMap.keys());
+        /* [318A-7V3] Con los CSS ahora en el barrido de consumo, cada clase
+         * debe excluir su(s) archivo(s) de definición: un selector compuesto
+         * en el mismo archivo (`.padre .hija` junto a la definición) no es
+         * uso; en OTRO archivo sí lo es. */
+        const archivosDefinicion = new Map<string, Set<string>>();
+        for (const [nombre, definiciones] of clasesMap) {
+            archivosDefinicion.set(nombre, new Set(definiciones.map(def => def.archivo)));
+        }
 
         for (let index = 0; index < nombresUnicos.length; index++) {
             throwIfCancelled(options.token);
@@ -478,7 +602,19 @@ export class ClassIndexBuilder {
                 continue;
             }
 
-            if (!tokens.has(nombre)) {
+            const definicion = archivosDefinicion.get(nombre) ?? new Set<string>();
+            let usado = false;
+            for (const [fsPath, tokensArchivo] of filesTokens) {
+                if (definicion.has(fsPath)) {
+                    continue;
+                }
+                if (tokensArchivo.has(nombre)) {
+                    usado = true;
+                    break;
+                }
+            }
+
+            if (!usado) {
                 const definiciones = clasesMap.get(nombre) ?? [];
                 if (definiciones.length > 0) {
                     clasesHuerfanas.push(definiciones[0]);
@@ -555,9 +691,10 @@ export class ClassIndexBuilder {
         patterns: string[],
         exclude: string[],
         token?: CancellationToken
-    ): Promise<{ tokens: Set<string>; totalArchivos: number }> {
+    ): Promise<{ filesTokens: Map<string, Set<string>>; totalArchivos: number }> {
         const files = await this.findUniqueFiles(patterns, exclude, token);
-        const tokens = new Set<string>();
+        const filesTokens = new Map<string, Set<string>>();
+        let totalTokens = 0;
         for (const fsPath of this.consumerFileCache.keys()) {
             if (!files.has(fsPath)) {
                 this.consumerFileCache.delete(fsPath);
@@ -569,7 +706,7 @@ export class ClassIndexBuilder {
 
         for (const file of files.values()) {
             throwIfCancelled(token);
-            if (tokens.size >= MAX_TOKENS) {
+            if (totalTokens >= MAX_TOKENS) {
                 break;
             }
 
@@ -578,13 +715,8 @@ export class ClassIndexBuilder {
                 if (!fileTokens) {
                     fileTokens = await this.loadConsumerTokens(file, token);
                 }
-                for (const tokenValue of fileTokens) {
-                    throwIfCancelled(token);
-                    if (tokens.size >= MAX_TOKENS) {
-                        break;
-                    }
-                    tokens.add(tokenValue);
-                }
+                filesTokens.set(file.fsPath, fileTokens);
+                totalTokens += fileTokens.size;
             } catch (error) {
                 if (error instanceof CancellationError) {
                     throw error;
@@ -593,7 +725,7 @@ export class ClassIndexBuilder {
             }
         }
 
-        return { tokens, totalArchivos: files.size };
+        return { filesTokens, totalArchivos: files.size };
     }
 
     /* [028A-8] Carga las definiciones CSS de un archivo reutilizando el índice

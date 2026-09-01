@@ -179,6 +179,10 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(findCalls.length, 2, 'CSS y consumidores deben descubrirse en dos recorridos');
     assert.deepStrictEqual(findCalls[1], [
       '**/*.tsx', '**/*.jsx', '**/*.ts', '**/*.js', '**/*.php', '**/*.html',
+      /* [318A-7V3] Los CSS también consumen clases: un selector compuesto en
+       * otro CSS (.dashboardGrid en movilBase.css refiriendo base.css) es uso
+       * real; el propio scan() excluye el archivo de definición de cada clase. */
+      '**/*.css',
     ]);
   });
 
@@ -225,7 +229,10 @@ suite('VarSense editor-agnostic core contracts', () => {
     opened.length = 0;
     const third = await builder.scan({ exclude: [] });
 
-    assert.deepStrictEqual(opened, ['/workspace/src/styles.css']);
+    /* [318A-7V3] El CSS inválidado se reabre en ambos recorridos: el de
+     * definiciones y el de consumo (los CSS son consumidores desde 318A-7V3),
+     * por lo que aparece dos veces. */
+    assert.deepStrictEqual(opened, ['/workspace/src/styles.css', '/workspace/src/styles.css']);
     assert.strictEqual(third.totalClasesHuerfanas, 1);
     assert.strictEqual(third.clasesHuerfanas[0].nombre, 'newClass');
   });
@@ -246,7 +253,13 @@ suite('VarSense editor-agnostic core contracts', () => {
     builder.clearCache();
     await builder.scan({ exclude: [] });
 
-    assert.deepStrictEqual(opened.sort(), ['/workspace/src/styles.css', '/workspace/src/view.ts']);
+    /* [318A-7V3] Ídem: con clearCache el CSS se reabre en ambos recorridos
+     * (definiciones + consumo), por eso aparece dos veces en la lista. */
+    assert.deepStrictEqual(opened.sort(), [
+      '/workspace/src/styles.css',
+      '/workspace/src/styles.css',
+      '/workspace/src/view.ts',
+    ]);
   });
 
   test('delegates file cache invalidation and clear', () => {
@@ -435,6 +448,106 @@ suite('VarSense editor-agnostic core contracts', () => {
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'dashboardContenedor--muerto');
+  });
+
+  /* [318A-7V3] Ternario asignado a variable y consumido por interpolación de
+   * template: `className={\`base ${claseTipo} ...\`}`. addClassTokens borra
+   * la interpolación; los identificadores puros deben resolverse contra el
+   * mapa de declaraciones igual que en className={ident}. Patrón real:
+   * VistaResizeHandle.tsx de PT. */
+  test('interpolacion de template con identificador resuelve por indirección', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.panelResize--derecha { color: red; }',
+          '.panelResize--abajo { color: red; }',
+          '.panelResize--arrastrando { color: red; }',
+          '.panelResize--muerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          "const claseTipo = tipo === 'derecha' ? 'panelResize--derecha' : 'panelResize--abajo';",
+          'const vista = (',
+          '  <div',
+          '    className={`panelResize ${claseTipo} ${arrastrando ? \'panelResize--arrastrando\' : \'\'}`}',
+          '  />',
+          ');',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelResize--muerto');
+  });
+
+  /* [318A-7V3] Array de clases con ternarios, join() y className={ident}:
+   * patrón real de VistaCelda.tsx en PT. */
+  test('array de clases con join() y ternarios resuelve por indirección', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.panelCelda { color: red; }',
+          '.panelCelda--eligiendo { color: red; }',
+          '.panelCelda--origenMover { color: red; }',
+          '.panelCelda--muerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'const clases = [',
+          "  'panelCelda'",
+          "  , estaEligiendo ? 'panelCelda--eligiendo' : ''",
+          "  , estaOrigenMover ? 'panelCelda--origenMover' : ''",
+          '].filter(Boolean).join(\' \');',
+          'const vista = <div className={clases} />;',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelCelda--muerto');
+  });
+
+  /* [318A-7V3] Objetos que devuelven la prop portadora en forma de clave:
+   * return { clase: 'badgePremium' } — el consumidor concatena el valor al
+   * className. Patrón real: FilaUsuario/ResumenAdmin/EncabezadoEstado de PT. */
+  test('clave objeto clase/*clase registra su valor como clase usada', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.badgePremium { color: gold; }',
+          '.estadoActiva { color: green; }',
+          '.tarjetaTotal { color: blue; }',
+          '.badgeMuerto { color: gray; }',
+        ].join('\n'),
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'const badgeUsuario = () => ({ clase: \'badgePremium\', texto: \'PREMIUM\' });',
+          'const estadoUsuario = () => ({ clase: \'estadoActiva\', texto: \'Activa\' });',
+          'const tarjetas = [{ clase: \'tarjetaTotal\', valor: 4 }];',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'badgeMuerto');
   });
 
   /* [318A-7V2] Ternario encadenado asignado a variable y consumido por prop
