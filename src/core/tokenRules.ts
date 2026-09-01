@@ -48,17 +48,33 @@ export function analyzeTokenRules(
 
     const findings: CoreFinding[] = [];
     if (config.tokens.duplicate.habilitado) {
-        const byValue = new Map<string, IndexedVariable[]>();
+        /* [318A-7V8] Un duplicado real repite el valor dentro del MISMO archivo
+         * (mismo dominio semántico del design system, p.ej. dos tokens del
+         * :root de variables.css). La coincidencia de valor entre archivos
+         * distintos (p.ej. `--ptr-translateY` [offset runtime de
+         * pull-to-refresh, = '0'] vs `--dashboard-radioMinimo` [radio, = '0'])
+         * es una coincidencia entre dominios independientes: colapsarla
+         * acoplaría archivos y semánticas ajenas. La clave agrupa por
+         * archivo+valor para que canonical y duplicados vivan en el mismo
+         * archivo; sin esto se perdían los pares intra-archivo cuando el
+         * canonical caía en otro archivo. Auditoría FN en PT (186→181):
+         * 5 hallazgos eliminados, todos cross-file verificados a mano
+         * (--space-xs/--scrollbarAncho, --space-sm/--espacioTactil,
+         * --arbol-color/--pixel-editor-iconoActivo,
+         * --panelHeaderBorde/--pixel-editor-iconoBorde,
+         * --radioMinimo/--ptr-translateY), 0 pares reales perdidos. */
+        const byFileValue = new Map<string, IndexedVariable[]>();
         for (const entry of variables) {
             const key = normalizedValue(entry.variable.valor);
             if (!key) {
                 continue;
             }
-            const group = byValue.get(key) ?? [];
+            const groupKey = `${entry.file}\u0000${key}`;
+            const group = byFileValue.get(groupKey) ?? [];
             group.push(entry);
-            byValue.set(key, group);
+            byFileValue.set(groupKey, group);
         }
-        for (const group of byValue.values()) {
+        for (const group of byFileValue.values()) {
             const names = new Set(group.map(entry => entry.variable.nombre));
             if (group.length < 2 || names.size < 2) {
                 continue;

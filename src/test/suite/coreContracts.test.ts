@@ -4,6 +4,7 @@ import { findingToDiagnostic } from '../../core/vscodeAdapter';
 import { parsearDocumento } from '../../parsers/cssParser';
 import { analyzeVarsenseDocument } from '../../core/analyzeDocument';
 import { buildAnalysisConfig } from '../../core/config';
+import { analyzeTokenRules } from '../../core/tokenRules';
 import { VariableIndexBuilder } from '../../core/variableIndexBuilder';
 import { ClassIndexBuilder } from '../../core/classIndexBuilder';
 import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../core/workspaceProviders';
@@ -663,5 +664,85 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(hallazgos.length, 1);
     assert.strictEqual(hallazgos[0].ruleId, 'cssInlineReact');
     assert.strictEqual(hallazgos[0].range.start.line, 3);
+  });
+
+  /* [318A-7V8] token-duplicate: un duplicado real repite el valor dentro del
+   * MISMO archivo (mismo dominio semantico del design system). La
+   * coincidencia de valor entre archivos distintos (p.ej. un offset runtime
+   * de pull-to-refresh = '0' vs un radio de dashboard = '0') es una
+   * coincidencia entre dominios independientes y NO debe reportarse.
+   * Caso real de PT: --ptr-translateY (pullToRefresh.css) marcado como
+   * duplicado de --dashboard-radioMinimo (variables.css). */
+  test('token-duplicate no cruza archivos: coincidencia de valor entre dominios distintos', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/variables.css': {
+        languageId: 'css',
+        content: ':root { --dashboard-radioMinimo: 0; }',
+      },
+      '/workspace/src/pullToRefresh.css': {
+        languageId: 'css',
+        content: ':root { --ptr-translateY: 0; }',
+      },
+    });
+    const builder = new VariableIndexBuilder(provider, provider);
+
+    const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
+    const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
+      file,
+      document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
+    }));
+    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
+    const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
+
+    assert.strictEqual(duplicados.length, 0);
+  });
+
+  test('token-duplicate detecta duplicados reales dentro del mismo archivo', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/variables.css': {
+        languageId: 'css',
+        content: ':root { --dashboard-fondoPrincipal: #000000; --dashboard-fondoSecundario: #000000; }',
+      },
+    });
+    const builder = new VariableIndexBuilder(provider, provider);
+
+    const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
+    const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
+      file,
+      document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
+    }));
+    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
+    const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
+
+    assert.strictEqual(duplicados.length, 1);
+    assert.ok(String(duplicados[0].message).includes('--dashboard-fondoSecundario'));
+  });
+
+  /* [318A-7V8] Auditoría FN: si el canonical de un valor cae en otro archivo
+   * y el par real esta en un tercer archivo, el par intra-archivo NO debe
+   * perderse (el agrupado por archivo+valor garantiza canonical por archivo). */
+  test('token-duplicate conserva pares intra-archivo aunque otro archivo tenga el mismo valor', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/a.css': {
+        languageId: 'css',
+        content: ':root { --valorA: #fff; }',
+      },
+      '/workspace/src/b.css': {
+        languageId: 'css',
+        content: ':root { --valorB1: #fff; --valorB2: #fff; }',
+      },
+    });
+    const builder = new VariableIndexBuilder(provider, provider);
+
+    const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
+    const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
+      file,
+      document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
+    }));
+    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
+    const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
+
+    assert.strictEqual(duplicados.length, 1);
+    assert.ok(String(duplicados[0].message).includes('--valorB2'));
   });
 });
