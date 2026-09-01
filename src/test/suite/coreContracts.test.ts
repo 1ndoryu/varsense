@@ -364,4 +364,105 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'stillOrphan');
   });
+
+  /* [318A-7V2] Props *clase del design system (claseAdicional, claseExtra,
+   * claseContenido, claseOverlay, claseContenedor) son portadoras de clase:
+   * los tres formularios de valor (attr string, template, expr JSX) deben
+   * registrar sus tokens igual que className. */
+  test('reconoce props *clase (claseAdicional/claseExtra) en attr, template y expr', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.panelExtra { color: red; }',
+          '.panelContenido { color: red; }',
+          '.panelCondicional { color: red; }',
+          '.panelDirecto { color: red; }',
+          '.panelMuerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          "const Contenido = ({estaActivo}: {estaActivo: boolean}) => (",
+          "  <div>",
+          "    <div claseExtra='panelExtra'>x</div>",
+          "    <div claseContenido={`panelContenido ${estaActivo ? 'panelCondicional' : ''}`}>y</div>",
+          "    <div claseAdicional={estaActivo ? 'panelDirecto' : ''}>z</div>",
+          "  </div>",
+          ");",
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelMuerto');
+  });
+
+  /* [318A-7V2] Templates largos (>240 chars) en declaraciones de variables:
+   * el cap anterior truncaba el valor y perdía las clases del final. */
+  test('declaraciones con template largo (>240 chars) resuelven por indirección', async () => {
+    const contenidoLargo = [
+      'const clasesContenedor = `',
+      'dashboardContenedor ${esMovil && auth.user ? \'dashboardContenedor--conNavegacionInferior\' : \'\'} ', 
+      '${tipoLayout === \'sidebar\' && !esMovil ? \'dashboardContenedor--sidebar\' : \'\'} ', 
+      '${tipoLayout === \'vistas\' && !esMovil ? \'dashboardContenedor--vistas\' : \'\'}`;',
+      'const vista = <div className={clasesContenedor} />;',
+    ].join('\n');
+    assert.ok(contenidoLargo.length > 240, 'fixture debe superar el cap anterior');
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.dashboardContenedor { color: red; }',
+          '.dashboardContenedor--conNavegacionInferior { color: red; }',
+          '.dashboardContenedor--sidebar { color: red; }',
+          '.dashboardContenedor--vistas { color: red; }',
+          '.dashboardContenedor--muerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: contenidoLargo,
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'dashboardContenedor--muerto');
+  });
+
+  /* [318A-7V2] Ternario encadenado asignado a variable y consumido por prop
+   * *clase: resolución por indirección + prop portadora. */
+  test('ternario encadenado via claseAdicional={ident} resuelve por indirección', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.panelExpVida--alta { color: green; }',
+          '.panelExpVida--media { color: orange; }',
+          '.panelExpVida--baja { color: red; }',
+          '.panelExpVida--muerta { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'const vidaClase = vida >= 60 ? \'panelExpVida--alta\' : vida >= 30 ? \'panelExpVida--media\' : \'panelExpVida--baja\';',
+          'const vista = <Panel claseAdicional={vidaClase} />;',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelExpVida--muerta');
+  });
 });

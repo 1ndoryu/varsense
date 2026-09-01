@@ -37,12 +37,22 @@ const DEFAULT_CONSUMER_PATTERNS = [
     '**/*.php', '**/*.html'
 ];
 const DEFAULT_MIN_LENGTH = 3;
-const REGEX_CLASS_ATTR = /(?:className|class)\s*=\s*["']([^"']+)["']/g;
-const REGEX_CLASS_TEMPLATE = /(?:className|class)\s*=\s*\{[`]([^`]+)[`]\}/g;
+/* [318A-7V2] Props que portan clases en los design systems del área:
+ * className/class más cualquier prop con nombre clase/Clase al inicio
+ * (claseAdicional, claseExtra, claseContenido, claseOverlay, claseContenedor,
+ * clase). Verificado repo-wide: en todos los consumidores estas props se
+ * concatenan al className del componente; ninguna prop *clase es dato.
+ * El patrón se reutiliza en attr/template/jsx-expr para que los tres
+ * formularios de valor cubran las mismas props. */
+/* Los tres patrones comparten la alternancia de props portadoras:
+ * className/class y cualquier prop cuyo nombre empiece por clase/Clase. */
+const REGEX_CLASS_ATTR = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*["']([^"']+)["']/g;
+const REGEX_CLASS_TEMPLATE = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*\{[`]([^`]+)[`]\}/g;
 /* [J-8] JSX/TSX className={expr} con ternarios y literales: cubre
  * className={cond ? 'a' : 'b'} y className={'a b'}. Los identificadores
- * puros se resuelven por indirección de variables (ver recopilarDeclaraciones). */
-const REGEX_CLASS_JSX_EXPR = /(?:className|class)\s*=\s*\{([^{}]*)\}/g;
+ * puros se resuelven por indirección de variables (ver recopilarDeclaraciones).
+ * [318A-7V2] Ídem para props *clase (claseAdicional={cond ? 'a' : 'b'}). */
+const REGEX_CLASS_JSX_EXPR = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*\{([^{}]*)\}/g;
 /* Vanilla TS/DOM factories commonly pass classes as object attributes:
  * createEl('div', { className: 'panel panel--active' }). Keep this parser
  * framework-agnostic while covering the project's createEl contract. */
@@ -55,11 +65,14 @@ const REGEX_CREATE_ELEMENT_CLASS = /createElement\s*\(\s*['"][^'"]+['"]\s*,\s*([
 /* [J-8] classList.add/toggle/remove: toggle('clase', cond) y remove('clase')
  * son usos reales igual que add. */
 const REGEX_CLASS_LIST = /classList\.(?:add|toggle|remove)\s*\(([^)]*)\)/g;
-const REGEX_CLASS_DECLARATION = /\b(?:const|let|var)\s+(?:className|contentClass)\s*=\s*([\s\S]{0,240}?);/g;
+/* [318A-7V2] Cap 240 → 1000: templates largos (DashboardIsland.tsx:300, ~270
+ * chars) y ternarios encadenados se truncaban y perdían las clases del final.
+ * El tope de tokens del scan (MAX_TOKENS) sigue acotando la memoria total. */
+const REGEX_CLASS_DECLARATION = /\b(?:const|let|var)\s+(?:className|contentClass)\s*=\s*([\s\S]{0,1000}?);/g;
 /* [J-8] Cualquier declaración de variable cuyo valor sea un literal de clase
  * (string, template, ternario, array/objeto de literales). Permite resolver
  * className={ident} y classList.add(ident) por indirección. */
-const REGEX_VAR_CLASS_DECLARATION = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]{0,240}?);/g;
+const REGEX_VAR_CLASS_DECLARATION = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]{0,1000}?);/g;
 const REGEX_STRING_LITERAL = /['"`]([^'"`$]+)['"`]/g;
 /* [J-8] El cap evita que un workspace enorme agote memoria, pero 10000 deja
  * sin escanear archivos posteriores (MapaV2.tsx etc.) en proyectos medianos.
