@@ -73,8 +73,19 @@ const REGEX_CLASS_JSX_EXPR = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*\{([^{}]*
  * [318A-7V3] Misma familia de props portadoras que las atribuciones
  * (verificada repo-wide): { clase: 'badgePremium' }, { claseAdicional: x } —
  * el consumidor concatena el valor al className (FilaUsuario/ResumenAdmin
- * de PT). Las props de datos (estado, tipo, texto) no casan con el patrón. */
-const REGEX_CLASS_OBJECT = /(?:['"]?(?:className|class|[Cc]lase[\w$]*)['"]?)\s*:\s*(?:['"]([^'"]+)['"]|[`]([^`]+)[`])/g;
+ * de PT). Las props de datos (estado, tipo, texto) no casan con el patrón.
+ * [318A-7V21] La alternancia admite también claves camelCase que TERMINAN
+ * en Class/clase (imageClass, iconClass): el nombre es la convención del
+ * carrier (AGAPE AgapeLanding.tsx:20/27/34 imageClass: 'activity-image-*'
+ * interpolado en className={`activity-image ${item.imageClass}`}). Solo
+ * casan claves finales: classification/classList no terminan en Class y
+ * quedan fuera por diseño (son dato/método, no carrier). */
+const REGEX_CLASS_OBJECT = /(?:['"]?(?:className|class|[Cc]lase[\w$]*|[\w$]*[Cc]lass)['"]?)\s*:\s*(?:['"]([^'"]+)['"]|[`]([^`]+)[`])/g;
+/* [318A-7V21] RC-4: propiedad objeto con VALOR VARIABLE (`className:
+ * clases.join(' ')` en notifications-popover.ts:83). La vía literal de arriba
+ * no casa; aquí se captura el identificador (con su `.join(...)` opcional) y
+ * se resuelve por indirección contra el mapa de declaraciones + pushs. */
+const REGEX_CLASS_OBJECT_VAR = /(?:['"]?(?:className|class|[Cc]lase[\w$]*|[\w$]*[Cc]lass)['"]?)\s*:\s*([A-Za-z_$][\w$]*)(?:\s*\.\s*join\s*\([^)]*\))?\s*(?=[,}])/g;
 const REGEX_CLASS_FACTORY = /createContainer\s*\(\s*['"]([^'"]+)['"]/g;
 const REGEX_EXTERNAL_LINK_CLASS = /createExternalLink\s*\([^,]+,[^,]+,\s*['"]([^'"]+)['"]/g;
 /* [J-8] createElement(tag, 'clase') posicional: Glory-Laminal pasa la clase
@@ -224,6 +235,12 @@ export function extraerClasesDeTexto(texto: string, rutaArchivo: string): ClaseC
             continue;
         }
 
+        /* [318A-7V21] `url('/logo-agape.png')` no es un selector: el `.png`
+         * del nombre de archivo casaba con regexClase y producía la clase
+         * fantasma 'png' (AgapeLanding.css:43-44 en AGAPE). Se neutraliza
+         * el segmento url(...) (con o sin comillas) antes del escaneo. */
+        const lineaEscaneable = linea.replace(/url\(\s*(['"])(?:(?!\1).)*\1\s*\)|url\(\s*[^)'"]+\s*\)/gi, ' ');
+
         const esPropiedad = /^\s*[\w-]+\s*:(?!:)/.test(linea) && !linea.includes('{');
         if (esPropiedad) {
             continue;
@@ -234,7 +251,7 @@ export function extraerClasesDeTexto(texto: string, rutaArchivo: string): ClaseC
         }
 
         let match: RegExpExecArray | null;
-        while ((match = regexClase.exec(linea)) !== null) {
+        while ((match = regexClase.exec(lineaEscaneable)) !== null) {
             clases.push({
                 nombre: match[1],
                 archivo: rutaArchivo,
@@ -588,6 +605,18 @@ function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): M
             addQuotedClassTokens(compuesto.valor, conjunto, familyPrefixes);
         }
     }
+    /* [318A-7V21] RC-4: los push sobre carriers fusionan sus literales al set
+     * de la variable (misma vía que la asignación compuesta), para que la
+     * indirección className={clases} / className: clases.join(' ') los vea. */
+    for (const push of escanearPushs(source)) {
+        if (!isCodeMatch(source, push.indice)) {
+            continue;
+        }
+        const conjunto = variables.get(push.nombre);
+        if (conjunto) {
+            addQuotedClassTokens(push.valor, conjunto, familyPrefixes);
+        }
+    }
     return variables;
 }
 
@@ -639,6 +668,56 @@ function escanearAsignacionesCompuestas(source: string): Array<{ nombre: string;
             continue;
         }
         resultados.push({ nombre, valor: source.slice(desde, fin), indice });
+    }
+    return resultados;
+}
+
+/* [318A-7V21] RC-4: `clases.push('literal')` sobre un array ya portador
+ * (WANDORIUS notifications-popover.ts:80-82: `const clases = ['...__item'];
+ * ...; clases.push('...--leida')`). Hermano directo de la asignación compuesta
+ * RC-1 (V20): el literal empujado compone el set de clases del runtime y jamás
+ * llegaba al índice. Solo cuenta push sobre identificadores ya declarados como
+ * portadores (ver recopilarDeclaraciones); un `x.push` cualquiera no aporta. */
+function escanearPushs(source: string): Array<{ nombre: string; valor: string; indice: number }> {
+    const REGEX_PUSH = /\b([A-Za-z_$][\w$]*)\s*\.push\s*\(/g;
+    const resultados: Array<{ nombre: string; valor: string; indice: number }> = [];
+    let match: RegExpExecArray | null;
+    while ((match = REGEX_PUSH.exec(source)) !== null) {
+        const indice = match.index;
+        if (!isCodeMatch(source, indice)) {
+            continue;
+        }
+        const { profundidad: inicial } = estadoScanning(source, indice);
+        const desde = REGEX_PUSH.lastIndex;
+        let quote = '';
+        let escaped = false;
+        let profundidad = inicial;
+        let fin = -1;
+        for (let cursor = desde; cursor < source.length; cursor++) {
+            const current = source[cursor];
+            if (quote) {
+                if (escaped) {escaped = false;}
+                else if (current === '\\') {escaped = true;}
+                else if (current === quote) {quote = '';}
+                continue;
+            }
+            if (current === '"' || current === "'" || current === '`') {quote = current; continue;}
+            if (current === '(' || current === '[' || current === '{') {profundidad++; continue;}
+            if (current === ')') {
+                profundidad--;
+                /* El '(' del push queda FUERA del rango (desde = tras él), así
+                 * que su cierre baja de 0 a -1; los paréntesis anidados vuelven
+                 * a su nivel sin cruzarlo. Cortar solo por debajo del inicial
+                 * evita tronchar `push(fn('x'))` en el ')' interno. */
+                if (profundidad < inicial) {fin = cursor; break;}
+                continue;
+            }
+            if (current === ']' || current === '}') {profundidad--; continue;}
+        }
+        if (fin === -1) {
+            continue;
+        }
+        resultados.push({ nombre: match[1], valor: source.slice(desde, fin), indice });
     }
     return resultados;
 }
@@ -866,6 +945,17 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         addClassTokens(match[1] ?? match[2] ?? '', tokens, familyPrefixes, true);
     }
 
+    /* [318A-7V21] RC-4: `className: clases.join(' ')` (vanilla DOM factory)
+     * resuelve el identificador por indirección; los push del carrier ya
+     * quedaron fusionados al set en recopilarDeclaraciones. */
+    REGEX_CLASS_OBJECT_VAR.lastIndex = 0;
+    while ((match = REGEX_CLASS_OBJECT_VAR.exec(source)) !== null) {
+        if (!isCodeMatch(source, match.index)) {continue;}
+        const previous = previousCodeCharacter(source, match.index);
+        if (previous !== '{' && previous !== ',') {continue;}
+        resolverExpresionClase(match[1], variables, tokens, familyPrefixes);
+    }
+
     REGEX_CLASS_FACTORY.lastIndex = 0;
     while ((match = REGEX_CLASS_FACTORY.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
@@ -919,6 +1009,17 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
             continue;
         }
         addQuotedClassTokens(compuesto.valor, tokens, familyPrefixes);
+    }
+    /* [318A-7V21] RC-4: `clases.push('...')` sobre un carrier emite directo
+     * al archivo (misma regla que los compuestos); el set para indirección ya
+     * se fusionó en recopilarDeclaraciones. */
+    for (const push of escanearPushs(source)) {
+        const esCarrierPush = /^[Cc]lase/.test(push.nombre)
+            || push.nombre === 'className' || push.nombre === 'contentClass';
+        if (!esCarrierPush || !isCodeMatch(source, push.indice)) {
+            continue;
+        }
+        addQuotedClassTokens(push.valor, tokens, familyPrefixes);
     }
 }
 

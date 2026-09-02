@@ -800,11 +800,36 @@ suite('VarSense editor-agnostic core contracts', () => {
     }
   });
 
-  /* [318A-7V3] Ternario asignado a variable y consumido por interpolación de
-   * template: `className={\`base ${claseTipo} ...\`}`. addClassTokens borra
-   * la interpolación; los identificadores puros deben resolverse contra el
-   * mapa de declaraciones igual que en className={ident}. Patrón real:
-   * VistaResizeHandle.tsx de PT. */
+  /* [318A-7V21] Un consumidor puede tener el submódulo clonado COMPLETO
+   * (glory-rs en AGAPE: `.git` es DIRECTORIO, no archivo). El filtro V17
+   * solo cubría la forma archivo y los hallazgos del submódulo se atribuían
+   * al consumidor (12 claseHuerfana de AGAPE vivían en glory-rs/tools).
+   * Ambas formas de `.git` marcan un repo anidado y se excluyen. */
+  test('walker excluye repos anidados con .git directorio (clon completo)', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'varsense-repoanidado-'));
+    try {
+      const escribir = (relativa: string, contenido: string): void => {
+        const completo = path.join(root, relativa);
+        fs.mkdirSync(path.dirname(completo), { recursive: true });
+        fs.writeFileSync(completo, contenido);
+      };
+      escribir('src/estilos.css', '.huerfanaRaiz { color: red; }');
+      escribir('glory-rs/frontend/otro.css', '.huerfanaSubmodulo { color: blue; }');
+      escribir('tools/varsense/core/x.css', '.huerfanaHerramienta { color: green; }');
+      /* Clon completo: .git es directorio real (con internals). */
+      escribir('glory-rs/.git/HEAD', 'ref: refs/heads/main\n');
+      escribir('glory-rs/.git/config', '[core]\n\trepositoryformatversion = 0\n');
+      escribir('tools/varsense/.git/HEAD', 'ref: refs/heads/main\n');
+
+      const provider = new NodeWorkspaceFileProvider(root);
+      const archivos = await provider.findFiles(['**/*.css'], []);
+      const rutas = archivos.map(archivo => path.relative(root, archivo.fsPath).replace(/\\/g, '/')).sort();
+
+      assert.deepStrictEqual(rutas, ['src/estilos.css']);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
   test('interpolacion de template con identificador resuelve por indirección', async () => {
     const provider = new MemoryWorkspaceProvider({
       '/workspace/src/styles.css': {
@@ -1267,5 +1292,110 @@ suite('VarSense editor-agnostic core contracts', () => {
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'etiquetaMuerta');
+  });
+
+  /* [318A-7V21] RC-url: el nombre de archivo dentro de `url(...)` no es un
+   * selector. `url('/logo-agape.png')` casaba con regexClase y producía la
+   * clase fantasma 'png' (AgapeLanding.css:43-44 en AGAPE): el `.png` del
+   * nombre se reportaba huérfana pese a ser solo un asset de imagen. */
+  test('url() assets no generan clases fantasma desde el nombre de archivo', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          ".fotoPrincipal { background-image: url('/logo-agape.png'); color: red; }",
+          ".fotoSecundaria { background: url(\"img/x.png\") no-repeat center; color: blue; }",
+          '.tarjetaViva { color: green; }',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const nombres = result.clasesHuerfanas.map(clase => clase.nombre);
+
+    assert.ok(!nombres.includes('png'), 'png no debe existir como clase');
+    assert.ok(nombres.includes('fotoPrincipal'));
+    assert.ok(nombres.includes('fotoSecundaria'));
+    assert.ok(nombres.includes('tarjetaViva'));
+  });
+
+  /* [318A-7V21] RC-clave: la regla de props *clase en objetos solo casaba
+   * claves clase/clase-prefijo; un carrier camelCase terminado en Class
+   * (imageClass) quedaba fuera y sus literales se reportaban huérfanos pese
+   * a interpolarse en className (AGAPE AgapeLanding.tsx:20/27/34 + :125).
+   * Las claves finales en Class son carriers por convención de nombre;
+   * classification/classList no casan (no terminan en Class). */
+  test('object keys ending in Class are class carriers (imageClass)', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.activity-image { color: red; }',
+          '.activity-image-community { color: red; }',
+          '.activity-image-support { color: red; }',
+          '.activity-image-allies { color: red; }',
+          '.activity-image-muerta { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/vista.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'const actividades = [',
+          "  { imageClass: 'activity-image-community' },",
+          "  { imageClass: 'activity-image-support' },",
+          "  { imageClass: 'activity-image-allies' },",
+          '];',
+          'export function Lista() {',
+          '  return actividades.map(a => (',
+          '    <div className={`activity-image ${a.imageClass}`}>x</div>',
+          '  ));',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'activity-image-muerta');
+  });
+
+  /* [318A-7V21] RC-4: `clases.push('...')` sobre un array portador + consumo
+   * por propiedad objeto `className: clases.join(' ')` (WANDORIUS
+   * notifications-popover.ts:80-83). El literal del push jamás llegaba al
+   * índice y la vía objeto con VARIABLE no resolvía indirección; ambos
+   * quedaban huérfanos pese al uso real. */
+  test('array push on a class carrier + object className variable resolve both paths', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.notificacionesPopover__item { color: red; }',
+          '.notificacionesPopover__item--leida { color: gray; }',
+          '.notificacionesPopover__item--noLeida { color: gold; }',
+          '.notificacionesPopover__item--muerta { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/popover.ts': {
+        languageId: 'typescript',
+        content: [
+          "import { createEl } from './dom';",
+          'export function renderItem(item: any) {',
+          "  const clases = ['notificacionesPopover__item'];",
+          "  if (item.read) clases.push('notificacionesPopover__item--leida');",
+          "  else clases.push('notificacionesPopover__item--noLeida');",
+          '  return createEl(\'div\', { className: clases.join(\' \') }, item.title);',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'notificacionesPopover__item--muerta');
   });
 });
