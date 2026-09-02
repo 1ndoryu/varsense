@@ -1092,4 +1092,180 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(duplicados.length, 1);
     assert.ok(String(duplicados[0].message).includes('--valorB2'));
   });
+
+  /* [318A-7V20] RC-1: asignaciones compuestas sobre un carrier de clase
+   * (`clase += ' selectorFechaCalendario__dia--hoy'`, SelectorFechaCalendario
+   * .tsx:75-76). escanearDeclaraciones solo lee `x =`; los literales añadidos
+   * con `+=` jamás llegaban al índice y sus selectores se reportaban
+   * huérfanos pese al uso real en className={clase}. */
+  test('compound assignment on a class carrier appends its literals to the index', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.selectorFechaCalendario__dia { color: red; }',
+          '.selectorFechaCalendario__dia--hoy { color: gold; }',
+          '.selectorFechaCalendario__dia--otroMes { color: gray; }',
+          '.selectorFechaCalendario__dia--muerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'export function Vista({ celdas }: any) {',
+          '  return celdas.map((celda: any) => {',
+          '    const esHoy = celda.fecha === hoy;',
+          "    let clase = 'selectorFechaCalendario__dia';",
+          "    if (celda.esOtroMes) clase += ' selectorFechaCalendario__dia--otroMes';",
+          "    if (esHoy) clase += ' selectorFechaCalendario__dia--hoy';",
+          '    return <Boton claseAdicional={clase}>{celda.dia}</Boton>;',
+          '  });',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'selectorFechaCalendario__dia--muerto');
+  });
+
+  /* [318A-7V20] RC-2: carriers nombrados *clase declarados en un archivo cuyo
+   * valor consume otro archivo (hook → componente): usePullToRefresh.ts:110
+   * declara `const clasesContenedor = ...`.trim() y el className vive en
+   * PullToRefresh.tsx. Sin la expansión de carriers el archivo del hook jamás
+   * emitía sus tokens; ahora toda declaración *clase emite al índice. */
+  test('clase*-named carrier declarations emit tokens even when consumed cross-file', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.pullToRefresh { color: red; }',
+          '.pullToRefresh--refrescando { color: red; }',
+          '.pullToRefresh--arrastrando { color: red; }',
+          '.pullToRefreshMuerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/usePullToRefresh.ts': {
+        languageId: 'typescript',
+        content: [
+          'export function usePullToRefresh() {',
+          '  const refrescando = true;',
+          '  const arrastre = 0;',
+          '  const clasesContenedor = `pullToRefresh ${refrescando ? \'pullToRefresh--refrescando\' : \'\'} ${arrastre > 0 ? \'pullToRefresh--arrastrando\' : \'\'}`.trim();',
+          '  return { clasesContenedor };',
+          '}',
+        ].join('\n'),
+      },
+      '/workspace/src/PullToRefresh.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          "import { usePullToRefresh } from './usePullToRefresh';",
+          'export function PullToRefresh() {',
+          '  const { clasesContenedor } = usePullToRefresh();',
+          '  return <div className={clasesContenedor} />;',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'pullToRefreshMuerto');
+  });
+
+  /* [318A-7V20] RC-3 (arrow con anotación de retorno): mapper del MISMO
+   * archivo llamado dentro de un atributo de clase
+   * (`claseAdicional={obtenerClase()}`, IndicadorPlan.tsx:54 con
+   * `const obtenerClase = (): string => {` en :23). Sus literales de return
+   * son las clases reales que el runtime aplica; sin la resolución se
+   * reportaban huérfanas indicadorPlan--trial/premium/free. */
+  test('same-file arrow mapper with return type resolves its class literals', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.indicadorPlan { color: red; }',
+          '.indicadorPlan--trial { color: red; }',
+          '.indicadorPlan--premium { color: red; }',
+          '.indicadorPlan--free { color: red; }',
+          '.indicadorPlanMuerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/IndicadorPlan.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'export function IndicadorPlan({ suscripcion }: any) {',
+          '  const { plan, estado } = suscripcion;',
+          '  const obtenerClase = (): string => {',
+          "    if (plan === 'premium') {",
+          "      if (estado === 'trial') {",
+          "        return 'indicadorPlan indicadorPlan--trial';",
+          '      }',
+          "      return 'indicadorPlan indicadorPlan--premium';",
+          '    }',
+          "    return 'indicadorPlan indicadorPlan--free';",
+          '  };',
+          '  return <Boton claseAdicional={obtenerClase()}>plan</Boton>;',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'indicadorPlanMuerto');
+  });
+
+  /* [318A-7V20] RC-3 (function declarada con anotación de retorno): mapper
+   * llamado dentro de un template de clase
+   * (className={`etiquetaPrioridad ${obtenerClasePrioridad(p)}`},
+   * ListaProyectos.tsx:163 con `function obtenerClasePrioridad(prioridad:
+   * string): string` en :24). El switch de returns alimenta el índice. */
+  test('same-file function mapper inside a class template resolves its return literals', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.etiquetaPrioridad { color: red; }',
+          '.etiquetaMuyAlta { color: red; }',
+          '.etiquetaAlta { color: red; }',
+          '.etiquetaMedia { color: red; }',
+          '.etiquetaBaja { color: red; }',
+          '.etiquetaMuerta { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/ListaProyectos.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'function obtenerClasePrioridad(prioridad: string): string {',
+          '  switch (prioridad) {',
+          "    case 'muy_alta': return 'etiquetaMuyAlta';",
+          "    case 'alta': return 'etiquetaAlta';",
+          "    case 'media': return 'etiquetaMedia';",
+          "    case 'baja': return 'etiquetaBaja';",
+          "    default: return 'etiquetaMedia';",
+          '  }',
+          '}',
+          'export function Lista({ proyectos }: any) {',
+          '  return proyectos.map((p: any) => (',
+          '    <span className={`etiquetaPrioridad ${obtenerClasePrioridad(p.prioridad)}`}>x</span>',
+          '  ));',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'etiquetaMuerta');
+  });
 });

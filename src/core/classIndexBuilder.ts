@@ -574,6 +574,20 @@ function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): M
             variables.set(nombre, tokensVariable);
         }
     }
+    /* [318A-7V20] RC-1: asignaciones compuestas (`clase += 'x'`) componen el
+     * set de una variable ya declarada como portadora (SelectorFechaCalendario
+     * .tsx:75: clase += ' ...--hoy'). escanearDeclaraciones solo lee `x =`,
+     * así que el literal añadido jamás llegaba al índice; aquí se fusiona al
+     * set para la vía de indirección className={clase}. */
+    for (const compuesto of escanearAsignacionesCompuestas(source)) {
+        if (!isCodeMatch(source, compuesto.indice)) {
+            continue;
+        }
+        const conjunto = variables.get(compuesto.nombre);
+        if (conjunto) {
+            addQuotedClassTokens(compuesto.valor, conjunto, familyPrefixes);
+        }
+    }
     return variables;
 }
 
@@ -583,6 +597,126 @@ function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): M
  * amplio hacía que el valor completo de un closure (React.forwardRef con
  * `resto?.claseExt`) se clasificara como ternario, extrayendo sus literales
  * y registrando familias falsas. */
+/* [318A-7V20] RC-1: `clase += 'selectorFechaCalendario__dia--hoy'` — el
+ * acumulador compone clases sobre una variable ya portadora. escanearDeclaraciones
+ * solo lee `x =`; este barrido captura `x +=` con el mismo escaneo acotado. */
+function escanearAsignacionesCompuestas(source: string): Array<{ nombre: string; valor: string; indice: number }> {
+    const REGEX_COMPUESTO = /\b([A-Za-z_$][\w$]*)\s*\+=\s*/g;
+    const resultados: Array<{ nombre: string; valor: string; indice: number }> = [];
+    let match: RegExpExecArray | null;
+    while ((match = REGEX_COMPUESTO.exec(source)) !== null) {
+        const nombre = match[1];
+        const indice = match.index;
+        if (!isCodeMatch(source, indice)) {
+            continue;
+        }
+        const previo = previousCodeCharacter(source, indice);
+        /* `miembro.objeto +=` o un identificador pegado no es un acumulador de
+         * sentencia; solo cuenta un nombre en posición de statement. */
+        if (previo && /[\w.$]/.test(previo)) {
+            continue;
+        }
+        const { profundidad: inicial } = estadoScanning(source, indice);
+        const desde = REGEX_COMPUESTO.lastIndex;
+        let quote = '';
+        let escaped = false;
+        let profundidad = inicial;
+        let fin = -1;
+        for (let cursor = desde; cursor < source.length; cursor++) {
+            const current = source[cursor];
+            if (quote) {
+                if (escaped) {escaped = false;}
+                else if (current === '\\') {escaped = true;}
+                else if (current === quote) {quote = '';}
+                continue;
+            }
+            if (current === '"' || current === "'" || current === '`') {quote = current; continue;}
+            if (current === '(' || current === '[' || current === '{') {profundidad++; continue;}
+            if (current === ')' || current === ']' || current === '}') {profundidad--; continue;}
+            if (current === ';' && profundidad <= inicial) {fin = cursor; break;}
+        }
+        if (fin === -1) {
+            continue;
+        }
+        resultados.push({ nombre, valor: source.slice(desde, fin), indice });
+    }
+    return resultados;
+}
+
+/* [318A-7V20] RC-3: mapper de clases del MISMO archivo llamado dentro de un
+ * atributo de clase (`claseAdicional={obtenerClase()}` en IndicadorPlan.tsx,
+ * className={`etiqueta ${obtenerClasePrioridad(p)}`} en ListaProyectos.tsx).
+ * Sus literales de return son las clases reales que el runtime aplica; sin
+ * esta resolución el extractor los reporta huérfanos. Solo se invoca desde
+ * contextos de atributo de clase (ver extraerTokensDeTexto); una llamada en
+ * una declaración (helper('x'), contrato 'unusedPanel') nunca llega aquí. */
+function cuerpoDeFuncionEn(source: string, nombre: string): string | null {
+    /* Admite anotación de retorno TS entre parámetros y cuerpo:
+     * `function f(p: string): string {`, `const f = (): string => {`
+     * (IndicadorPlan.tsx:23, ListaProyectos.tsx:24). */
+    const regex = new RegExp(
+        '(?:function\\s+' + nombre + '\\s*\\([^)]*\\)\\s*(?::\\s*[^{;]*?)?\\s*\\{|' +
+        '(?:const|let|var)\\s+' + nombre + '\\s*=\\s*(?:\\([^)]*\\)|[A-Za-z_$][\\w$]*)\\s*(?::\\s*[^{;]*?)?\\s*=>\\s*\\{)',
+        'g'
+    );
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(source)) !== null) {
+        if (!isCodeMatch(source, match.index)) {
+            continue;
+        }
+        let profundidad = 0;
+        let quote = '';
+        let escaped = false;
+        /* Recorre desde la '{' final del match hasta su cierre balanceado. */
+        for (let cursor = match.index + match[0].length - 1; cursor < source.length; cursor++) {
+            const current = source[cursor];
+            if (quote) {
+                if (escaped) {escaped = false;}
+                else if (current === '\\') {escaped = true;}
+                else if (current === quote) {quote = '';}
+                continue;
+            }
+            if (current === '"' || current === "'" || current === '`') {quote = current; continue;}
+            if (current === '{') {profundidad++;}
+            else if (current === '}') {
+                profundidad--;
+                if (profundidad === 0) {
+                    return source.slice(match.index + match[0].length, cursor);
+                }
+            }
+        }
+        return null;
+    }
+    return null;
+}
+
+function resolverLlamadaMapper(body: string, source: string, tokens: Set<string>): void {
+    const llamada = body.trim().match(/^([A-Za-z_$][\w$]*)\s*\(/);
+    if (!llamada) {
+        return;
+    }
+    const cuerpo = cuerpoDeFuncionEn(source, llamada[1]);
+    if (!cuerpo) {
+        return;
+    }
+    /* Cada `return <literal>` del mapper aporta la(s) clase(s) reales. Se
+     * avanza hasta el ';' del return para no releer returns posteriores. */
+    const reReturn = /\breturn\b/g;
+    let match: RegExpExecArray | null;
+    while ((match = reReturn.exec(cuerpo)) !== null) {
+        const resto = cuerpo.slice(reReturn.lastIndex);
+        const literales = extraerLiterales(resto);
+        if (literales.length > 0) {
+            addClassTokens(literales[0], tokens);
+        }
+        const finStatement = resto.indexOf(';');
+        if (finStatement < 0) {
+            break;
+        }
+        reReturn.lastIndex = reReturn.lastIndex + finStatement + 1;
+    }
+}
+
 function pareceTernarioDeLiterales(valor: string): boolean {
     return /\?\s*['"`]/.test(valor);
 }
@@ -706,6 +840,11 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
          * ES una cadena de clases por construcción (regla V18). */
         addTemplateClassTokens(valor, variables, tokens, familyPrefixes, true);
         resolverSwitchTemplate(valor, source, tokens);
+        /* [318A-7V20] RC-3: mapper llamado dentro del template de clase
+         * (`etiqueta ${obtenerClasePrioridad(p)}` en ListaProyectos.tsx). */
+        for (const exp of descomponerTemplate(valor).expresiones) {
+            resolverLlamadaMapper(exp, source, tokens);
+        }
     }
 
     /* [J-8] className={cond ? 'a' : 'b'} y className={'a b'}: expresiones
@@ -714,6 +853,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
     while ((match = REGEX_CLASS_JSX_EXPR.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
         resolverExpresionClase(match[1], variables, tokens, familyPrefixes);
+        resolverLlamadaMapper(match[1], source, tokens);
     }
 
     REGEX_CLASS_OBJECT.lastIndex = 0;
@@ -740,6 +880,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
     while ((match = REGEX_CREATE_ELEMENT_CLASS.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
         resolverExpresionClase(match[1], variables, tokens, familyPrefixes);
+        resolverLlamadaMapper(match[1], source, tokens);
     }
 
     REGEX_EXTERNAL_LINK_CLASS.lastIndex = 0;
@@ -754,16 +895,30 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
     while ((match = REGEX_CLASS_LIST.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index) || previousCodeCharacter(source, match.index) !== '.') {continue;}
         resolverExpresionClase(match[1], variables, tokens, familyPrefixes);
+        resolverLlamadaMapper(match[1], source, tokens);
     }
 
     for (const declaracion of escanearDeclaraciones(source)) {
-        if (declaracion.nombre !== 'className' && declaracion.nombre !== 'contentClass') {
+        const esCarrier = declaracion.nombre === 'className' || declaracion.nombre === 'contentClass'
+            || /^[Cc]lase/.test(declaracion.nombre);
+        if (!esCarrier) {
             continue;
         }
         if (!isCodeMatch(source, declaracion.indice)) {continue;}
         const previous = previousCodeCharacter(source, declaracion.indice);
         if (previous && /[\w'"`]/.test(previous)) {continue;}
         addDeclarationClassTokens(declaracion.valor, tokens, familyPrefixes);
+    }
+    /* [318A-7V20] RC-1: compuestos de carriers (*clase, className, contentClass)
+     * emiten directo al archivo; recopilarDeclaraciones ya los fusionó al set
+     * de la variable para la vía de indirección className={clase}. */
+    for (const compuesto of escanearAsignacionesCompuestas(source)) {
+        const esCarrierCompuesto = /^[Cc]lase/.test(compuesto.nombre)
+            || compuesto.nombre === 'className' || compuesto.nombre === 'contentClass';
+        if (!esCarrierCompuesto || !isCodeMatch(source, compuesto.indice)) {
+            continue;
+        }
+        addQuotedClassTokens(compuesto.valor, tokens, familyPrefixes);
     }
 }
 
