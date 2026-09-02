@@ -175,7 +175,39 @@ export function extraerClasesDeTexto(texto: string, rutaArchivo: string): ClaseC
     return clases;
 }
 
-function addClassTokens(value: string, tokens: Set<string>): void {
+/* [318A-7V14] Prefijo de familia de template literal. Un token estático
+ * PEGADO a una interpolación (`badgeInfo--${variante}`, `selectorNivelBoton${sufijo}`,
+ * `boton--${variante}`) marca como EN-USO toda la familia de clases cuyo
+ * nombre empiece por ese prefijo: el sufijo se emite en runtime desde una
+ * unión/mapa que indexar literalmente exigiría resolver tipos (verificado
+ * en VAR-4: BadgeInfo.tsx, SelectorNivel.tsx, Boton.tsx). Solo cuenta el
+ * token pegado (sin espacio previo): una interpolación separada por espacio
+ * (`estadoViabilidad ${viabilidad.estado}`) aporta la clase COMPLETA, no una
+ * familia — esa vía ya la resuelven las variables/switch. Nunca marca clases
+ * fuera de la familia ni exime el reporte de un token exacto.*/
+function registrarPrefijosFamilia(value: string, familyPrefixes: Set<string>): void {
+    if (!value.includes('${')) {
+        return;
+    }
+    const segmentos = value.split(/\$\{[^}]*\}/);
+    /* Cada segmento salvo el último termina donde arranca la interpolación. */
+    for (let i = 0; i < segmentos.length - 1; i++) {
+        const segmento = segmentos[i];
+        if (/\s$/.test(segmento)) {
+            continue;
+        }
+        const tokens = segmento.split(/\s+/);
+        const ultimo = tokens[tokens.length - 1];
+        if (ultimo.length > 2 && /^[a-zA-Z_][\w-]*$/.test(ultimo)) {
+            familyPrefixes.add(ultimo);
+        }
+    }
+}
+
+function addClassTokens(value: string, tokens: Set<string>, familyPrefixes?: Set<string>): void {
+    if (familyPrefixes) {
+        registrarPrefijosFamilia(value, familyPrefixes);
+    }
     const withoutInterpolation = value.replace(/\$\{[^}]*\}/g, ' ');
     for (const clase of withoutInterpolation.split(/\s+/)) {
         if (clase.length > 1 && /^[a-zA-Z_][\w-]*$/.test(clase)) {
@@ -188,7 +220,7 @@ function addClassTokens(value: string, tokens: Set<string>): void {
     const interpolations = value.match(/\$\{[^}]*\}/g) ?? [];
     for (const interpolation of interpolations) {
         for (const literal of extraerLiterales(interpolation)) {
-            addClassTokens(literal, tokens);
+            addClassTokens(literal, tokens, familyPrefixes);
         }
     }
 }
@@ -208,7 +240,10 @@ const REGEX_SWITCH_CASE = /\bcase\s*['"]([A-Za-z_][\w-]*)['"]\s*:/g;
  * interpolan como clases (CabeceraArbitraje: switch (viabilidad.estado) +
  * className={\`estadoViabilidad ${viabilidad.estado}\`}).
  * La parte 2 se resuelve en extraerTokensDeTexto, que tiene el source. */
-function addTemplateClassTokens(value: string, variables: Map<string, Set<string>>, tokens: Set<string>): void {
+function addTemplateClassTokens(value: string, variables: Map<string, Set<string>>, tokens: Set<string>, familyPrefixes?: Set<string>): void {
+    if (familyPrefixes) {
+        registrarPrefijosFamilia(value, familyPrefixes);
+    }
     const withoutInterpolation = value.replace(/\$\{[^}]*\}/g, ' ');
     for (const clase of withoutInterpolation.split(/\s+/)) {
         if (clase.length > 1 && /^[a-zA-Z_][\w-]*$/.test(clase)) {
@@ -228,7 +263,7 @@ function addTemplateClassTokens(value: string, variables: Map<string, Set<string
             }
         }
         for (const literal of extraerLiterales(interpolation)) {
-            addClassTokens(literal, tokens);
+            addClassTokens(literal, tokens, familyPrefixes);
         }
     }
 }
@@ -272,21 +307,21 @@ function previousCodeCharacter(source: string, index: number): string {
     return cursor >= 0 ? source[cursor] : '';
 }
 
-function addQuotedClassTokens(value: string, tokens: Set<string>): void {
+function addQuotedClassTokens(value: string, tokens: Set<string>, familyPrefixes?: Set<string>): void {
     for (const literal of extraerLiterales(value)) {
-        addClassTokens(literal, tokens);
+        addClassTokens(literal, tokens, familyPrefixes);
     }
 }
 
-function addDeclarationClassTokens(value: string, tokens: Set<string>): void {
+function addDeclarationClassTokens(value: string, tokens: Set<string>, familyPrefixes?: Set<string>): void {
     const trimmed = value.trim();
     if (/^(['"`])[\s\S]*\1$/.test(trimmed)) {
-        addClassTokens(trimmed.slice(1, -1), tokens);
-        addQuotedClassTokens(trimmed, tokens);
+        addClassTokens(trimmed.slice(1, -1), tokens, familyPrefixes);
+        addQuotedClassTokens(trimmed, tokens, familyPrefixes);
         return;
     }
     if (trimmed.includes('?')) {
-        addQuotedClassTokens(trimmed, tokens);
+        addQuotedClassTokens(trimmed, tokens, familyPrefixes);
     }
 }
 
@@ -310,7 +345,7 @@ function normalizarValorLiteral(value: string): string {
  * indirección de variable (const x = 'a b'; ...; className={x}). Solo
  * literales: una llamada a función (helper('clase')) NO resuelve, manteniendo
  * el contrato del test 'unusedPanel'. */
-function recopilarDeclaraciones(source: string): Map<string, Set<string>> {
+function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): Map<string, Set<string>> {
     const variables = new Map<string, Set<string>>();
     let match: RegExpExecArray | null;
 
@@ -331,12 +366,12 @@ function recopilarDeclaraciones(source: string): Map<string, Set<string>> {
         const valor = normalizarValorLiteral(match[2]);
         const tokensVariable = new Set<string>();
         if (/^(['"`])[\s\S]*\1$/.test(valor)) {
-            addClassTokens(valor.slice(1, -1), tokensVariable);
-            addQuotedClassTokens(valor, tokensVariable);
+            addClassTokens(valor.slice(1, -1), tokensVariable, familyPrefixes);
+            addQuotedClassTokens(valor, tokensVariable, familyPrefixes);
         } else if (valor.includes('?')) {
-            addQuotedClassTokens(valor, tokensVariable);
+            addQuotedClassTokens(valor, tokensVariable, familyPrefixes);
         } else if (valor.startsWith('[')) {
-            addQuotedClassTokens(valor, tokensVariable);
+            addQuotedClassTokens(valor, tokensVariable, familyPrefixes);
         }
         if (tokensVariable.size > 0) {
             variables.set(nombre, tokensVariable);
@@ -348,7 +383,7 @@ function recopilarDeclaraciones(source: string): Map<string, Set<string>> {
 /* [J-8] Resuelve un identificador puro (className={clases}) contra el mapa de
  * declaraciones; si no es un identificador, extrae los literales embebidos
  * (ternarios, templates). */
-function resolverExpresionClase(body: string, variables: Map<string, Set<string>>, tokens: Set<string>): void {
+function resolverExpresionClase(body: string, variables: Map<string, Set<string>>, tokens: Set<string>, familyPrefixes?: Set<string>): void {
     const trimmed = body.trim();
     if (/^[A-Za-z_$][\w$]*$/.test(trimmed)) {
         const resuelto = variables.get(trimmed);
@@ -359,7 +394,7 @@ function resolverExpresionClase(body: string, variables: Map<string, Set<string>
         }
         return;
     }
-    addQuotedClassTokens(trimmed, tokens);
+    addQuotedClassTokens(trimmed, tokens, familyPrefixes);
 }
 
 function removeComments(texto: string): string {
@@ -433,12 +468,12 @@ function isCodeMatch(source: string, matchIndex: number): boolean {
     return !isInsideString(source, matchIndex);
 }
 
-function extraerTokensDeTexto(texto: string, tokens: Set<string>): void {
+function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes?: Set<string>): void {
     const source = removeComments(texto);
     let match: RegExpExecArray | null;
     /* [J-8] La indirección requiere conocer las declaraciones antes de
      * resolver los usos (className={ident}). Se recopila una vez por archivo. */
-    const variables = recopilarDeclaraciones(source);
+    const variables = recopilarDeclaraciones(source, familyPrefixes);
 
     REGEX_CLASS_ATTR.lastIndex = 0;
     while ((match = REGEX_CLASS_ATTR.exec(source)) !== null) {
@@ -453,7 +488,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>): void {
     REGEX_CLASS_TEMPLATE.lastIndex = 0;
     while ((match = REGEX_CLASS_TEMPLATE.exec(source)) !== null) {
         if (isCodeMatch(source, match.index)) {
-            addTemplateClassTokens(match[1], variables, tokens);
+            addTemplateClassTokens(match[1], variables, tokens, familyPrefixes);
             resolverSwitchTemplate(match[1], source, tokens);
         }
     }
@@ -463,7 +498,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>): void {
     REGEX_CLASS_JSX_EXPR.lastIndex = 0;
     while ((match = REGEX_CLASS_JSX_EXPR.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
-        resolverExpresionClase(match[1], variables, tokens);
+        resolverExpresionClase(match[1], variables, tokens, familyPrefixes);
     }
 
     REGEX_CLASS_OBJECT.lastIndex = 0;
@@ -471,7 +506,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>): void {
         if (!isCodeMatch(source, match.index)) {continue;}
         const previous = previousCodeCharacter(source, match.index);
         if (previous !== '{' && previous !== ',') {continue;}
-        addClassTokens(match[1] ?? match[2] ?? '', tokens);
+        addClassTokens(match[1] ?? match[2] ?? '', tokens, familyPrefixes);
     }
 
     REGEX_CLASS_FACTORY.lastIndex = 0;
@@ -487,7 +522,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>): void {
     REGEX_CREATE_ELEMENT_CLASS.lastIndex = 0;
     while ((match = REGEX_CREATE_ELEMENT_CLASS.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
-        resolverExpresionClase(match[1], variables, tokens);
+        resolverExpresionClase(match[1], variables, tokens, familyPrefixes);
     }
 
     REGEX_EXTERNAL_LINK_CLASS.lastIndex = 0;
@@ -501,7 +536,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>): void {
     REGEX_CLASS_LIST.lastIndex = 0;
     while ((match = REGEX_CLASS_LIST.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index) || previousCodeCharacter(source, match.index) !== '.') {continue;}
-        resolverExpresionClase(match[1], variables, tokens);
+        resolverExpresionClase(match[1], variables, tokens, familyPrefixes);
     }
 
     REGEX_CLASS_DECLARATION.lastIndex = 0;
@@ -509,7 +544,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>): void {
         if (!isCodeMatch(source, match.index)) {continue;}
         const previous = previousCodeCharacter(source, match.index);
         if (previous && /[\\w'"`]/.test(previous)) {continue;}
-        addDeclarationClassTokens(match[1], tokens);
+        addDeclarationClassTokens(match[1], tokens, familyPrefixes);
     }
 }
 
@@ -526,7 +561,7 @@ function compilarPatronesExcluidos(patterns: string[]): RegExp[] {
  * Gotcha: los adaptadores deciden como abrir archivos; aqui solo se cruzan tokens y selectores. */
 export class ClassIndexBuilder {
     private readonly cssFileCache = new Map<string, ClaseCssDefinida[]>();
-    private readonly consumerFileCache = new Map<string, Set<string>>();
+    private readonly consumerFileCache = new Map<string, { tokens: Set<string>; familyPrefixes: Set<string> }>();
 
     constructor(
         private readonly fileProvider: WorkspaceFileProvider,
@@ -571,7 +606,7 @@ export class ClassIndexBuilder {
 
         throwIfCancelled(options.token);
         onProgress?.('Extrayendo tokens de consumidores', 0, 1);
-        const { filesTokens, totalArchivos: archivosConsumo } = await this.extractConsumerTokens(
+        const { filesTokens, filesFamilyPrefixes, totalArchivos: archivosConsumo } = await this.extractConsumerTokens(
             consumerPatterns,
             options.exclude,
             options.token
@@ -603,6 +638,11 @@ export class ClassIndexBuilder {
             }
 
             const definicion = archivosDefinicion.get(nombre) ?? new Set<string>();
+            /* [318A-7V14] Uso por familia: un prefijo de template literal
+             * (badgeInfo-- / selectorNivelBoton / boton--) alcanza a toda la
+             * familia de clases definidas, porque el sufijo se emite en
+             * runtime desde el componente. No aplica al archivo de definición
+             * (un selector compuesto en el mismo CSS no es uso). */
             let usado = false;
             for (const [fsPath, tokensArchivo] of filesTokens) {
                 if (definicion.has(fsPath)) {
@@ -610,6 +650,18 @@ export class ClassIndexBuilder {
                 }
                 if (tokensArchivo.has(nombre)) {
                     usado = true;
+                    break;
+                }
+                const prefijos = filesFamilyPrefixes.get(fsPath);
+                if (prefijos) {
+                    for (const prefijo of prefijos) {
+                        if (nombre.startsWith(prefijo)) {
+                            usado = true;
+                            break;
+                        }
+                    }
+                }
+                if (usado) {
                     break;
                 }
             }
@@ -691,9 +743,10 @@ export class ClassIndexBuilder {
         patterns: string[],
         exclude: string[],
         token?: CancellationToken
-    ): Promise<{ filesTokens: Map<string, Set<string>>; totalArchivos: number }> {
+    ): Promise<{ filesTokens: Map<string, Set<string>>; filesFamilyPrefixes: Map<string, Set<string>>; totalArchivos: number }> {
         const files = await this.findUniqueFiles(patterns, exclude, token);
         const filesTokens = new Map<string, Set<string>>();
+        const filesFamilyPrefixes = new Map<string, Set<string>>();
         let totalTokens = 0;
         for (const fsPath of this.consumerFileCache.keys()) {
             if (!files.has(fsPath)) {
@@ -711,12 +764,13 @@ export class ClassIndexBuilder {
             }
 
             try {
-                let fileTokens = this.consumerFileCache.get(file.fsPath);
-                if (!fileTokens) {
-                    fileTokens = await this.loadConsumerTokens(file, token);
+                let cached = this.consumerFileCache.get(file.fsPath);
+                if (!cached) {
+                    cached = await this.loadConsumerTokens(file, token);
                 }
-                filesTokens.set(file.fsPath, fileTokens);
-                totalTokens += fileTokens.size;
+                filesTokens.set(file.fsPath, cached.tokens);
+                filesFamilyPrefixes.set(file.fsPath, cached.familyPrefixes);
+                totalTokens += cached.tokens.size;
             } catch (error) {
                 if (error instanceof CancellationError) {
                     throw error;
@@ -725,7 +779,7 @@ export class ClassIndexBuilder {
             }
         }
 
-        return { filesTokens, totalArchivos: files.size };
+        return { filesTokens, filesFamilyPrefixes, totalArchivos: files.size };
     }
 
     /* [028A-8] Carga las definiciones CSS de un archivo reutilizando el índice
@@ -764,27 +818,39 @@ export class ClassIndexBuilder {
 
     /* [028A-8] Ídem para tokens de consumo: store-first, reutiliza la entrada
      * persistente cuando el hash coincide y registra la nueva al cambiar. */
-    private async loadConsumerTokens(file: WorkspaceFile, token?: CancellationToken): Promise<Set<string>> {
+    private async loadConsumerTokens(file: WorkspaceFile, token?: CancellationToken): Promise<{ tokens: Set<string>; familyPrefixes: Set<string> }> {
         const hash = this.persistentStore ? await sha256File(file.fsPath) : null;
         const store = this.persistentStore;
         const stored = hash ? store?.getEntry(file.fsPath) : undefined;
-        if (stored?.hash === hash && stored.consumerTokens) {
+        /* [318A-7V14] La familia se exige persistida: una entrada vieja (sin
+         * consumerFamilyPrefixes) se re-parsea aunque el hash coincida. */
+        if (stored?.hash === hash && stored.consumerTokens && stored.consumerFamilyPrefixes) {
             if (store) {store.stats.reused++;}
-            const fileTokens = new Set<string>(stored.consumerTokens);
-            this.consumerFileCache.set(file.fsPath, fileTokens);
-            return fileTokens;
+            const cached = {
+                tokens: new Set<string>(stored.consumerTokens),
+                familyPrefixes: new Set<string>(stored.consumerFamilyPrefixes),
+            };
+            this.consumerFileCache.set(file.fsPath, cached);
+            return cached;
         }
         const document = await this.documentProvider.openTextDocument(file);
         throwIfCancelled(token);
         const fileTokens = new Set<string>();
-        extraerTokensDeTexto(document.getText(), fileTokens);
-        this.consumerFileCache.set(file.fsPath, fileTokens);
+        const fileFamilyPrefixes = new Set<string>();
+        extraerTokensDeTexto(document.getText(), fileTokens, fileFamilyPrefixes);
+        const cached = { tokens: fileTokens, familyPrefixes: fileFamilyPrefixes };
+        this.consumerFileCache.set(file.fsPath, cached);
         if (hash) {
             const previa = store?.getEntry(file.fsPath) ?? {};
-            store?.setEntry(file.fsPath, { ...previa, hash, consumerTokens: [...fileTokens] });
+            store?.setEntry(file.fsPath, {
+                ...previa,
+                hash,
+                consumerTokens: [...fileTokens],
+                consumerFamilyPrefixes: [...fileFamilyPrefixes],
+            });
             if (store) {store.stats.reparsed++;}
         }
-        return fileTokens;
+        return cached;
     }
 
     private async findUniqueFiles(patterns: string[], exclude: string[], token?: CancellationToken): Promise<Map<string, WorkspaceFile>> {

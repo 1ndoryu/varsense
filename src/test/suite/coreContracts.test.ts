@@ -358,6 +358,121 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'unusedClass');
   });
 
+  /* [318A-7V14] Familia dinámica por template literal con prefijo pegado:
+   * `badgeInfo--${variante}` (BadgeInfo.tsx) emite en runtime cualquier
+   * miembro de la familia badgeInfo--*, porque el sufijo sale de una unión
+   * de valores. El prefijo estático pegado a la interpolación marca TODA la
+   * familia como en-uso; una clase fuera de la familia sigue reportada. */
+  test('template literal glued prefix marks the whole class family as used', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.badgeInfo--exito { color: red; }',
+          '.badgeInfo--peligro { color: red; }',
+          '.badgeInfo--muerto { color: blue; }',
+          '.otraClaseMuerta { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: 'const view = <span className={`badgeInfo--${variante}`} />;',
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'otraClaseMuerta');
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre.startsWith('badgeInfo--')), false);
+  });
+
+  /* [318A-7V14] Prefijo camelCase sin separador: `selectorNivelBoton${sufijo}`
+   * (SelectorNivel.tsx) cubre selectorNivelBotonUrgente/Activo/etc. Igual
+   * que el caso BEM, el prefijo pegado marca la familia completa. */
+  test('camelCase glued prefix covers suffix-map families', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.selectorNivelBotonActivo { color: red; }',
+          '.selectorNivelBotonUrgente { color: red; }',
+          '.selectorNivelBotonLegacyMuerto { color: blue; }',
+          '.selectorOtroVivo { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: 'const view = <button className={`selectorNivelBoton${claseSufijo}`} />;',
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'selectorOtroVivo');
+  });
+
+  /* [318A-7V14] Límite de la semántica: una interpolación separada por ESPACIO
+   * (`estadoViabilidad ${estado}`) aporta la clase completa, no una familia;
+   * CSS con prefijo parecido (estadoViabilidadMuerto) NO se exime. Las clases
+   * completas dinámicas las resuelven variables/switch, no el prefijo. */
+  test('space-separated interpolation does not mark families', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.estadoViabilidad { color: red; }',
+          '.estadoViabilidadMuerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: 'const view = <span className={`estadoViabilidad ${estado}`} />;',
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'estadoViabilidadMuerto');
+  });
+
+  /* [318A-7V14] El prefijo pegado también aplica en la forma object factory
+   * (createEl('div', { className: `panel--${x}` }) de Glory-Laminal) y en
+   * declaraciones de variables con template interpolado. */
+  test('glued template prefix works in object factories and variable declarations', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.panel--oscuro { color: red; }',
+          '.panel--claro { color: red; }',
+          '.capaOverlay--abierta { color: red; }',
+          '.panelMuertoReal { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/view.ts': {
+        languageId: 'typescript',
+        content: [
+          "const el = createEl('div', { className: `panel--${tema}` });",
+          "const capas = `capaOverlay--${estado} oculta`;",
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelMuertoReal');
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre.startsWith('panel--')), false);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre.startsWith('capaOverlay--')), false);
+  });
+
   test('supports quoted object keys, templates and multiline consumers', async () => {
     const provider = new MemoryWorkspaceProvider({
       '/workspace/src/styles.css': {

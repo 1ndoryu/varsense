@@ -18,14 +18,20 @@ import type { CssVariable } from '@/types';
 import type { VarsenseConfigFile } from './config';
 
 export const PERSISTENT_INDEX_SCHEMA_VERSION = 1;
-/* Bump al cambiar la semántica de parseo/extracción que alimenta el índice. */
-export const PARSER_VERSION = '2';
+/* Bump al cambiar la semántica de parseo/extracción que alimenta el índice.
+ * 3: [318A-7V14] consumerFamilyPrefixes (template-literal family prefixes). */
+export const PARSER_VERSION = '3';
 export const PERSISTENT_INDEX_FILENAME = 'varsense-index.json';
 
 export interface PersistentIndexEntry {
     hash: string;
     classDefinitions?: ClaseCssDefinida[];
     consumerTokens?: string[];
+    /* [318A-7V14] Prefijos de familia de template literal por archivo: el
+     * escaneo de claseHuerfana los cruza con las clases definidas. Se exige
+     * presente junto a consumerTokens para reusar una entrada; una entrada
+     * vieja (sin el campo) se re-parsea (PARSER_VERSION 2→3). */
+    consumerFamilyPrefixes?: string[];
     variables?: CssVariable[];
     /* [028A-8 tramo 4] Usos var(--x) referenciados por este archivo CSS: permite
      * resolver consumidores de una definición sin recorrer el workspace. */
