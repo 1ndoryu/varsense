@@ -76,14 +76,81 @@ const REGEX_CREATE_ELEMENT_CLASS = /createElement\s*\(\s*['"][^'"]+['"]\s*,\s*([
 /* [J-8] classList.add/toggle/remove: toggle('clase', cond) y remove('clase')
  * son usos reales igual que add. */
 const REGEX_CLASS_LIST = /classList\.(?:add|toggle|remove)\s*\(([^)]*)\)/g;
-/* [318A-7V2] Cap 240 → 1000: templates largos (DashboardIsland.tsx:300, ~270
- * chars) y ternarios encadenados se truncaban y perdían las clases del final.
- * El tope de tokens del scan (MAX_TOKENS) sigue acotando la memoria total. */
-const REGEX_CLASS_DECLARATION = /\b(?:const|let|var)\s+(?:className|contentClass)\s*=\s*([\s\S]{0,1000}?);/g;
-/* [J-8] Cualquier declaración de variable cuyo valor sea un literal de clase
- * (string, template, ternario, array/objeto de literales). Permite resolver
- * className={ident} y classList.add(ident) por indirección. */
-const REGEX_VAR_CLASS_DECLARATION = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]{0,1000}?);/g;
+/* [318A-7V17] Any variable declaration whose value is a class literal
+ * (string, template, ternary, array/object of literals). Resolves
+ * className={ident} and classList.add(ident) by indirection.
+ * The old non-greedy regex broke on closures: in
+ * `const Boton = React.forwardRef(..., () => { const clases = [...]; ... })`
+ * the first ';' belongs to the INNER declaration, so the match swallowed
+ * `const clases = [...]` and its template families (`boton--${variante}`)
+ * were never indexed (they stayed orphan FPs). This scan balances (), []
+ * and {} with string awareness and cuts only at depth 0. The MAX_TOKENS cap
+ * still bounds total memory. */
+/* [318A-7V17] Estado de brackets/strings en un índice: permite cortar cada
+ * declaración al ';' que devuelve la profundidad a SU nivel de partida (no a
+ * 0): `const Boton = React.forwardRef((...) => { const clases = [...]; ... });`
+ * arranca a profundidad 0 y solo corta en el ';' tras `});`; la declaración
+ * INTERNA `clases` arranca a profundidad 1 y corta en su propio ';' sin ser
+ * tragada. Antes, el salto tras el corte ocultaba las declaraciones anidadas
+ * y su familia de clases (boton--, 20 FPs en Boton.tsx de PT). */
+function estadoScanning(source: string, indice: number): { profundidad: number; enString: boolean } {
+    let profundidad = 0;
+    let quote = '';
+    let escaped = false;
+    for (let cursor = 0; cursor < indice; cursor++) {
+        const current = source[cursor];
+        if (quote) {
+            if (escaped) {escaped = false;}
+            else if (current === '\\') {escaped = true;}
+            else if (current === quote) {quote = '';}
+            continue;
+        }
+        if (current === '"' || current === "'" || current === '`') {quote = current; continue;}
+        if (current === '(' || current === '[' || current === '{') {profundidad++; continue;}
+        if (current === ')' || current === ']' || current === '}') {profundidad--; continue;}
+    }
+    return { profundidad, enString: Boolean(quote) };
+}
+
+function escanearDeclaraciones(source: string): Array<{ nombre: string; valor: string; indice: number }> {
+    const REGEX_INICIO = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g;
+    const resultados: Array<{ nombre: string; valor: string; indice: number }> = [];
+    let inicio: RegExpExecArray | null;
+    while ((inicio = REGEX_INICIO.exec(source)) !== null) {
+        const nombre = inicio[1];
+        const indice = inicio.index;
+        const { profundidad: inicial, enString } = estadoScanning(source, indice);
+        if (enString) {
+            continue;
+        }
+        const desde = REGEX_INICIO.lastIndex;
+        let quote = '';
+        let escaped = false;
+        let profundidad = inicial;
+        let fin = -1;
+        for (let cursor = desde; cursor < source.length; cursor++) {
+            const current = source[cursor];
+            if (quote) {
+                if (escaped) {escaped = false;}
+                else if (current === '\\') {escaped = true;}
+                else if (current === quote) {quote = '';}
+                continue;
+            }
+            if (current === '"' || current === "'" || current === '`') {quote = current; continue;}
+            if (current === '(' || current === '[' || current === '{') {profundidad++; continue;}
+            if (current === ')' || current === ']' || current === '}') {profundidad--; continue;}
+            if (current === ';' && profundidad <= inicial) {fin = cursor; break;}
+        }
+        if (fin === -1) {
+            continue;
+        }
+        resultados.push({ nombre, valor: source.slice(desde, fin), indice });
+        /* No saltar tras el corte: las declaraciones anidadas dentro del valor
+         * (const clases dentro del closure de un forwardRef) son declaraciones
+         * propias y se capturan en la siguiente iteración del regex. */
+    }
+    return resultados;
+}
 /* [318A-7V5] Extracción de literales por pares de comillas. El regex de
  * agrupación anterior (['"`]([^'"`$]+)['"`]) falla con literales vacíos
  * seguidos de más texto: `: ''\n , estaX ? 'claseReal'` toma la comilla de
@@ -193,14 +260,28 @@ function registrarPrefijosFamilia(value: string, familyPrefixes: Set<string>): v
     /* Cada segmento salvo el último termina donde arranca la interpolación. */
     for (let i = 0; i < segmentos.length - 1; i++) {
         const segmento = segmentos[i];
-        if (/\s$/.test(segmento)) {
+        /* [318A-7V17] La familia es el token PEGADO al `${`, no el segmento
+         * completo: `badgeInfo badgeInfo--${variante}` (BadgeInfo.tsx:34)
+         * comparte segmento con otra clase literal y seguiría siendo una
+         * familia válida `badgeInfo--`. Tomar el último run sin whitespace. */
+        const ultimoRun = segmento.match(/([A-Za-z_][\w-]*)$/);
+        if (!ultimoRun) {
             continue;
         }
-        const tokens = segmento.split(/\s+/);
-        const ultimo = tokens[tokens.length - 1];
-        if (ultimo.length > 2 && /^[a-zA-Z_][\w-]*$/.test(ultimo)) {
-            familyPrefixes.add(ultimo);
+        const ultimo = ultimoRun[1];
+        if (ultimo.length <= 2) {
+            continue;
         }
+        /* Guard de prosa: `recordatorio${n > 1 ? 's' : ''}`,
+         * ` archivo${...}`/` adjunto${...}` (TareaBadges.tsx:143,
+         * usePanelRecordatorios.ts:141) interpolan PALABRAS en minúscula sin
+         * guion; solo tokens con forma de clase (BEM `--` o CamelCase/dígito)
+         * son familias. Verificado: `adjunto` absorbía
+         * `adjuntosAreaCarga--bloqueado` (huérfana real sin consumidor). */
+        if (!ultimo.endsWith('--') && !/[A-Z0-9]/.test(ultimo)) {
+            continue;
+        }
+        familyPrefixes.add(ultimo);
     }
 }
 
@@ -320,7 +401,7 @@ function addDeclarationClassTokens(value: string, tokens: Set<string>, familyPre
         addQuotedClassTokens(trimmed, tokens, familyPrefixes);
         return;
     }
-    if (trimmed.includes('?')) {
+    if (pareceTernarioDeLiterales(trimmed)) {
         addQuotedClassTokens(trimmed, tokens, familyPrefixes);
     }
 }
@@ -347,28 +428,26 @@ function normalizarValorLiteral(value: string): string {
  * el contrato del test 'unusedPanel'. */
 function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): Map<string, Set<string>> {
     const variables = new Map<string, Set<string>>();
-    let match: RegExpExecArray | null;
 
-    REGEX_VAR_CLASS_DECLARATION.lastIndex = 0;
-    while ((match = REGEX_VAR_CLASS_DECLARATION.exec(source)) !== null) {
-        if (!isCodeMatch(source, match.index)) {
+    for (const declaracion of escanearDeclaraciones(source)) {
+        if (!isCodeMatch(source, declaracion.indice)) {
             continue;
         }
-        const previous = previousCodeCharacter(source, match.index);
+        const previous = previousCodeCharacter(source, declaracion.indice);
         if (previous && /[\w'"`]/.test(previous)) {
             continue;
         }
-        const nombre = match[1];
-        /* className/contentClass ya se resuelven por REGEX_CLASS_DECLARATION. */
+        const nombre = declaracion.nombre;
+        /* className/contentClass se resuelven aparte (ver extraerTokensDeTexto). */
         if (nombre === 'className' || nombre === 'contentClass') {
             continue;
         }
-        const valor = normalizarValorLiteral(match[2]);
+        const valor = normalizarValorLiteral(declaracion.valor);
         const tokensVariable = new Set<string>();
         if (/^(['"`])[\s\S]*\1$/.test(valor)) {
             addClassTokens(valor.slice(1, -1), tokensVariable, familyPrefixes);
             addQuotedClassTokens(valor, tokensVariable, familyPrefixes);
-        } else if (valor.includes('?')) {
+        } else if (pareceTernarioDeLiterales(valor)) {
             addQuotedClassTokens(valor, tokensVariable, familyPrefixes);
         } else if (valor.startsWith('[')) {
             addQuotedClassTokens(valor, tokensVariable, familyPrefixes);
@@ -378,6 +457,16 @@ function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): M
         }
     }
     return variables;
+}
+
+/* [318A-7V17] Un ternario real tiene el '?' PEGADO/SEGUIDO de un literal
+ * (`cond ? 'a' : 'b'`, `${x ? 'a' : ''}`). El optional-chaining (`resto?.claseExt`)
+ * también contiene '?' pero no es ternario de literales: un includes('?')
+ * amplio hacía que el valor completo de un closure (React.forwardRef con
+ * `resto?.claseExt`) se clasificara como ternario, extrayendo sus literales
+ * y registrando familias falsas. */
+function pareceTernarioDeLiterales(valor: string): boolean {
+    return /\?\s*['"`]/.test(valor);
 }
 
 /* [J-8] Resuelve un identificador puro (className={clases}) contra el mapa de
@@ -539,12 +628,14 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         resolverExpresionClase(match[1], variables, tokens, familyPrefixes);
     }
 
-    REGEX_CLASS_DECLARATION.lastIndex = 0;
-    while ((match = REGEX_CLASS_DECLARATION.exec(source)) !== null) {
-        if (!isCodeMatch(source, match.index)) {continue;}
-        const previous = previousCodeCharacter(source, match.index);
-        if (previous && /[\\w'"`]/.test(previous)) {continue;}
-        addDeclarationClassTokens(match[1], tokens, familyPrefixes);
+    for (const declaracion of escanearDeclaraciones(source)) {
+        if (declaracion.nombre !== 'className' && declaracion.nombre !== 'contentClass') {
+            continue;
+        }
+        if (!isCodeMatch(source, declaracion.indice)) {continue;}
+        const previous = previousCodeCharacter(source, declaracion.indice);
+        if (previous && /[\w'"`]/.test(previous)) {continue;}
+        addDeclarationClassTokens(declaracion.valor, tokens, familyPrefixes);
     }
 }
 

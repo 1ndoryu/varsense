@@ -20,7 +20,7 @@ import type { VarsenseConfigFile } from './config';
 export const PERSISTENT_INDEX_SCHEMA_VERSION = 1;
 /* Bump al cambiar la semántica de parseo/extracción que alimenta el índice.
  * 3: [318A-7V14] consumerFamilyPrefixes (template-literal family prefixes). */
-export const PARSER_VERSION = '3';
+export const PARSER_VERSION = '4';
 export const PERSISTENT_INDEX_FILENAME = 'varsense-index.json';
 
 export interface PersistentIndexEntry {

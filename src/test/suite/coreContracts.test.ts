@@ -7,7 +7,11 @@ import { buildAnalysisConfig } from '../../core/config';
 import { analyzeTokenRules } from '../../core/tokenRules';
 import { VariableIndexBuilder } from '../../core/variableIndexBuilder';
 import { ClassIndexBuilder } from '../../core/classIndexBuilder';
+import { NodeWorkspaceFileProvider } from '../../core/nodeProviders';
 import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../core/workspaceProviders';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 class MemoryWorkspaceProvider implements WorkspaceFileProvider, DocumentProvider {
   constructor(
@@ -441,6 +445,79 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'estadoViabilidadMuerto');
   });
 
+  /* [318A-7V17] Prosa con template interpolado (titulo={...}, mostrarExito(`...`))
+   * NO es una familia: `${n} archivo${...} adjunto${...}` tiene segmentos con
+   * whitespace previo (" adjunto") que el fix anterior registraba como
+   * prefijo espurio "adjunto"/"archivo", absorbiendo huérfanas reales como
+   * `adjuntosAreaCarga--bloqueado` (sin consumidor, TareaBadges.tsx:143,
+   * usePanelRecordatorios.ts:141). Solo un token pegado sin whitespace
+   * alrededor (badgeInfo--${x}) es familia. */
+  test('prose template literals never register spurious families', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.adjuntosAreaCarga { color: red; }',
+          '.adjuntosAreaCarga--subiendo { color: red; }',
+          '.adjuntosAreaCarga--bloqueado { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'const n = 2;',
+          'const view = <div className={`adjuntosAreaCarga ${subiendo ? \'adjuntosAreaCarga--subiendo\' : \'\'}`}>',
+          '  <Badge titulo={`${n} archivo${n > 1 ? \'s\' : \'\'} adjunto${n > 1 ? \'s\' : \'\'}`} />',
+          '</div>;',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    /* La familia espuria "adjunto" NO debe eximir adjuntosAreaCarga--bloqueado;
+     * la clase usada literalmente (adjuntosAreaCarga) sí está en uso. El único
+     * reporte es la muerta real. */
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'adjuntosAreaCarga--bloqueado');
+  });
+
+  /* [318A-7V17] Un segmento puede compartir espacio con otra clase literal:
+   * `badgeInfo badgeInfo--${variante}` (BadgeInfo.tsx:34). La familia es el
+   * token PEGADO al `${` (badgeInfo--), no el segmento completo; el guard de
+   * prosa rechaza palabras minúsculas sin guion (adjunto/archivo/recordatorio)
+   * pero NO debe perder familias BEM multi-clase. */
+  test('multi-class template segments register the glued BEM family prefix', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.badgeInfo--exito { color: green; }',
+          '.badgeInfo--advertencia { color: orange; }',
+          '.badgeInfoMuerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/BadgeInfo.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'export function BadgeInfo({ variante }: { variante: string }) {',
+          '  const clases = `badgeInfo badgeInfo--${variante}`.trim();',
+          '  return <span className={clases} />;',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    /* La familia `badgeInfo--` (token pegado) exime ambas variantes; la clase
+     * muerta sin prefijo sigue reportándose: 0 FN, 0 FP. */
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'badgeInfoMuerto');
+  });
+
   /* [318A-7V14] El prefijo pegado también aplica en la forma object factory
    * (createEl('div', { className: `panel--${x}` }) de Glory-Laminal) y en
    * declaraciones de variables con template interpolado. */
@@ -566,6 +643,77 @@ suite('VarSense editor-agnostic core contracts', () => {
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'dashboardContenedor--muerto');
+  });
+
+  /* [318A-7V17] Componentes con closure (React.forwardRef): el regex no-greedy
+   * anterior cortaba en el primer ';' (el de la declaración INTERNA
+   * `const clases = [...]`) y se tragaba el literal, dejando la familia
+   * `boton--` como FP huérfana (Boton.tsx de PT, 20 hallazgos). El escaneo
+   * balanceado debe indexar la familia del template dentro del closure. */
+  test('indexa familias de clases declaradas dentro del closure de un forwardRef', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.boton { color: red; }',
+          '.boton--primario { color: red; }',
+          '.boton--secundario { color: red; }',
+          /* Fuera de la familia (no comparte el prefijo `boton--`): sigue
+           * siendo huérfana aunque la familia esté viva — la semántica V14
+           * cubre solo clases con el prefijo. */
+          '.botonIcono { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/ui/Boton.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          "import React from 'react';",
+          'const Boton = React.forwardRef<HTMLButtonElement, BotonProps>(({ variante = \'primario\', resto }, ref) => {',
+          "  const clases = ['boton', `boton--${variante}`, resto?.claseExt].join(' ');",
+          '  return <button ref={ref} className={clases} />;',
+          '});',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'botonIcono');
+    /* La familia boton-- se marca EN-USO completa (el sufijo se emite en
+     * runtime); ningún miembro de la familia debe reportarse huérfano. */
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre.startsWith('boton--')), false);
+  });
+
+  /* [318A-7V17] El walker no debe descender a repos anidados (submódulos/worktrees:
+   * su `.git` es un ARCHIVO, p. ej. glory-rs en los consumidores) ni a internals
+   * de git (`.git/modules/...`). El código de otro repo se arregla en su propio
+   * repo; analizarlo desde el consumidor duplica hallazgos (8 claseHuerfana de
+   * glory-rs en PT). El `.git` directorio raíz también se salta. */
+  test('walker excluye submódulos (.git archivo) y directorios .git', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'varsense-submodulo-'));
+    try {
+      const escribir = (relativa: string, contenido: string): void => {
+        const completo = path.join(root, relativa);
+        fs.mkdirSync(path.dirname(completo), { recursive: true });
+        fs.writeFileSync(completo, contenido);
+      };
+      escribir('src/estilos.css', '.huerfanaRaiz { color: red; }');
+      escribir('glory-rs/frontend/otro.css', '.huerfanaSubmodulo { color: blue; }');
+      escribir('.git/modules/glory-rs/config', 'dummy');
+      escribir('.git/modules/glory-rs/refs/heads/main', 'dummy');
+      /* Marcador git de submódulo: .git es archivo (no directorio). */
+      fs.writeFileSync(path.join(root, 'glory-rs', '.git'), 'gitdir: ../.git/modules/glory-rs\n');
+
+      const provider = new NodeWorkspaceFileProvider(root);
+      const archivos = await provider.findFiles(['**/*.css'], []);
+      const rutas = archivos.map(archivo => path.relative(root, archivo.fsPath).replace(/\\/g, '/')).sort();
+
+      assert.deepStrictEqual(rutas, ['src/estilos.css']);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   /* [318A-7V3] Ternario asignado a variable y consumido por interpolación de

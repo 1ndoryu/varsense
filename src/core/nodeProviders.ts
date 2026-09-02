@@ -128,12 +128,33 @@ export class NodeWorkspaceFileProvider implements WorkspaceFileProvider {
             const relativePath = normalizarRuta(path.relative(this.rootPath, absolutePath));
             const relativeForDirectory = entry.isDirectory() ? `${relativePath}/` : relativePath;
 
-            if (relativePath && (matchesAnyGlob(relativePath, exclude) || matchesAnyGlob(relativeForDirectory, exclude))) {
+            /* [318A-7V17] Repos anidados fuera del alcance: un directorio cuyo
+             * `.git` es un ARCHIVO es un submódulo/worktree git (glory-rs en
+             * los consumidores). El código de otro repo se arregla en su propio
+             * repo, no desde el consumidor; analizarlo duplicaba hallazgos
+             * (claseHuerfana de glory-rs en PT). Internals `.git` tampoco se
+             * recorren: nunca son código analizable. El repo raíz tiene `.git`
+             * directorio y no se ve afectado. */
+            if (entry.name === '.git') {
                 continue;
             }
-
             if (entry.isDirectory()) {
+                let esSubmodulo = false;
+                try {
+                    const gitMarker = await fs.lstat(path.join(absolutePath, '.git'));
+                    esSubmodulo = gitMarker.isFile();
+                } catch {
+                    esSubmodulo = false;
+                }
+                if (esSubmodulo) {
+                    continue;
+                }
+                if (relativePath && (matchesAnyGlob(relativePath, exclude) || matchesAnyGlob(relativeForDirectory, exclude))) {
+                    continue;
+                }
                 await this.walk(absolutePath, patterns, exclude, files);
+                continue;
+            } else if (relativePath && (matchesAnyGlob(relativePath, exclude) || matchesAnyGlob(relativeForDirectory, exclude))) {
                 continue;
             }
 
