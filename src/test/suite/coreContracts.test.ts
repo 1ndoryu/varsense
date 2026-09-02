@@ -518,6 +518,90 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'badgeInfoMuerto');
   });
 
+  /* [318A-7V18] Contexto de ATRIBUTO de clase: cuando la interpolación vive
+   * dentro de className/claseAdicional={...}, el contenido ES una cadena de
+   * clases por construcción. `detallePlan ${usuario.suscripcion.plan}`
+   * (DetalleUsuario.tsx:79) registra el segmento estático `detallePlan`
+   * como clase real aunque termine en espacio — el guard de prosa (V17)
+   * solo aplica a declaraciones/cadenas fuera de atributos. El estado
+   * interpolado (premium/free/trial) NO se exime: es zona gris que el
+   * detector reporta con fundamento. */
+  test('attribute-context templates register static bases as used classes', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.detallePlan { color: red; }',
+          '.detallePlan.premium { color: gold; }',
+          '.detallePlanMuerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/DetalleUsuario.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'export function DetalleUsuario({ usuario }: any) {',
+          '  return (',
+          '    <div className={`detallePlan ${usuario.suscripcion.plan}`}>',
+          '      <p>{usuario.nombre}</p>',
+          '    </div>',
+          '  );',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    /* `detallePlan` en uso (clase base); `premium` (estado runtime, zona
+     * gris documentada) y la muerta real se reportan con fundamento. */
+    assert.strictEqual(result.totalClasesHuerfanas, 2);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'detallePlan'), false);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'detallePlanMuerto'), true);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'premium'), true);
+  });
+
+  /* [318A-7V18] Template ANIDADO en atributo de clase:
+   * claseAdicional={`selectorNivelBoton ${activo ? `selectorNivelBotonActivo
+   * selectorNivelBoton${claseSufijo}` : ''}`} (SelectorNivel.tsx:39). El
+   * regex plano se cortaba en el backtick/`}` INTERIOR y perdía el template
+   * entero (clases literales + familia); el escáner balanceado recupera
+   * segmento estático, literal anidado y familia `selectorNivelBoton`. */
+  test('nested template literals inside class attributes are fully indexed', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.selectorNivelBoton { color: red; }',
+          '.selectorNivelBotonActivo { color: red; }',
+          '.selectorNivelBotonUrgente { color: red; }',
+          '.nivelMuerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/SelectorNivel.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'export function SelectorNivel({ activo, claseSufijo }: any) {',
+          '  return (',
+          '    <Boton type="button" variante="ghost"',
+          '      claseAdicional={`selectorNivelBoton ${activo ? `selectorNivelBotonActivo selectorNivelBoton${claseSufijo}` : \'\'}`}>',
+          '      nivel',
+          '    </Boton>',
+          '  );',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    /* La familia `selectorNivelBoton` (token pegado) exime las variantes;
+     * la muerta sin prefijo sigue reportada: 0 FN, 0 FP. */
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'nivelMuerto');
+  });
+
   /* [318A-7V14] El prefijo pegado también aplica en la forma object factory
    * (createEl('div', { className: `panel--${x}` }) de Glory-Laminal) y en
    * declaraciones de variables con template interpolado. */

@@ -54,7 +54,14 @@ const DEFAULT_MIN_LENGTH = 3;
 /* Los tres patrones comparten la alternancia de props portadoras:
  * className/class y cualquier prop cuyo nombre empiece por clase/Clase. */
 const REGEX_CLASS_ATTR = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*["']([^"']+)["']/g;
-const REGEX_CLASS_TEMPLATE = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*\{[`]([^`]+)[`]\}/g;
+/* [318A-7V18] Apertura de template literal en atributo de clase:
+ * className/class/*clase={...`template`...}. El scanner balanceado
+ * (finTemplateLiteral/finExpresion) sustituye al regex plano [J-8]
+ * porque el regex no puede con templates anidados
+ * (claseAdicional={`a ${x ? `b${y}` : ''}`} en SelectorNivel/ModalExperimentos)
+ * ni con post-procesado tras el cierre (className={`a ${x}`.trim()} en
+ * AccionesItem). */
+const REGEX_CLASS_TEMPLATE_INICIO = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*\{\s*`/g;
 /* [J-8] JSX/TSX className={expr} con ternarios y literales: cubre
  * className={cond ? 'a' : 'b'} y className={'a b'}. Los identificadores
  * puros se resuelven por indirección de variables (ver recopilarDeclaraciones).
@@ -252,11 +259,115 @@ export function extraerClasesDeTexto(texto: string, rutaArchivo: string): ClaseC
  * (`estadoViabilidad ${viabilidad.estado}`) aporta la clase COMPLETA, no una
  * familia — esa vía ya la resuelven las variables/switch. Nunca marca clases
  * fuera de la familia ni exime el reporte de un token exacto.*/
-function registrarPrefijosFamilia(value: string, familyPrefixes: Set<string>): void {
+/* [318A-7V18] Escáner balanceado de templates/interpolaciones: el regex
+ * `\$\{[^}]*\}` y el `[^`]+` plano se rompen con templates ANIDADOS
+ * (interpolación cuyo cuerpo contiene otro template: SelectorNivel.tsx:39,
+ * ModalExperimentos.tsx) — se cortan en el `}`/backtick INTERIOR y el resto
+ * queda sin tokenizar (clases literales y familias perdidas). Estos
+ * escáneres recorren char a char respetando escapes, strings, llaves
+ * anidadas, comentarios de código y templates anidados dentro de ${...}. */
+function finExpresion(source: string, indiceLlave: number): number {
+    let i = indiceLlave + 1;
+    let quote = '';
+    let profundidad = 1;
+    while (i < source.length) {
+        const c = source[i];
+        if (quote) {
+            if (c === '\\') {i += 2; continue;}
+            if (c === quote) {quote = '';}
+            i++;
+            continue;
+        }
+        if (c === '"' || c === "'") {quote = c; i++; continue;}
+        if (c === '`') {
+            const cierre = finTemplateLiteral(source, i);
+            if (cierre < 0) {return -1;}
+            i = cierre + 1;
+            continue;
+        }
+        if (c === '/') {
+            const siguiente = source[i + 1];
+            if (siguiente === '/') {while (i < source.length && source[i] !== '\n') {i++;} continue;}
+            if (siguiente === '*') {
+                const fin = source.indexOf('*/', i + 2);
+                i = fin < 0 ? source.length : fin + 2;
+                continue;
+            }
+        }
+        if (c === '{') {profundidad++;}
+        else if (c === '}') {
+            profundidad--;
+            if (profundidad === 0) {return i;}
+        }
+        i++;
+    }
+    return -1;
+}
+
+function finTemplateLiteral(source: string, indiceApertura: number): number {
+    let i = indiceApertura + 1;
+    while (i < source.length) {
+        const c = source[i];
+        if (c === '\\') {i += 2; continue;}
+        if (c === '`') {return i;}
+        if (c === '$' && source[i + 1] === '{') {
+            const cierre = finExpresion(source, i + 1);
+            if (cierre < 0) {return -1;}
+            i = cierre + 1;
+            continue;
+        }
+        i++;
+    }
+    return -1;
+}
+
+/* Separa el contenido de un template (sin backticks) en segmentos estáticos
+ * y cuerpos de interpolación BALANCEADOS (nested templates incluidos). */
+function descomponerTemplate(valor: string): { segmentos: string[]; expresiones: string[] } {
+    const segmentos: string[] = [];
+    const expresiones: string[] = [];
+    let inicio = 0;
+    let i = 0;
+    while (i < valor.length) {
+        if (valor[i] === '$' && valor[i + 1] === '{') {
+            segmentos.push(valor.slice(inicio, i));
+            const cierre = finExpresion(valor, i + 1);
+            if (cierre < 0) {
+                segmentos.push(valor.slice(i));
+                return { segmentos, expresiones };
+            }
+            expresiones.push(valor.slice(i + 2, cierre));
+            i = cierre + 1;
+            inicio = i;
+        } else {
+            i++;
+        }
+    }
+    segmentos.push(valor.slice(inicio));
+    return { segmentos, expresiones };
+}
+
+/* [318A-7V14] Prefijo de familia de template literal. Un token estático
+ * PEGADO a una interpolación (`badgeInfo--${variante}`, `selectorNivelBoton${sufijo}`,
+ * `boton--${variante}`) marca como EN-USO toda la familia de clases cuyo
+ * nombre empiece por ese prefijo: el sufijo se emite en runtime desde una
+ * unión/mapa que indexar literalmente exigiría resolver tipos (verificado
+ * en VAR-4: BadgeInfo.tsx, SelectorNivel.tsx, Boton.tsx). Solo cuenta el
+ * token pegado (sin espacio previo): una interpolación separada por espacio
+ * (`estadoViabilidad ${viabilidad.estado}`) aporta la clase COMPLETA, no una
+ * familia — esa vía ya la resuelven las variables/switch. Nunca marca clases
+ * fuera de la familia ni exime el reporte de un token exacto.
+ * [318A-7V18] contextoAttr: dentro de un atributo className/class/*clase el
+ * contenido del template ES una cadena de clases por construcción, así que
+ * el guard de prosa (V17) solo aplica a declaraciones/cadenas fuera de
+ * atributos (` archivo${...}`, `recordatorio${...}` de TareaBadges). Un
+ * prefijo pegado en minúsculas dentro de un atributo (`item-${x}`) es una
+ * familia real. */
+function registrarPrefijosFamilia(value: string, familyPrefixes: Set<string>, contextoAttr = false): void {
     if (!value.includes('${')) {
         return;
     }
-    const segmentos = value.split(/\$\{[^}]*\}/);
+    const { segmentos } = descomponerTemplate(value);
     /* Cada segmento salvo el último termina donde arranca la interpolación. */
     for (let i = 0; i < segmentos.length - 1; i++) {
         const segmento = segmentos[i];
@@ -272,36 +383,42 @@ function registrarPrefijosFamilia(value: string, familyPrefixes: Set<string>): v
         if (ultimo.length <= 2) {
             continue;
         }
-        /* Guard de prosa: `recordatorio${n > 1 ? 's' : ''}`,
+        /* Guard de prosa (fuera de atributos): `recordatorio${n > 1 ? 's' : ''}`,
          * ` archivo${...}`/` adjunto${...}` (TareaBadges.tsx:143,
          * usePanelRecordatorios.ts:141) interpolan PALABRAS en minúscula sin
          * guion; solo tokens con forma de clase (BEM `--` o CamelCase/dígito)
          * son familias. Verificado: `adjunto` absorbía
          * `adjuntosAreaCarga--bloqueado` (huérfana real sin consumidor). */
-        if (!ultimo.endsWith('--') && !/[A-Z0-9]/.test(ultimo)) {
+        if (!contextoAttr && !ultimo.endsWith('--') && !/[A-Z0-9]/.test(ultimo)) {
             continue;
         }
         familyPrefixes.add(ultimo);
     }
 }
 
-function addClassTokens(value: string, tokens: Set<string>, familyPrefixes?: Set<string>): void {
+function addClassTokens(value: string, tokens: Set<string>, familyPrefixes?: Set<string>, contextoAttr = false): void {
     if (familyPrefixes) {
-        registrarPrefijosFamilia(value, familyPrefixes);
+        registrarPrefijosFamilia(value, familyPrefixes, contextoAttr);
     }
-    const withoutInterpolation = value.replace(/\$\{[^}]*\}/g, ' ');
-    for (const clase of withoutInterpolation.split(/\s+/)) {
-        if (clase.length > 1 && /^[a-zA-Z_][\w-]*$/.test(clase)) {
-            tokens.add(clase);
+    /* [318A-7V18] descomponerTemplate en lugar de replace con `\$\{[^}]*\}`:
+     * el regex se cortaba en el `}` INTERIOR de un template anidado y dejaba
+     * basura en los segmentos estáticos (SelectorNivel.tsx:39). */
+    const { segmentos, expresiones } = descomponerTemplate(value);
+    for (const segmento of segmentos) {
+        for (const clase of segmento.split(/\s+/)) {
+            if (clase.length > 1 && /^[a-zA-Z_][\w-]*$/.test(clase)) {
+                tokens.add(clase);
+            }
         }
     }
 
     /* Conserva clases literales dentro de ternarios/template expressions:
-     * `campo ${error ? 'campoError' : ''}`. Nunca agrega identificadores. */
-    const interpolations = value.match(/\$\{[^}]*\}/g) ?? [];
-    for (const interpolation of interpolations) {
-        for (const literal of extraerLiterales(interpolation)) {
-            addClassTokens(literal, tokens, familyPrefixes);
+     * `campo ${error ? 'campoError' : ''}`. Nunca agrega identificadores.
+     * Los cuerpos balanceados pueden contener templates anidados; sus
+     * literales (comillas/backticks) se extraen recursivamente aquí. */
+    for (const body of expresiones) {
+        for (const literal of extraerLiterales(body)) {
+            addClassTokens(literal, tokens, familyPrefixes, contextoAttr);
         }
     }
 }
@@ -321,30 +438,31 @@ const REGEX_SWITCH_CASE = /\bcase\s*['"]([A-Za-z_][\w-]*)['"]\s*:/g;
  * interpolan como clases (CabeceraArbitraje: switch (viabilidad.estado) +
  * className={\`estadoViabilidad ${viabilidad.estado}\`}).
  * La parte 2 se resuelve en extraerTokensDeTexto, que tiene el source. */
-function addTemplateClassTokens(value: string, variables: Map<string, Set<string>>, tokens: Set<string>, familyPrefixes?: Set<string>): void {
+function addTemplateClassTokens(value: string, variables: Map<string, Set<string>>, tokens: Set<string>, familyPrefixes?: Set<string>, contextoAttr = false): void {
     if (familyPrefixes) {
-        registrarPrefijosFamilia(value, familyPrefixes);
+        registrarPrefijosFamilia(value, familyPrefixes, contextoAttr);
     }
-    const withoutInterpolation = value.replace(/\$\{[^}]*\}/g, ' ');
-    for (const clase of withoutInterpolation.split(/\s+/)) {
-        if (clase.length > 1 && /^[a-zA-Z_][\w-]*$/.test(clase)) {
-            tokens.add(clase);
+    const { segmentos, expresiones } = descomponerTemplate(value);
+    for (const segmento of segmentos) {
+        for (const clase of segmento.split(/\s+/)) {
+            if (clase.length > 1 && /^[a-zA-Z_][\w-]*$/.test(clase)) {
+                tokens.add(clase);
+            }
         }
     }
 
-    const interpolations = value.match(/\$\{[^}]*\}/g) ?? [];
-    for (const interpolation of interpolations) {
-        const body = interpolation.slice(2, -1).trim();
-        if (/^[A-Za-z_$][\w$]*$/.test(body)) {
-            const resuelto = variables.get(body);
+    for (const body of expresiones) {
+        const trimmed = body.trim();
+        if (/^[A-Za-z_$][\w$]*$/.test(trimmed)) {
+            const resuelto = variables.get(trimmed);
             if (resuelto) {
                 for (const token of resuelto) {
                     tokens.add(token);
                 }
             }
         }
-        for (const literal of extraerLiterales(interpolation)) {
-            addClassTokens(literal, tokens, familyPrefixes);
+        for (const literal of extraerLiterales(body)) {
+            addClassTokens(literal, tokens, familyPrefixes, contextoAttr);
         }
     }
 }
@@ -353,12 +471,12 @@ function addTemplateClassTokens(value: string, variables: Map<string, Set<string
  * coincide exactamente con el sujeto de un switch del mismo archivo, los
  * literales de sus case son las clases aplicadas en runtime. */
 function resolverSwitchTemplate(template: string, source: string, tokens: Set<string>): void {
-    const interpolations = template.match(/\$\{[^}]*\}/g) ?? [];
+    const { expresiones } = descomponerTemplate(template);
     const cadenas = new Set<string>();
-    for (const interpolation of interpolations) {
-        const body = interpolation.slice(2, -1).trim();
-        if (/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(body)) {
-            cadenas.add(body);
+    for (const body of expresiones) {
+        const trimmed = body.trim();
+        if (/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(trimmed)) {
+            cadenas.add(trimmed);
         }
     }
     if (cadenas.size === 0) {
@@ -574,12 +692,20 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         }
     }
 
-    REGEX_CLASS_TEMPLATE.lastIndex = 0;
-    while ((match = REGEX_CLASS_TEMPLATE.exec(source)) !== null) {
-        if (isCodeMatch(source, match.index)) {
-            addTemplateClassTokens(match[1], variables, tokens, familyPrefixes);
-            resolverSwitchTemplate(match[1], source, tokens);
-        }
+    REGEX_CLASS_TEMPLATE_INICIO.lastIndex = 0;
+    while ((match = REGEX_CLASS_TEMPLATE_INICIO.exec(source)) !== null) {
+        if (!isCodeMatch(source, match.index)) {continue;}
+        /* [318A-7V18] El match termina en el backtick de apertura; el cierre
+         * se halla con el escáner balanceado (soporta templates anidados y
+         * post-procesado como `.trim()` tras el backtick de cierre). */
+        const apertura = match.index + match[0].length - 1;
+        const cierre = finTemplateLiteral(source, apertura);
+        if (cierre < 0) {continue;}
+        const valor = source.slice(apertura + 1, cierre);
+        /* contextoAttr=true: el contenido de un template en atributo de clase
+         * ES una cadena de clases por construcción (regla V18). */
+        addTemplateClassTokens(valor, variables, tokens, familyPrefixes, true);
+        resolverSwitchTemplate(valor, source, tokens);
     }
 
     /* [J-8] className={cond ? 'a' : 'b'} y className={'a b'}: expresiones
@@ -595,7 +721,9 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         if (!isCodeMatch(source, match.index)) {continue;}
         const previous = previousCodeCharacter(source, match.index);
         if (previous !== '{' && previous !== ',') {continue;}
-        addClassTokens(match[1] ?? match[2] ?? '', tokens, familyPrefixes);
+        /* Las props *clase en objetos ({ claseAdicional: x }) son portadoras
+         * de clase: contextoAttr true (regla V18). */
+        addClassTokens(match[1] ?? match[2] ?? '', tokens, familyPrefixes, true);
     }
 
     REGEX_CLASS_FACTORY.lastIndex = 0;
