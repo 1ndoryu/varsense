@@ -1398,4 +1398,250 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'notificacionesPopover__item--muerta');
   });
+
+  /* [318A-7V22][M4] Construcción de HTML en runtime: template que ensambla
+   * markup con atributos `class="..."` literales (useScratchpad.ts:82/94 de
+   * PT: `html += \`<h${n} class="scratchpadVistaPreviaTitulo
+   * scratchpadVistaPreviaTitulo--h${n}">...\`` y `<li><span
+   * class="scratchpadVistaPreviaChecklist">`). El literal de clase dentro de
+   * un template HTML ES una cadena de clases por construcción; una clase
+   * realmente muerta sigue reportada. */
+  test('runtime HTML construction registers class attributes as used', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.scratchpadVistaPreviaTitulo { color: red; }',
+          '.scratchpadVistaPreviaTitulo--h1 { color: red; }',
+          '.scratchpadVistaPreviaTitulo--h4 { color: red; }',
+          '.scratchpadVistaPreviaChecklist { color: red; }',
+          '.scratchpadVistaPreviaMuerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/useScratchpad.ts': {
+        languageId: 'typescript',
+        content: [
+          'export function renderizar(texto: string) {',
+          '  let html = \'\';',
+          '  const m = /^(#{1,6})\\s+(.*)/.exec(texto);',
+          '  if (m) {',
+          '    const nivel = m[1].length;',
+          '    html += `<h${nivel} class="scratchpadVistaPreviaTitulo scratchpadVistaPreviaTitulo--h${nivel}">${m[2]}</h${nivel}>`;',
+          '  } else {',
+          '    html += `<li><span class="scratchpadVistaPreviaChecklist">${marcado}</span> x</li>`;',
+          '  }',
+          '  return html;',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    /* `scratchpadVistaPreviaTitulo` (segmento estático), la familia
+     * `--h` (h1/h4) y `scratchpadVistaPreviaChecklist` en uso; la muerta
+     * real se reporta. */
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'scratchpadVistaPreviaMuerto');
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'scratchpadVistaPreviaTitulo'), false);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre.startsWith('scratchpadVistaPreviaTitulo--h')), false);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'scratchpadVistaPreviaChecklist'), false);
+  });
+
+  /* [318A-7V22][M1] Mapa/objeto literal Record<Tipo, string> cuyos valores son
+   * clases, indexado por subíndice dentro de un atributo de clase
+   * (PanelRecordatorios.tsx:19-21/91: `CLASES_FUENTE: Record<..., string> = {
+   * pequeno: 'recordatoriosTexto--pequeno', normal: '', grande:
+   * 'recordatoriosTexto--grande' }` usado como
+   * `className={\`recordatoriosTexto ${CLASES_FUENTE[config.tamanoFuente]}\`}`).
+   * Los valores del Record son todos alcanzables en runtime por la clave
+   * tipada; una clase realmente muerta sigue reportada. */
+  test('record map values indexed by subscript in a class attribute are used', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.recordatoriosTexto { color: red; }',
+          '.recordatoriosTexto--pequeno { color: red; }',
+          '.recordatoriosTexto--grande { color: red; }',
+          '.recordatoriosTextoMuerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/PanelRecordatorios.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          "type TamanoFuenteRecordatorio = 'pequeno' | 'normal' | 'grande';",
+          'const CLASES_FUENTE: Record<TamanoFuenteRecordatorio, string> = {',
+          "  pequeno: 'recordatoriosTexto--pequeno',",
+          "  normal: '',",
+          "  grande: 'recordatoriosTexto--grande'",
+          '};',
+          'export function Panel({ config }: any) {',
+          '  return (',
+          '    <div className={`recordatoriosTexto ${CLASES_FUENTE[config.tamanoFuente]}`}>x</div>',
+          '  );',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'recordatoriosTextoMuerto');
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'recordatoriosTexto--pequeno'), false);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'recordatoriosTexto--grande'), false);
+  });
+
+  /* [318A-7V22][M2] Template ternario que interpola una variable local ya
+   * declarada con valor de clase (ItemNotificacion.tsx:77): `const claseBase =
+   * 'itemNotificacion'; const claseLeida = notificacion.leida ? \`${claseBase}
+   * --leida\` : '';` consumido en un className. La clase compuesta
+   * `itemNotificacion--leida` es real en runtime y no debe reportarse;
+   * una clase realmente muerta sí. */
+  test('template interpolating a local class variable in a declaration is composed', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.itemNotificacion { color: red; }',
+          '.itemNotificacion--leida { color: gray; }',
+          '.itemNotificacion--muerta { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/ItemNotificacion.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'export function Item({ notificacion }: any) {',
+          "  const claseBase = 'itemNotificacion';",
+          "  const claseLeida = notificacion.leida ? `${claseBase}--leida` : '';",
+          '  return (',
+          '    <div className={`${claseBase} ${claseLeida}`}>x</div>',
+          '  );',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'itemNotificacion--muerta');
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'itemNotificacion--leida'), false);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'itemNotificacion'), false);
+  });
+
+  /* [318A-7V22][M3] Flecha auto-invocada (IIFE) con returns literales
+   * asignada a una variable portadora que luego se interpola en un className
+   * (FilaSubHabito.tsx:51-55/187): los sufijos
+   * `barraRellenoCompletado/UrgenteCritico/Urgente/Advertencia` son clases
+   * reales del runtime y no deben reportarse; una clase realmente muerta sí.
+   * Una flecha componente NO auto-invocada NO debe resolver sus returns JSX
+   * (guard anti-FN del helper). */
+  test('iife arrow returns of class literals assigned to a carrier variable are used', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.barraRellenoNueva { color: red; }',
+          '.barraRellenoCompletado { color: green; }',
+          '.barraRellenoUrgenteCritico { color: orange; }',
+          '.barraRellenoUrgente { color: yellow; }',
+          '.barraRellenoAdvertencia { color: pink; }',
+          '.barraRellenoMuerta { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/FilaSubHabito.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'export function Fila({ completadoHoy, porcentajeUrgencia, esUrgente }: any) {',
+          '  const claseUrgencia = (() => {',
+          "    if (completadoHoy) return 'barraRellenoCompletado';",
+          "    if (porcentajeUrgencia >= 80) return 'barraRellenoUrgenteCritico';",
+          "    if (esUrgente) return 'barraRellenoUrgente';",
+          "    if (porcentajeUrgencia >= 40) return 'barraRellenoAdvertencia';",
+          "    return '';",
+          '  })();',
+          '  return (',
+          '    <div className={`barraRellenoNueva ${claseUrgencia}`}>x</div>',
+          '  );',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'barraRellenoMuerta');
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'barraRellenoCompletado'), false);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'barraRellenoUrgenteCritico'), false);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'barraRellenoUrgente'), false);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'barraRellenoAdvertencia'), false);
+  });
+
+  /* [318A-7V22][M5] Un regex literal con comillas o backticks
+   * (`/[&<>"]/g`, `/`([^`]+)`/g`) NO debe corromper el estado de strings:
+   * removeComments sin estado regex trataba la comilla interna como apertura
+   * y todo el texto posterior quedaba "dentro de string", haciendo que los
+   * `html +=` con clases reales se saltaran por isCodeMatch
+   * (useScratchpad.ts:28/41 en PT, scratchpadVistaPrevia* seguían huérfanas).
+   * Aquí el archivo tiene helpers con regex de comillas ANTES de la
+   * construcción HTML; la clase runtime debe resolverse igual. */
+  test('regex literals containing quotes do not corrupt string state (html += after)', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: [
+          '.scratchpadVistaPreviaTitulo { color: red; }',
+          '.scratchpadVistaPreviaTitulo--h4 { color: green; }',
+          '.scratchpadVistaPreviaTitulo--h5 { color: blue; }',
+          '.scratchpadVistaPreviaChecklist { color: orange; }',
+          '.scratchpadVistaPreviaMuerto { color: purple; }',
+        ].join('\n'),
+      },
+      '/workspace/src/renderizar.ts': {
+        languageId: 'typescript',
+        content: [
+          'const escaparHtml = (s: string) => s.replace(/[&<>"]/g, (c: string) => c);',
+          "const formatear = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>');",
+          'const renderizar = (texto: string): string => {',
+          '  const lineas = texto.split(\'\\n\');',
+          '  let html = \'\';',
+          '  lineas.forEach((linea) => {',
+          '    const m = /^(#{1,6})\\s+(.*)/.exec(linea);',
+          '    if (m) {',
+          '      const nivel = m[1].length;',
+          '      const contenido = formatear(escaparHtml(m[2] || \'\'));',
+          '      html += `<h${nivel} class="scratchpadVistaPreviaTitulo scratchpadVistaPreviaTitulo--h${nivel}">${contenido}</h${nivel}>`;',
+          '      return;',
+          '    }',
+          '    const c = /^-\\s\\[( |x|X)\\]\\s+(.*)/.exec(linea);',
+          '    if (c) {',
+          '      const marcado = c[1].toLowerCase() === \'x\' ? \'[x]\' : \'[ ]\';',
+          '      const contenido = formatear(escaparHtml(c[2] || \'\'));',
+          '      html += `<li><span class="scratchpadVistaPreviaChecklist">${marcado}</span> ${contenido}</li>`;',
+          '    }',
+          '  });',
+          '  return html;',
+          '};',
+          'export default renderizar;',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'scratchpadVistaPreviaMuerto');
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'scratchpadVistaPreviaTitulo'), false);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'scratchpadVistaPreviaTitulo--h4'), false);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'scratchpadVistaPreviaTitulo--h5'), false);
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'scratchpadVistaPreviaChecklist'), false);
+  });
 });

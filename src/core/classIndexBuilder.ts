@@ -131,7 +131,14 @@ function estadoScanning(source: string, indice: number): { profundidad: number; 
 }
 
 function escanearDeclaraciones(source: string): Array<{ nombre: string; valor: string; indice: number }> {
-    const REGEX_INICIO = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g;
+    /* [318A-7V22][M1] Admite anotación de tipo TS entre el nombre y el '=':
+     * `const CLASES_FUENTE: Record<TamanoFuenteRecordatorio, string> = { ... }`
+     * (PanelRecordatorios.tsx:19). La anotación típica (Record<...>, tipo
+     * simple) no contiene '=' suelto; el grupo opcional se detiene en el '='
+     * de asignación. Un arrow type como anotación (`const f: (a)=>b = ...`,
+     * rarísimo en const de componentes) no casa y esa declaración se ignora,
+     * igual que antes (sin regresión). */
+    const REGEX_INICIO = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*(?:[^=;{}]|=(?!>))*?)?\s*=/g;
     const resultados: Array<{ nombre: string; valor: string; indice: number }> = [];
     let inicio: RegExpExecArray | null;
     while ((inicio = REGEX_INICIO.exec(source)) !== null) {
@@ -169,6 +176,163 @@ function escanearDeclaraciones(source: string): Array<{ nombre: string; valor: s
     }
     return resultados;
 }
+/* [318A-7V22][M1] Extrae los valores con forma de clase de un objeto literal
+ * (mapa Record<Tipo,string>): `{ pequeno: 'a--p', normal: '', grande: 'a--g' }`
+ * devuelve ['a--p', 'a--g']. Escanea miembros de nivel superior (clave: valor)
+ * por pares de comillas; ignora objetos anidados y strings vacíos (no clase).
+ * No resuelve indentificadores: un valor `clave: otraVariable` no aporta
+ * literal y queda fuera (retener > arriesgar FN). */
+function extraerValoresDeMapaClase(valor: string): string[] {
+    const valores: string[] = [];
+    const cuerpo = valor.trim().replace(/^\{/, '').replace(/\}\s*$/, '');
+    /* Miembro `clave: 'valor'` o `'clave': 'valor'` con comillas simples o
+     * dobles; el valor se captura sin escapar (solo comillas sin backslash). */
+    const reMiembro = /(?:^|[,{])\s*(?:[A-Za-z_$][\w$]*|'[^']*'|"[^"]*")\s*:\s*(['"])((?:[^'"]|\\.)*?)\1/g;
+    let match: RegExpExecArray | null;
+    while ((match = reMiembro.exec(cuerpo)) !== null) {
+        valores.push(match[2]);
+    }
+    return valores;
+}
+
+/* [318A-7V22][M2] Compone los tokens de templates que interpolan variables
+ * locales ya declaradas con valor de clase: `const claseBase =
+ * 'itemNotificacion'; const claseLeida = notif.leida ? \`${claseBase}--leida\`
+ * : ''` (ItemNotificacion.tsx:77). En runtime el template concatena el
+ * literal de la variable con el segmento estático pegado → `itemNotificacion--
+ * leida`. addClassTokens no compone (descarta el `${ident}` por no ser
+ * literal); aquí, si TODAS las interpolaciones del template son identificadores
+ * puros con set en `variables`, se genera el producto acotado segmento +
+ * token + segmento. Guard: el token compuesto debe tener FORMA de clase (BEM
+ * `--`, CamelCase/dígito); una palabra minúscula (prosa: `archivo${x}s`) no
+ * pasa, reteniendo el contrato de no inventar familias. */
+function resolverTemplatesDeVariables(
+    valor: string,
+    variables: Map<string, Set<string>>,
+    destino: Set<string>
+): void {
+    for (const literal of extraerLiterales(valor)) {
+        if (!literal.includes('${')) {
+            continue;
+        }
+        const { segmentos, expresiones } = descomponerTemplate(literal);
+        if (expresiones.length === 0) {
+            continue;
+        }
+        const conjuntos: Array<Set<string>> = [];
+        let combinaciones = 1;
+        let resoluble = true;
+        for (const expr of expresiones) {
+            const ident = expr.trim();
+            if (!/^[A-Za-z_$][\w$]*$/.test(ident)) {
+                resoluble = false;
+                break;
+            }
+            const conjunto = variables.get(ident);
+            if (!conjunto || conjunto.size === 0) {
+                resoluble = false;
+                break;
+            }
+            conjuntos.push(conjunto);
+            combinaciones *= conjunto.size;
+            if (combinaciones > 64) {
+                resoluble = false;
+                break;
+            }
+        }
+        if (!resoluble || conjuntos.length !== expresiones.length) {
+            continue;
+        }
+        /* Producto cartesiano acotado: segmento_0 · token_0 · segmento_1 ·
+         * token_1 · ... · segmento_n. */
+        let resultados = [''] as string[];
+        for (let e = 0; e < expresiones.length; e++) {
+            const siguientes: string[] = [];
+            for (const base of resultados) {
+                for (const token of conjuntos[e]) {
+                    siguientes.push(base + token + segmentos[e + 1]);
+                }
+            }
+            /* El primer segmento (antes de la primera interpolación) se aplica
+             * al inicio. */
+            if (e === 0) {
+                resultados = siguientes.map(s => segmentos[0] + s);
+            } else {
+                resultados = siguientes;
+            }
+        }
+        for (const compuesto of resultados) {
+            if (compuesto.length > 1 && /^[a-zA-Z_][\w-]*$/.test(compuesto)) {
+                destino.add(compuesto);
+            }
+        }
+    }
+}
+
+/* [318A-7V22][M3] Literales de return de una flecha AUTO-INVOCADA (IIFE) con
+ * cuerpo de bloque, asignada a una variable portadora que luego se interpola
+ * en un className:
+ * `const claseUrgencia = (() => { if (x) return 'barraRellenoCompletado'; if
+ * (p >= 80) return 'barraRellenoUrgenteCritico'; ... return ''; })();`
+ * (FilaSubHabito.tsx:51-55). Cada `return <literal>` es una clase real que el
+ * runtime aplica sobre la base. Sin resolver, los sufijos
+ * `barraRellenoCompletado/UrgenteCritico/Urgente/Advertencia` se reportan
+ * huérfanos (el valor no es string/ternario/array/objeto, así que
+ * recopilarDeclaraciones no registra nada).
+ * Guard anti-FN: solo se procesan flechas auto-invocadas (`})()` tras el
+ * cierre del cuerpo). Una flecha NO invocada (`const C = (p) => { return
+ * <div className="x"/>; }`) tiene returns JSX y no produce un string de
+ * clases en runtime; si se incluyera, `x` del JSX entraría al set de una
+ * variable y podría tapar una clase muerta por indirección. */
+function extraerReturnsDeIIFE(valor: string, tokens: Set<string>, familyPrefixes?: Set<string>): void {
+    const reArrow = /=>\s*\{/g;
+    let match: RegExpExecArray | null;
+    while ((match = reArrow.exec(valor)) !== null) {
+        const indiceCuerpo = match.index + match[0].length - 1;
+        let profundidad = 0;
+        let quote = '';
+        let cierre = -1;
+        for (let cursor = indiceCuerpo; cursor < valor.length; cursor++) {
+            const c = valor[cursor];
+            if (quote) {
+                if (c === '\\') {cursor++; continue;}
+                if (c === quote) {quote = '';}
+                continue;
+            }
+            if (c === '"' || c === "'" || c === '`') {quote = c; continue;}
+            if (c === '{') {profundidad++;}
+            else if (c === '}') {
+                profundidad--;
+                if (profundidad === 0) {cierre = cursor; break;}
+            }
+        }
+        if (cierre < 0) {
+            continue;
+        }
+        const restoTrasCierre = valor.slice(cierre + 1);
+        if (!/^\s*\)\s*\(\s*\)/.test(restoTrasCierre)) {
+            reArrow.lastIndex = cierre + 1;
+            continue;
+        }
+        const cuerpo = valor.slice(indiceCuerpo + 1, cierre);
+        const reReturn = /\breturn\b/g;
+        let ret: RegExpExecArray | null;
+        while ((ret = reReturn.exec(cuerpo)) !== null) {
+            const resto = cuerpo.slice(reReturn.lastIndex);
+            const literales = extraerLiterales(resto);
+            if (literales.length > 0) {
+                addClassTokens(literales[0], tokens, familyPrefixes);
+            }
+            const finStatement = resto.indexOf(';');
+            if (finStatement < 0) {
+                break;
+            }
+            reReturn.lastIndex = reReturn.lastIndex + finStatement + 1;
+        }
+        reArrow.lastIndex = cierre + 1;
+    }
+}
+
 /* [318A-7V5] Extracción de literales por pares de comillas. El regex de
  * agrupación anterior (['"`]([^'"`$]+)['"`]) falla con literales vacíos
  * seguidos de más texto: `: ''\n , estaX ? 'claseReal'` toma la comilla de
@@ -478,6 +642,20 @@ function addTemplateClassTokens(value: string, variables: Map<string, Set<string
                 }
             }
         }
+        /* [318A-7V22][M1] Subíndice sobre un mapa de clases dentro de un
+         * atributo de clase: `CLASES_FUENTE[config.tamanoFuente]`
+         * (PanelRecordatorios.tsx:91). Todas las claves del Record son
+         * alcanzables en runtime (la variable es el mapa completo), así que
+         * el subíndice resuelve el set de la variable igual que un ident. */
+        const subindice = /^([A-Za-z_$][\w$]*)\s*\[[^\]]+\]$/.exec(trimmed);
+        if (subindice) {
+            const resueltoMapa = variables.get(subindice[1]);
+            if (resueltoMapa) {
+                for (const token of resueltoMapa) {
+                    tokens.add(token);
+                }
+            }
+        }
         for (const literal of extraerLiterales(body)) {
             addClassTokens(literal, tokens, familyPrefixes, contextoAttr);
         }
@@ -586,7 +764,43 @@ function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): M
             addQuotedClassTokens(valor, tokensVariable, familyPrefixes);
         } else if (valor.startsWith('[')) {
             addQuotedClassTokens(valor, tokensVariable, familyPrefixes);
+        } else if (valor.trim().startsWith('{')) {
+            /* [318A-7V22][M1] Mapa/objeto literal de clases: una variable
+             * tipada como Record<Tipo, string> cuyos valores son clases
+             * (PanelRecordatorios.tsx:19 `CLASES_FUENTE:
+             * Record<TamanoFuenteRecordatorio, string> = { pequeno:
+             * 'recordatoriosTexto--pequeno', normal: '', grande:
+             * 'recordatoriosTexto--grande' }` indexado en :91 por
+             * `CLASES_FUENTE[config.tamanoFuente]`). Se registra la variable
+             * con TODOS sus valores con forma de clase; el subíndice
+             * M[clave] en un atributo de clase resuelve el set completo
+             * (todas las claves del Record son alcanzables en runtime). Los
+             * valores vacíos ('') se ignoran (no son clase). */
+            for (const valorClase of extraerValoresDeMapaClase(valor)) {
+                if (valorClase.length > 1 && /^[a-zA-Z_][\w-]*$/.test(valorClase)) {
+                    tokensVariable.add(valorClase);
+                }
+            }
+        } else if (/^\s*\(\s*\(?\s*\)?\s*=>\s*\{/.test(valor)) {
+            /* [318A-7V22][M3] IIFE flecha auto-invocada asignada a una
+             * variable portadora (FilaSubHabito.tsx:51: `const claseUrgencia =
+             * (() => { if (...) return 'barraRellenoCompletado'; ... })();`).
+             * Sus `return <literal>` son las clases que el runtime aplica;
+             * se registran en el set para la vía className={ident} /
+             * interpolation. Solo flechas auto-invocadas (ver guard en el
+             * helper): una flecha componente NO invocada no produce un
+             * string de clases. */
+            extraerReturnsDeIIFE(valor, tokensVariable, familyPrefixes);
         }
+        /* [318A-7V22][M2] Templates que interpolan variables locales ya
+         * declaradas: `const claseLeida = notif.leida ? \`${claseBase}--leida\`
+         * : ''` con `const claseBase = 'itemNotificacion'`
+         * (ItemNotificacion.tsx:77). El template compone literal + token en
+         * runtime; se resuelve contra el set ya recopilado de la variable
+         * interpolada (orden de declaración garantiza que la base precede a
+         * su consumidora). Sin resolver, el set de claseLeida queda sin la
+         * clase compuesta y `itemNotificacion--leida` se reporta huérfana. */
+        resolverTemplatesDeVariables(valor, variables, tokensVariable);
         if (tokensVariable.size > 0) {
             variables.set(nombre, tokensVariable);
         }
@@ -822,7 +1036,23 @@ function removeComments(texto: string): string {
     let quote = '';
     let escaped = false;
     let comment = '';
-
+    let regex = false;
+    let inClass = false;
+    let prevSig = '';
+    /* [318A-7V22][M5] Un regex literal puede contener comillas o backticks
+     * (`/[&<>"]/g`, `/`([^`]+)`/g` en useScratchpad.ts de PT): sin estado
+     * regex, removeComments trataba esa comilla como apertura de string y
+     * TODO el texto posterior del archivo quedaba "dentro de string" →
+     * escanearDeclaraciones/escanearAsignacionesCompuestas saltaban los
+     * `html +=` con clases reales (scratchpadVistaPrevia* seguían huérfanas)
+     * por isCodeMatch. Aquí se reconoce un regex literal cuando el '/' NO va
+     * precedido de algo que lo haga división (identificador, número, cierre
+     * de bloque/llamada) y se consume hasta su '/' de cierre sin tratar las
+     * comillas/backticks internas como strings (excepto dentro de [clase]).
+     * El cuerpo del regex se conserva en la salida (es código, no comentario)
+     * para no alterar índices: solo se evita que sus comillas abran string.
+     * prevSig es el último carácter significativo (no-whitespace): con
+     * espacios, `width / 2` sigue siendo división (prevSig='h') y no regex. */
     for (let index = 0; index < texto.length; index++) {
         const current = texto[index];
         const next = texto[index + 1] ?? '';
@@ -842,11 +1072,39 @@ function removeComments(texto: string): string {
             continue;
         }
 
+        if (regex) {
+            /* Dentro de un regex literal: comillas/backticks NO abren string.
+             * Se neutralizan EN LA SALIDA (emitidas como espacio, misma
+             * longitud) para que los escáneres posteriores tampoco las vean
+             * como apertura: `isInsideString`/`escanearAsignacionesCompuestas`
+             * no conocen el estado regex y una comilla interna (`/[&<>"]/g`,
+             * `/`([^`]+)`/g`) corrompía TODO el texto posterior del archivo
+             * (los `html +=` con clases reales quedaban "dentro de string"). */
+            result += (current === '"' || current === "'" || current === '`') ? ' ' : current;
+            if (escaped) {
+                escaped = false;
+            } else if (current === '\\') {
+                escaped = true;
+            } else if (current === '[') {
+                inClass = true;
+            } else if (current === ']') {
+                inClass = false;
+            } else if (current === '/' && !inClass) {
+                regex = false;
+            }
+            continue;
+        }
+
         if (quote) {
             result += current;
-            if (escaped) {escaped = false;}
-            else if (current === '\\\\') {escaped = true;}
-            else if (current === quote) {quote = '';}
+            if (escaped) {
+                escaped = false;
+            } else if (current === '\\') {
+                escaped = true;
+            } else if (current === quote) {
+                quote = '';
+                prevSig = current;
+            }
             continue;
         }
 
@@ -862,8 +1120,36 @@ function removeComments(texto: string): string {
             comment = 'block';
             continue;
         }
-        if (current === '"' || current === "'" || current === '`') {quote = current;}
+        /* [318A-7V22][M5] Inicio de regex literal SOLO tras un carácter que en
+         * la práctica precede a un regex (whitelist): apertura de llamada/
+         * array/objeto, asignación, coma, dos puntos, operadores. Un blacklist
+         * era insuficiente: en TSX real el '/' de self-closing `<Tag "x" />`
+         * va tras una comilla de cierre y disparaba un falso regex que se
+         * tragaba el resto del archivo (medición PT 156→419). NUNCA es regex
+         * tras cierre de string/comilla (`"foo" / 2` = división), `) ] }`,
+         * identificador, número, `<` (cierre etiqueta JSX) ni `>`. */
+        if (current === '/' && /[=(,:;!?&|[+*%~^{]/.test(prevSig)) {
+            /* Se consume hasta el cierre sin abrir strings por comillas
+             * internas; las comillas/backticks del interior se neutralizan en
+             * la salida (emitidas como espacio, misma longitud) para que los
+             * escáneres posteriores tampoco las vean como apertura
+             * (`isInsideString`/`escanearAsignacionesCompuestas` no conocen el
+             * estado regex: `/[&<>"]/g` y `/`([^`]+)`/g` corrompían TODO el
+             * texto posterior del archivo, dejando los `html +=` con clases
+             * reales "dentro de string"). */
+            regex = true;
+            inClass = false;
+            escaped = false;
+            result += current;
+            continue;
+        }
+        if (current === '"' || current === "'" || current === '`') {
+            quote = current;
+        }
         result += current;
+        if (!/\s/.test(current)) {
+            prevSig = current;
+        }
     }
     return result;
 }
@@ -1020,6 +1306,58 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
             continue;
         }
         addQuotedClassTokens(push.valor, tokens, familyPrefixes);
+    }
+
+    /* [318A-7V22][M4] Construcción de HTML en runtime: templates que
+     * ensamblan markup (`html += '<h${n} class="...">...'`, innerHTML,
+     * createElement con html). El literal `class="..."` dentro de un template
+     * ES una cadena de clases por construcción, aunque no sea un atributo de
+     * componente React. Cubre (useScratchpad.ts:82/94 de PT):
+     *   `<h${nivel} class="scratchpadVistaPreviaTitulo scratchpadVistaPreviaTitulo--h${nivel}">`
+     *   `<li><span class="scratchpadVistaPreviaChecklist">${marcado}</span>`
+     * El segmento estático se tokeniza entero (base + clase literal), y la
+     * familia pegada a la interpolación (--h) la registra registrarPrefijosFamilia
+     * con contextoAttr=true (forma de clase válida). El HTML se suele acumular
+     * con `html +=` (asignación compuesta) o declararse en `const x =`; se
+     * recorren ambas vías. */
+    for (const declaracion of escanearDeclaraciones(source)) {
+        if (!isCodeMatch(source, declaracion.indice)) {continue;}
+        const previo = previousCodeCharacter(source, declaracion.indice);
+        if (previo && /[\w'"`]/.test(previo)) {continue;}
+        resolverConstruccionHtml(declaracion.valor, tokens, familyPrefixes);
+    }
+    for (const compuesto of escanearAsignacionesCompuestas(source)) {
+        if (!isCodeMatch(source, compuesto.indice)) {continue;}
+        resolverConstruccionHtml(compuesto.valor, tokens, familyPrefixes);
+    }
+}
+
+/* [318A-7V22][M4] Extrae las clases de los atributos `class="..."` literales
+ * dentro de un valor que construye HTML (template con `<tag` o asignación a
+ * innerHTML/html). Solo procesa si el valor parece contener markup HTML; una
+ * cadena de clases plana ya la cubre addDeclarationClassTokens (vía carriers). */
+function resolverConstruccionHtml(valor: string, tokens: Set<string>, familyPrefixes?: Set<string>): void {
+    /* Guard rápido: sin '<' no hay construcción de HTML. */
+    if (!valor.includes('<')) {
+        return;
+    }
+    /* Atributos class="..." (o class='...') con contenido no vacío. */
+    const reAttr = /\bclass\s*=\s*(["'])([\s\S]*?)\1/g;
+    let match: RegExpExecArray | null;
+    while ((match = reAttr.exec(valor)) !== null) {
+        const contenido = match[2];
+        if (!contenido.includes('${')) {
+            /* Clase literal completa: tokenizar por espacios. */
+            for (const clase of contenido.split(/\s+/)) {
+                if (clase.length > 1 && /^[a-zA-Z_][\w-]*$/.test(clase)) {
+                    tokens.add(clase);
+                }
+            }
+            continue;
+        }
+        /* Contenido con interpolación: descomponer el template para tokenizar
+         * segmentos estáticos y registrar familias pegadas. */
+        addClassTokens(contenido, tokens, familyPrefixes, true);
     }
 }
 
