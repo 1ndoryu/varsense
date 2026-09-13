@@ -1,5 +1,5 @@
 import { CssVariable, VariableIndex } from '@/types';
-import { parsearDefiniciones } from '@/parsers/cssParser';
+import { parsearDefiniciones, parsearDefinicionesRuntime } from '@/parsers/cssParser';
 import { CancellationToken, DocumentProvider, throwIfCancelled, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
 import { PersistentIndexStore, sha256File } from './persistentIndex';
 
@@ -93,6 +93,36 @@ export class VariableIndexBuilder {
         for (const variable of variables) {
             if (!indice.has(variable.nombre)) {
                 indice.set(variable.nombre, variable);
+            }
+        }
+    }
+
+    /* [318A-7V24] Indexa definiciones de variables en runtime
+     * (`setProperty('--x', ...)`) de archivos script. Sin caché persistente
+     * por diseño: es un regex barato sobre archivos que el análisis abre de
+     * todos modos, y evita contaminar las entradas `variables` del store
+     * (claveadas por variableFiles). No duplica nombres ya definidos en CSS. */
+    public async agregarDefinicionesRuntime(
+        files: WorkspaceFile[],
+        indice: Map<string, CssVariable>,
+        variablesPorArchivo: Map<string, CssVariable[]>,
+        token?: CancellationToken
+    ): Promise<void> {
+        const scripts = files.filter(file => /\.(ts|tsx|jsx|js|mjs|cjs)$/.test(file.fsPath));
+        for (const file of scripts) {
+            throwIfCancelled(token);
+            const document = await this.documentProvider.openTextDocument(file);
+            throwIfCancelled(token);
+            const runtime = parsearDefinicionesRuntime(document);
+            if (runtime.length === 0) {
+                continue;
+            }
+            const previas = variablesPorArchivo.get(file.fsPath) ?? [];
+            variablesPorArchivo.set(file.fsPath, [...previas, ...runtime]);
+            for (const variable of runtime) {
+                if (!indice.has(variable.nombre)) {
+                    indice.set(variable.nombre, variable);
+                }
             }
         }
     }

@@ -2,11 +2,13 @@ import * as assert from 'assert';
 import { createCoreDocument, createCoreRange, serializeCoreFindings, CoreFinding } from '../../core/types';
 import { findingToDiagnostic } from '../../core/vscodeAdapter';
 import { parsearDocumento } from '../../parsers/cssParser';
+import { parsearDefinicionesRuntime } from '../../parsers/cssParser';
 import { analyzeVarsenseDocument } from '../../core/analyzeDocument';
 import { buildAnalysisConfig } from '../../core/config';
 import { analyzeTokenRules } from '../../core/tokenRules';
 import { VariableIndexBuilder } from '../../core/variableIndexBuilder';
 import { ClassIndexBuilder } from '../../core/classIndexBuilder';
+import { detectarCarriersMismoArchivo } from '../../core/classIndexBuilder';
 import { NodeWorkspaceFileProvider } from '../../core/nodeProviders';
 import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../core/workspaceProviders';
 import * as fs from 'fs';
@@ -1821,5 +1823,139 @@ suite('VarSense editor-agnostic core contracts', () => {
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'lstMuerta');
+  });
+
+  /* [318A-7V24][T8] setProperty con literal '--x' define la variable en
+   * runtime (GH: panelDerechoAncho.ts, barraLateral.ts...). Comilla simple
+   * y doble valen; nombre dinámico se ignora. */
+  test('parsearDefinicionesRuntime indexa setProperty con nombre literal', () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/panel.ts',
+      fileName: '/workspace/src/panel.ts',
+      languageId: 'typescript',
+      content: [
+        'el.style.setProperty(\'--alto-runtime\', px);',
+        'otro.style.setProperty("--ancho-runtime", "10px");',
+        'tercero.style.setProperty(`--fondo-runtime`, c);',
+        'cuarto.style.setProperty(prefijo + sufijo, v);',
+        'quinto.setPropiedad(\'--no-es-setproperty\', v);',
+      ].join('\n'),
+    });
+
+    const definidas = parsearDefinicionesRuntime(documento).map(variable => variable.nombre);
+
+    assert.deepStrictEqual(definidas, ['--alto-runtime', '--ancho-runtime', '--fondo-runtime']);
+  });
+
+  /* [318A-7V24][T9] El builder agrega definiciones runtime al índice: un
+   * var(--x) cuyo único origen es setProperty no es variableNoDefinida. */
+  test('agregarDefinicionesRuntime elimina variableNoDefinida de origen setProperty', async () => {
+    const archivos = {
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: '.panel { height: var(--alto-runtime); }',
+      },
+      '/workspace/src/panel.ts': {
+        languageId: 'typescript',
+        content: 'export function ajustar(px: string): void { document.body.style.setProperty(\'--alto-runtime\', px); }',
+      },
+    };
+    const provider = new MemoryWorkspaceProvider(archivos);
+    const builder = new VariableIndexBuilder(provider, provider);
+    const construido = await builder.build({ patterns: ['**/*.css'], exclude: [] });
+    await builder.agregarDefinicionesRuntime(
+      [{ uri: 'file:///workspace/src/panel.ts', fsPath: '/workspace/src/panel.ts' }],
+      construido.indice.variables,
+      construido.variablesPorArchivo
+    );
+
+    assert.strictEqual(construido.indice.variables.has('--alto-runtime'), true);
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/estilos.css',
+      fileName: '/workspace/src/estilos.css',
+      languageId: 'css',
+      content: archivos['/workspace/src/estilos.css'].content,
+    });
+    const hallazgos = analyzeVarsenseDocument(documento, construido.indice, buildAnalysisConfig({}));
+
+    assert.deepStrictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'variableNoDefinida'), []);
+  });
+
+  /* [318A-7V24][T6] Carrier cross-file vía setAttribute (patrón icono de GH:
+   * definido en iconos.ts, llamado desde otro módulo). Regresión del divisor
+   * que partía desde la ',' y nunca detectaba el sink. */
+  test('cross-file carrier via setAttribute marks call-site literal as used', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: [
+          '.iconoExtra { color: red; }',
+          '.iconoMuerta { color: purple; }',
+        ].join('\n'),
+      },
+      '/workspace/src/iconos.ts': {
+        languageId: 'typescript',
+        content: [
+          'export function icono(nombre: string, pequeno = false, extraClase = \'\'): string {',
+          '  const svg = document.createElementNS(\'svg\', \'svg\');',
+          '  svg.setAttribute(\'class\', \'ic\' + (extraClase ? \' \' + extraClase : \'\'));',
+          '  return svg.outerHTML;',
+          '}',
+        ].join('\n'),
+      },
+      '/workspace/src/uso.ts': {
+        languageId: 'typescript',
+        content: 'import { icono } from \'./iconos\';\nexport const html = icono(\'flujo\', true, \'iconoExtra\');',
+      },
+    });
+
+    const fuente = [
+      'export function icono(nombre: string, pequeno = false, extraClase = \'\'): string {',
+      '  svg.setAttribute(\'class\', \'ic\' + extraClase);',
+      '}',
+    ].join('\n');
+    assert.deepStrictEqual(
+      [...detectarCarriersMismoArchivo(fuente)].map(([fn, poss]) => [fn, [...poss]]),
+      [['icono', [2]]]
+    );
+
+    const builder = new ClassIndexBuilder(provider, provider);
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'iconoMuerta');
+  });
+
+  /* [318A-7V24][T7] Carrier cross-file vía el(): la unión global cubre sinks
+   * distintos de setAttribute (definición en un módulo, llamada en otro). */
+  test('cross-file carrier via el factory marks call-site literal as used', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: [
+          '.tarjetaViva { color: red; }',
+          '.tarjetaMuerta { color: purple; }',
+        ].join('\n'),
+      },
+      '/workspace/src/fabrica.ts': {
+        languageId: 'typescript',
+        content: [
+          'declare function el(tag: string, cls?: string): unknown;',
+          'export function tarjeta(extra: string): unknown {',
+          '  return el(\'div\', extra);',
+          '}',
+        ].join('\n'),
+      },
+      '/workspace/src/vista.ts': {
+        languageId: 'typescript',
+        content: 'import { tarjeta } from \'./fabrica\';\nexport const nodo = tarjeta(\'tarjetaViva\');',
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'tarjetaMuerta');
   });
 });

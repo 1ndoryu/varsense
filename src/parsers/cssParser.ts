@@ -152,6 +152,39 @@ export class CssParser {
     }
 
     /*
+     * [318A-7V24] Parsea definiciones de variables en runtime: llamadas
+     * `algo.setProperty('--x', valor)` en TS/JS. El primer argumento literal
+     * '--x' define la variable aunque ningún CSS la declare (patrón habitual
+     * en GH: panelDerechoAncho.ts, panelEntrada.ts, barraLateral.ts...).
+     * Solo literales quoted (incluye backtick sin interpolación: el nombre
+     * queda cerrado por el backtick antes de cualquier ${...}); si el nombre
+     * es dinámico no se puede indexar y se ignora. El valor runtime es
+     * desconocido: se registra como '' (no color) para que la definición
+     * exista en el índice.
+     */
+    public parsearDefinicionesRuntime(): CssVariable[] {
+        const variables: CssVariable[] = [];
+        const texto = this._documento.getText();
+        const runtimeDefRegex = /\.setProperty\s*\(\s*(['"`])--([\w-]+)\1/g;
+        let match: RegExpExecArray | null;
+
+        while ((match = runtimeDefRegex.exec(texto)) !== null) {
+            const posicion = positionAtOffset(this._documento, match.index);
+            variables.push({
+                nombre: `--${match[2]}`,
+                valor: '',
+                archivo: this._documento.fileName,
+                linea: posicion.line,
+                columna: posicion.character,
+                esColor: false,
+                frecuenciaUso: 0
+            });
+        }
+
+        return variables;
+    }
+
+    /*
      * Parsea las reglas CSS del documento
      */
     private parsearReglas(): CssRule[] {
@@ -380,6 +413,15 @@ export function parsearDocumento(documento: CoreTextDocument, opciones: CssParse
 export function parsearDefiniciones(documento: CoreTextDocument): CssVariable[] {
     const parser = new CssParser(documento);
     return parser.parsearSoloDefiniciones();
+}
+
+/*
+ * [318A-7V24] Función helper para parsear definiciones de variables en
+ * runtime (setProperty) de un documento script.
+ */
+export function parsearDefinicionesRuntime(documento: CoreTextDocument): CssVariable[] {
+    const parser = new CssParser(documento);
+    return parser.parsearDefinicionesRuntime();
 }
 
 /*

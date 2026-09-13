@@ -1009,11 +1009,14 @@ function escanearReturns(source: string): Array<{ valor: string; indice: number 
  * extraClase ...` + `<svg class="${cls}">` en iconoHtml de iconos.ts:121),
  * o si se reenvía como ident puro a una posición portadora de otra función
  * del archivo (ponerIcono → icono; punto fijo ≤3). Solo literales string en
- * el call-site aportan (un ident/boolean nunca se indexa). Deliberadamente
- * mismo-archivo: un índice cross-file rompería el caché por hash de
- * loadConsumerTokens (la entrada de B dependería del contenido de A); los
- * carriers exportados usados cross-file (marcarCuerpo, icono, ponerIcono de
- * GH) quedan como residual documentado para V24. */
+ * el call-site aportan (un ident/boolean nunca se indexa). La detección de
+ * carriers es mismo-archivo (el cuerpo que prueba el sink está aquí), pero
+ * [318A-7V24] el CRUCE es global: scan() une los carriers de todos los
+ * archivos y marca los literales de call-sites en posiciones portadoras
+ * (marcarCuerpo/icono/ponerIcono de GH definidos en un módulo y llamados
+ * desde otro). Cache-safe: cada entrada persistente solo guarda sus propios
+ * carriers + llamadas (ver extraerCarriersYLlamadas); la unión se computa en
+ * memoria por ejecución. */
 function nombreParametroBase(parametro: string): string | null {
     let actual = parametro.trim().replace(/^\.\.\./, '');
     /* Recorta tipo (`p: string`) y default (`p = 'x'`) a profundidad 0. */
@@ -1058,7 +1061,11 @@ function textosSinkDeCuerpo(cuerpo: string): string[] {
     while ((match = reClassName.exec(source)) !== null) {textos.push(match[1]);}
     const reSetAttr = /setAttribute\s*\(\s*['"]class['"]\s*,/g;
     while ((match = reSetAttr.exec(source)) !== null) {
-        const args = dividirArgumentosLlamada(source, match.index + match[0].length - 1);
+        /* [318A-7V24] El match termina en ',' (no en '(' como reEl/reList):
+         * la apertura es el '(' del match, no length - 1. Antes se dividía
+         * desde la ',' → null siempre → ningún carrier vía setAttribute se
+         * detectaba (icono de GH nunca fue carrier). */
+        const args = dividirArgumentosLlamada(source, match.index + match[0].indexOf('('));
         if (args && args.length >= 2) {textos.push(args[1]);}
     }
     /* Contenido de class="..." en templates del cuerpo (iconoHtml:
@@ -1108,7 +1115,9 @@ function escanearDefinicionesFunciones(source: string): Array<{ nombre: string; 
     return defs;
 }
 
-function detectarCarriersMismoArchivo(source: string): Map<string, Set<number>> {
+/* [318A-7V24] Exportada para tests: la detección de carriers alimenta tanto
+ * el cruce mismo-archivo de extraerTokensDeTexto como la unión cross-file. */
+export function detectarCarriersMismoArchivo(source: string): Map<string, Set<number>> {
     const carriers = new Map<string, Set<number>>();
     const defs = escanearDefinicionesFunciones(source);
     if (defs.length === 0) {return carriers;}
@@ -1167,6 +1176,51 @@ function detectarCarriersMismoArchivo(source: string): Map<string, Set<number>> 
         if (!cambio) {break;}
     }
     return carriers;
+}
+
+/* [318A-7V24] Extrae, para UN archivo, sus carriers (vía
+ * detectarCarriersMismoArchivo) y sus call-sites con literales string:
+ * toda llamada `fn(...)` con argumento literal quoted o template PURO
+ * (sin ${}) se registra como {fn, pos, literal}. Los templates con ${} se
+ * omiten: su valor depende del mapa de variables del archivo definidor y no
+ * son resolubles cross-file sin contexto. Tope 1000 registros/archivo por
+ * diseño (un archivo con más llamadas literales es generado; el exceso se
+ * ignora y queda documentado en el resumen de scan). El cruce (unión global
+ * de carriers × literales en posiciones portadoras) lo hace scan(): así la
+ * entrada en caché de B NO depende del contenido de A y el caché por hash
+ * sigue siendo válido. */
+export interface CarrierCallSite {
+    fn: string;
+    pos: number;
+    literal: string;
+}
+
+export function extraerCarriersYLlamadas(source: string): { carriers: Record<string, number[]>; llamadas: CarrierCallSite[] } {
+    const carriers: Record<string, number[]> = {};
+    for (const [nombre, posiciones] of detectarCarriersMismoArchivo(source)) {
+        carriers[nombre] = [...posiciones];
+    }
+    const llamadas: CarrierCallSite[] = [];
+    const reLlamada = /\b([A-Za-z_$][\w$]*)\s*\(/g;
+    let match: RegExpExecArray | null;
+    while ((match = reLlamada.exec(source)) !== null) {
+        if (llamadas.length >= 1000) {break;}
+        if (!isCodeMatch(source, match.index)) {continue;}
+        const previo = previousCodeCharacter(source, match.index);
+        if (previo === '.' || previo === '$') {continue;}
+        const args = dividirArgumentosLlamada(source, match.index + match[0].length - 1);
+        if (!args) {continue;}
+        for (let pos = 0; pos < args.length; pos++) {
+            const arg = args[pos].trim();
+            if (/^(['"])[\s\S]*\1$/.test(arg) && arg.length >= 2) {
+                llamadas.push({ fn: match[1], pos, literal: arg.slice(1, -1) });
+            } else if (arg.startsWith('`') && arg.endsWith('`') && arg.length >= 2 && !arg.includes('${')) {
+                llamadas.push({ fn: match[1], pos, literal: arg.slice(1, -1) });
+            }
+        }
+        if (llamadas.length >= 1000) {break;}
+    }
+    return { carriers, llamadas };
 }
 
 /* [318A-7V23] Divide los argumentos top-level de una llamada a partir del
@@ -1748,7 +1802,14 @@ function compilarPatronesExcluidos(patterns: string[]): RegExp[] {
  * Gotcha: los adaptadores deciden como abrir archivos; aqui solo se cruzan tokens y selectores. */
 export class ClassIndexBuilder {
     private readonly cssFileCache = new Map<string, ClaseCssDefinida[]>();
-    private readonly consumerFileCache = new Map<string, { tokens: Set<string>; familyPrefixes: Set<string> }>();
+    /* [318A-7V24] carriers propios + call-sites con literales por archivo: el
+     * cruce cross-file (unión global) se computa en scan() en memoria. */
+    private readonly consumerFileCache = new Map<string, {
+        tokens: Set<string>;
+        familyPrefixes: Set<string>;
+        carriers: Map<string, Set<number>>;
+        llamadas: CarrierCallSite[];
+    }>();
 
     constructor(
         private readonly fileProvider: WorkspaceFileProvider,
@@ -1793,11 +1854,36 @@ export class ClassIndexBuilder {
 
         throwIfCancelled(options.token);
         onProgress?.('Extrayendo tokens de consumidores', 0, 1);
-        const { filesTokens, filesFamilyPrefixes, totalArchivos: archivosConsumo } = await this.extractConsumerTokens(
+        const { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, totalArchivos: archivosConsumo } = await this.extractConsumerTokens(
             consumerPatterns,
             options.exclude,
             options.token
         );
+        /* [318A-7V24] Unión global de carriers: fn → posiciones portadoras en
+         * CUALQUIER archivo (la definición vive en un módulo y la llamada en
+         * otro). Los literales de call-sites en esas posiciones son clases que
+         * el runtime aplica: literal → archivos donde se llama. */
+        const carriersUnion = new Map<string, Set<number>>();
+        for (const carriers of filesCarriers.values()) {
+            for (const [fn, posiciones] of carriers) {
+                const union = carriersUnion.get(fn) ?? new Set<number>();
+                for (const pos of posiciones) {union.add(pos);}
+                carriersUnion.set(fn, union);
+            }
+        }
+        const llamadasCrossCarrier = new Map<string, Set<string>>();
+        for (const [fsPath, llamadas] of filesLlamadas) {
+            for (const { fn, pos, literal } of llamadas) {
+                if (!carriersUnion.get(fn)?.has(pos)) {continue;}
+                for (const clase of literal.split(/\s+/)) {
+                    if (clase.length > 1 && /^[a-zA-Z_][\w-]*$/.test(clase)) {
+                        const archivos = llamadasCrossCarrier.get(clase) ?? new Set<string>();
+                        archivos.add(fsPath);
+                        llamadasCrossCarrier.set(clase, archivos);
+                    }
+                }
+            }
+        }
 
         throwIfCancelled(options.token);
         const regexExcluidos = compilarPatronesExcluidos(options.excludedClassPatterns ?? []);
@@ -1850,6 +1936,21 @@ export class ClassIndexBuilder {
                 }
                 if (usado) {
                     break;
+                }
+            }
+            /* [318A-7V24] Uso por carrier cross-file (ver construcción de
+             * llamadasCrossCarrier arriba): el literal se llamó en una
+             * posición portadora. Aplica fuera del archivo de definición
+             * (un call-site en el mismo CSS no es uso, igual que V3). */
+            if (!usado) {
+                const archivosLlamada = llamadasCrossCarrier.get(nombre);
+                if (archivosLlamada) {
+                    for (const archivo of archivosLlamada) {
+                        if (!definicion.has(archivo)) {
+                            usado = true;
+                            break;
+                        }
+                    }
                 }
             }
 
@@ -1930,10 +2031,18 @@ export class ClassIndexBuilder {
         patterns: string[],
         exclude: string[],
         token?: CancellationToken
-    ): Promise<{ filesTokens: Map<string, Set<string>>; filesFamilyPrefixes: Map<string, Set<string>>; totalArchivos: number }> {
+    ): Promise<{
+        filesTokens: Map<string, Set<string>>;
+        filesFamilyPrefixes: Map<string, Set<string>>;
+        filesCarriers: Map<string, Map<string, Set<number>>>;
+        filesLlamadas: Map<string, CarrierCallSite[]>;
+        totalArchivos: number;
+    }> {
         const files = await this.findUniqueFiles(patterns, exclude, token);
         const filesTokens = new Map<string, Set<string>>();
         const filesFamilyPrefixes = new Map<string, Set<string>>();
+        const filesCarriers = new Map<string, Map<string, Set<number>>>();
+        const filesLlamadas = new Map<string, CarrierCallSite[]>();
         let totalTokens = 0;
         for (const fsPath of this.consumerFileCache.keys()) {
             if (!files.has(fsPath)) {
@@ -1957,6 +2066,8 @@ export class ClassIndexBuilder {
                 }
                 filesTokens.set(file.fsPath, cached.tokens);
                 filesFamilyPrefixes.set(file.fsPath, cached.familyPrefixes);
+                filesCarriers.set(file.fsPath, cached.carriers);
+                filesLlamadas.set(file.fsPath, cached.llamadas);
                 totalTokens += cached.tokens.size;
             } catch (error) {
                 if (error instanceof CancellationError) {
@@ -1966,7 +2077,7 @@ export class ClassIndexBuilder {
             }
         }
 
-        return { filesTokens, filesFamilyPrefixes, totalArchivos: files.size };
+        return { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, totalArchivos: files.size };
     }
 
     /* [028A-8] Carga las definiciones CSS de un archivo reutilizando el índice
@@ -2004,28 +2115,51 @@ export class ClassIndexBuilder {
     }
 
     /* [028A-8] Ídem para tokens de consumo: store-first, reutiliza la entrada
-     * persistente cuando el hash coincide y registra la nueva al cambiar. */
-    private async loadConsumerTokens(file: WorkspaceFile, token?: CancellationToken): Promise<{ tokens: Set<string>; familyPrefixes: Set<string> }> {
+     * persistente cuando el hash coincide y registra la nueva al cambiar.
+     * [318A-7V24] Además persiste carriers + llamadas con literales (mismo
+     * criterio V14: entrada vieja sin los campos se re-parsea). Solo archivos
+     * script aportan carriers/llamadas (los carriers son un idioma JS/TS). */
+    private async loadConsumerTokens(file: WorkspaceFile, token?: CancellationToken): Promise<{
+        tokens: Set<string>;
+        familyPrefixes: Set<string>;
+        carriers: Map<string, Set<number>>;
+        llamadas: CarrierCallSite[];
+    }> {
         const hash = this.persistentStore ? await sha256File(file.fsPath) : null;
         const store = this.persistentStore;
         const stored = hash ? store?.getEntry(file.fsPath) : undefined;
         /* [318A-7V14] La familia se exige persistida: una entrada vieja (sin
          * consumerFamilyPrefixes) se re-parsea aunque el hash coincida. */
-        if (stored?.hash === hash && stored.consumerTokens && stored.consumerFamilyPrefixes) {
+        if (stored?.hash === hash && stored.consumerTokens && stored.consumerFamilyPrefixes
+            && stored.consumerCarriers && stored.consumerCarrierCalls) {
             if (store) {store.stats.reused++;}
             const cached = {
                 tokens: new Set<string>(stored.consumerTokens),
                 familyPrefixes: new Set<string>(stored.consumerFamilyPrefixes),
+                carriers: new Map<string, Set<number>>(
+                    Object.entries(stored.consumerCarriers).map(([fn, poss]) => [fn, new Set<number>(poss)])
+                ),
+                llamadas: stored.consumerCarrierCalls.map(llamada => ({ ...llamada })),
             };
             this.consumerFileCache.set(file.fsPath, cached);
             return cached;
         }
         const document = await this.documentProvider.openTextDocument(file);
         throwIfCancelled(token);
+        const texto = document.getText();
         const fileTokens = new Set<string>();
         const fileFamilyPrefixes = new Set<string>();
-        extraerTokensDeTexto(document.getText(), fileTokens, fileFamilyPrefixes);
-        const cached = { tokens: fileTokens, familyPrefixes: fileFamilyPrefixes };
+        extraerTokensDeTexto(texto, fileTokens, fileFamilyPrefixes);
+        let carriers = new Map<string, Set<number>>();
+        let llamadas: CarrierCallSite[] = [];
+        if (/\.(ts|tsx|jsx|js|mjs|cjs)$/.test(file.fsPath)) {
+            const extraccion = extraerCarriersYLlamadas(texto);
+            carriers = new Map<string, Set<number>>(
+                Object.entries(extraccion.carriers).map(([fn, poss]) => [fn, new Set<number>(poss)])
+            );
+            llamadas = extraccion.llamadas;
+        }
+        const cached = { tokens: fileTokens, familyPrefixes: fileFamilyPrefixes, carriers, llamadas };
         this.consumerFileCache.set(file.fsPath, cached);
         if (hash) {
             const previa = store?.getEntry(file.fsPath) ?? {};
@@ -2034,6 +2168,8 @@ export class ClassIndexBuilder {
                 hash,
                 consumerTokens: [...fileTokens],
                 consumerFamilyPrefixes: [...fileFamilyPrefixes],
+                consumerCarriers: Object.fromEntries([...carriers].map(([fn, poss]) => [fn, [...poss]])),
+                consumerCarrierCalls: llamadas,
             });
             if (store) {store.stats.reparsed++;}
         }
