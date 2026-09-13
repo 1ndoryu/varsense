@@ -91,9 +91,23 @@ const REGEX_EXTERNAL_LINK_CLASS = /createExternalLink\s*\([^,]+,[^,]+,\s*['"]([^
 /* [J-8] createElement(tag, 'clase') posicional: Glory-Laminal pasa la clase
  * como segundo argumento (helper createElement(tag, className, text)). */
 const REGEX_CREATE_ELEMENT_CLASS = /createElement\s*\(\s*['"][^'"]+['"]\s*,\s*([^)]*)\)/g;
+/* [318A-7V23] Apertura de la factoría DOM posicional el(tag, cls): el
+ * micro-helper el() (GH dom.ts: `el(tag, cls?) → e.className = cls`) porta
+ * clases en su 2º argumento igual que createElement [J-8]. El 2º argumento se
+ * extrae con el divisor balanceado (soporta ternarios/concat multilínea y
+ * templates con ${}; el regex plano [J-8] no puede con paréntesis anidados).
+ * Solo cuenta con 1er argumento tag literal ('div'): un el() con tag dinámico
+ * u otra semántica queda fuera por diseño (retener > arriesgar FN). */
+const REGEX_EL_FACTORY = /\bel\s*\(/g;
 /* [J-8] classList.add/toggle/remove: toggle('clase', cond) y remove('clase')
- * son usos reales igual que add. */
-const REGEX_CLASS_LIST = /classList\.(?:add|toggle|remove)\s*\(([^)]*)\)/g;
+ * son usos reales igual que add.
+ * [318A-7V23] contains/replace: classList.contains('sel') es una lectura que
+ * exige la clase en runtime igual que add (glory-harness sidebarCeldas); sin
+ * esta rama la clase solo se veía si otro sink la tocaba. */
+const REGEX_CLASS_LIST = /classList\.(?:add|toggle|remove|contains|replace)\s*\(([^)]*)\)/g;
+/* [318A-7V23] Apertura de setAttribute('class', ...): el 2º argumento se
+ * extrae balanceado (ver loop en extraerTokensDeTexto). */
+const REGEX_SET_ATTRIBUTE_CLASS = /\bsetAttribute\s*\(\s*['"]class['"]\s*,/g;
 /* [318A-7V17] Any variable declaration whose value is a class literal
  * (string, template, ternary, array/object of literals). Resolves
  * className={ident} and classList.add(ident) by indirection.
@@ -936,6 +950,261 @@ function escanearPushs(source: string): Array<{ nombre: string; valor: string; i
     return resultados;
 }
 
+/* [318A-7V23] Valores de `return <expr>;`: el mismo barrido acotado que las
+ * declaraciones, anclado en la palabra `return`. Sin valor (`return;`) o sin
+ * `;` de cierre (ASI) no aporta. Solo cuenta en posición de sentencia: un
+ * `return` pegado a identificador es otra cosa (inexistente en la práctica,
+ * pero el guard es gratis). */
+function escanearReturns(source: string): Array<{ valor: string; indice: number }> {
+    const REGEX_RETURN = /\breturn\b/g;
+    const resultados: Array<{ valor: string; indice: number }> = [];
+    let match: RegExpExecArray | null;
+    while ((match = REGEX_RETURN.exec(source)) !== null) {
+        const indice = match.index;
+        if (!isCodeMatch(source, indice)) {
+            continue;
+        }
+        const previo = previousCodeCharacter(source, indice);
+        if (previo && /[\w$]/.test(previo)) {
+            continue;
+        }
+        const { profundidad: inicial } = estadoScanning(source, indice);
+        const desde = REGEX_RETURN.lastIndex;
+        let quote = '';
+        let escaped = false;
+        let profundidad = inicial;
+        let fin = -1;
+        for (let cursor = desde; cursor < source.length; cursor++) {
+            const current = source[cursor];
+            if (quote) {
+                if (escaped) {escaped = false;}
+                else if (current === '\\') {escaped = true;}
+                else if (current === quote) {quote = '';}
+                continue;
+            }
+            if (current === '"' || current === "'" || current === '`') {quote = current; continue;}
+            if (current === '(' || current === '[' || current === '{') {profundidad++; continue;}
+            if (current === ')' || current === ']' || current === '}') {profundidad--; continue;}
+            if (current === ';' && profundidad <= inicial) {fin = cursor; break;}
+        }
+        if (fin === -1) {
+            continue;
+        }
+        resultados.push({ valor: source.slice(desde, fin), indice });
+    }
+    return resultados;
+}
+
+/* [318A-7V23] Parámetros portadores del MISMO archivo: una función cuyos
+ * parámetros fluyen a un sink de clase (`el('span', clase)` en crearStat de
+ * panelGit.ts:174, `el('div', icono)` vía iconoDeEstado en tareasMeta.ts:54)
+ * aplica en runtime los literales que recibe en esa posición
+ * (`crearStat('+', n, 'git-adiciones')` en :105). Sin esta resolución el
+ * literal del call-site jamás llega al índice y la clase se reporta.
+ * Detección por función definida en el archivo (function + flecha con
+ * paréntesis): el parámetro es portador si se menciona en un argumento de
+ * sink (2º arg de el()/createElement, 1er arg de classList.*, RHS de
+ * .className, 2º arg de setAttribute('class',...), contenido de
+ * class="..." en templates) o a un hop por un local (`const cls = ...
+ * extraClase ...` + `<svg class="${cls}">` en iconoHtml de iconos.ts:121),
+ * o si se reenvía como ident puro a una posición portadora de otra función
+ * del archivo (ponerIcono → icono; punto fijo ≤3). Solo literales string en
+ * el call-site aportan (un ident/boolean nunca se indexa). Deliberadamente
+ * mismo-archivo: un índice cross-file rompería el caché por hash de
+ * loadConsumerTokens (la entrada de B dependería del contenido de A); los
+ * carriers exportados usados cross-file (marcarCuerpo, icono, ponerIcono de
+ * GH) quedan como residual documentado para V24. */
+function nombreParametroBase(parametro: string): string | null {
+    let actual = parametro.trim().replace(/^\.\.\./, '');
+    /* Recorta tipo (`p: string`) y default (`p = 'x'`) a profundidad 0. */
+    let profundidad = 0;
+    let quote = '';
+    for (let i = 0; i < actual.length; i++) {
+        const ch = actual[i];
+        if (quote) {
+            if (ch === quote) {quote = '';}
+            continue;
+        }
+        if (ch === '"' || ch === "'" || ch === '`') {quote = ch; continue;}
+        if (ch === '<' || ch === '(' || ch === '[' || ch === '{') {profundidad++; continue;}
+        if (ch === '>' || ch === ')' || ch === ']' || ch === '}') {profundidad--; continue;}
+        if ((ch === ':' || ch === '=') && profundidad === 0) {actual = actual.slice(0, i); break;}
+    }
+    actual = actual.trim();
+    return /^[A-Za-z_$][\w$]*$/.test(actual) ? actual : null;
+}
+
+function mencionaIdentificador(texto: string, nombre: string): boolean {
+    return new RegExp('\\b' + nombre + '\\b').test(texto);
+}
+
+/* Textos de sink dentro de un cuerpo: argumentos que en runtime SON clases.
+ * Se reutiliza dividirArgumentosLlamada para no tronchar args anidados. */
+function textosSinkDeCuerpo(cuerpo: string): string[] {
+    const textos: string[] = [];
+    const source = cuerpo;
+    const reEl = /\b(?:el|createElement)\s*\(/g;
+    let match: RegExpExecArray | null;
+    while ((match = reEl.exec(source)) !== null) {
+        const args = dividirArgumentosLlamada(source, match.index + match[0].length - 1);
+        if (args && args.length >= 2) {textos.push(args[1]);}
+    }
+    const reList = /classList\.(?:add|toggle|remove|contains|replace)\s*\(/g;
+    while ((match = reList.exec(source)) !== null) {
+        const args = dividirArgumentosLlamada(source, match.index + match[0].length - 1);
+        if (args && args.length >= 1) {textos.push(args[0]);}
+    }
+    const reClassName = /\.\s*className\s*=\s*([^;]+)/g;
+    while ((match = reClassName.exec(source)) !== null) {textos.push(match[1]);}
+    const reSetAttr = /setAttribute\s*\(\s*['"]class['"]\s*,/g;
+    while ((match = reSetAttr.exec(source)) !== null) {
+        const args = dividirArgumentosLlamada(source, match.index + match[0].length - 1);
+        if (args && args.length >= 2) {textos.push(args[1]);}
+    }
+    /* Contenido de class="..." en templates del cuerpo (iconoHtml:
+     * `<svg class="${cls}">`): el local interpolado resuelve a un hop. */
+    const reAttrHtml = /\bclass\s*=\s*(["'])([\s\S]*?)\1/g;
+    while ((match = reAttrHtml.exec(source)) !== null) {textos.push(match[2]);}
+    return textos;
+}
+
+function escanearDefinicionesFunciones(source: string): Array<{ nombre: string; params: Array<string | null>; cuerpo: string }> {
+    const defs: Array<{ nombre: string; params: Array<string | null>; cuerpo: string }> = [];
+    const vistos = new Set<string>();
+    /* Solo flechas CON paréntesis: `const f = x => {` no casa y queda fuera
+     * por diseño (su único parámetro no es posicional múltiple). Se admite
+     * `async function` y `export function`: el prev-guard solo rechaza que el
+     * nombre cuelgue de un identificador, número o miembro (`x.f(`). */
+    const reDef = /(?:(?:async\s+)?function\s+([A-Za-z_$][\w$]*)|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\()/g;
+    let match: RegExpExecArray | null;
+    while ((match = reDef.exec(source)) !== null) {
+        const nombre = match[1] ?? match[2];
+        if (!nombre || vistos.has(nombre) || !isCodeMatch(source, match.index)) {continue;}
+        if (match[1]) {
+            /* `export function` / `async function`: el match arranca en
+             * `function` y el previo salta blancos hasta la 't' de export o
+             * la 'c' de async — solo '.' o '$' excluyen (miembro/otra fn). */
+            const previo = previousCodeCharacter(source, match.index);
+            if (previo === '.' || previo === '$') {continue;}
+        }
+        const cuerpo = cuerpoDeFuncionEn(source, nombre);
+        if (!cuerpo) {continue;}
+        /* En el formulario function el match termina tras el NOMBRE (el patrón
+         * no incluye `\(`): el '(' de parámetros se busca hacia adelante
+         * (admite `function f (` con espacio). En el formulario flecha el
+         * match sí termina en el '(' y vale length - 1. */
+        const inicioParams = match[1]
+            ? source.indexOf('(', match.index + match[0].length)
+            : match.index + match[0].length - 1;
+        if (inicioParams < 0) {continue;}
+        const args = dividirArgumentosLlamada(source, inicioParams);
+        if (!args) {continue;}
+        /* null preserva el índice posicional tras un destructurado
+         * (`(a, {b}, c)`: c sigue en 2 aunque {b} no sea portable). */
+        const params: Array<string | null> = args.map(arg => nombreParametroBase(arg));
+        vistos.add(nombre);
+        defs.push({ nombre, params, cuerpo });
+    }
+    return defs;
+}
+
+function detectarCarriersMismoArchivo(source: string): Map<string, Set<number>> {
+    const carriers = new Map<string, Set<number>>();
+    const defs = escanearDefinicionesFunciones(source);
+    if (defs.length === 0) {return carriers;}
+    const sinksPorFuncion = new Map<string, string[]>();
+    for (const def of defs) {
+        sinksPorFuncion.set(def.nombre, textosSinkDeCuerpo(def.cuerpo));
+    }
+    /* Paso 1: mención directa en sink + un hop por local. */
+    for (const def of defs) {
+        const sinks = sinksPorFuncion.get(def.nombre) ?? [];
+        if (sinks.length === 0) {continue;}
+        const posiciones = new Set<number>();
+        def.params.forEach((param, i) => {
+            if (param && sinks.some(texto => mencionaIdentificador(texto, param))) {posiciones.add(i);}
+        });
+        /* Un hop: local cuyo inicializador menciona el parámetro y que a su
+         * vez se menciona en un sink (cls ← extraClase, cls en class="${cls}"). */
+        if (posiciones.size < def.params.length) {
+            for (const declaracion of escanearDeclaraciones(def.cuerpo)) {
+                for (let i = 0; i < def.params.length; i++) {
+                    if (posiciones.has(i)) {continue;}
+                    const param = def.params[i];
+                    if (!param || !mencionaIdentificador(declaracion.valor, param)) {continue;}
+                    if (sinks.some(texto => mencionaIdentificador(texto, declaracion.nombre))) {
+                        posiciones.add(i);
+                    }
+                }
+            }
+        }
+        if (posiciones.size > 0) {carriers.set(def.nombre, posiciones);}
+    }
+    /* Paso 2: reenvío a carriers (punto fijo ≤3; ponerIcono → icono). */
+    for (let iter = 0; iter < 3; iter++) {
+        let cambio = false;
+        for (const def of defs) {
+            const posiciones = carriers.get(def.nombre) ?? new Set<number>();
+            const reLlamada = /\b([A-Za-z_$][\w$]*)\s*\(/g;
+            let llamada: RegExpExecArray | null;
+            while ((llamada = reLlamada.exec(def.cuerpo)) !== null) {
+                const destino = carriers.get(llamada[1]);
+                if (!destino || llamada[1] === def.nombre) {continue;}
+                const args = dividirArgumentosLlamada(def.cuerpo, llamada.index + llamada[0].length - 1);
+                if (!args) {continue;}
+                for (const pos of destino) {
+                    const arg = (args[pos] ?? '').trim();
+                    if (!/^[A-Za-z_$][\w$]*$/.test(arg)) {continue;}
+                    const propio = def.params.indexOf(arg);
+                    if (propio >= 0 && !posiciones.has(propio)) {
+                        posiciones.add(propio);
+                        cambio = true;
+                    }
+                }
+            }
+            if (posiciones.size > 0 && !carriers.has(def.nombre)) {carriers.set(def.nombre, posiciones);}
+        }
+        if (!cambio) {break;}
+    }
+    return carriers;
+}
+
+/* [318A-7V23] Divide los argumentos top-level de una llamada a partir del
+ * índice de su '(' de apertura. Respeta strings/templates con escape y
+ * anidado de paréntesis/corchetes/llaves, así que soporta llamadas
+ * multilínea (`el('div', 'conv' + (x ? ' archivada' : ''))`) y args con
+ * paréntesis internos, donde el regex plano `([^)]*)` [J-8] se troncha.
+ * Devuelve null sin cierre balanceado; las comas a profundidad 1 separan. */
+function dividirArgumentosLlamada(source: string, apertura: number): string[] | null {
+    const args: string[] = [];
+    let actual = '';
+    let profundidad = 0;
+    let quote = '';
+    let escaped = false;
+    for (let cursor = apertura; cursor < source.length; cursor++) {
+        const ch = source[cursor];
+        if (quote) {
+            actual += ch;
+            if (escaped) {escaped = false;}
+            else if (ch === '\\') {escaped = true;}
+            else if (ch === quote) {quote = '';}
+            continue;
+        }
+        if (ch === '"' || ch === "'" || ch === '`') {quote = ch; actual += ch; continue;}
+        if (ch === '(' || ch === '[' || ch === '{') {profundidad++; if (profundidad > 1) {actual += ch;} continue;}
+        if (ch === ')' || ch === ']' || ch === '}') {
+            profundidad--;
+            if (profundidad === 0) {args.push(actual); return args;}
+            if (profundidad < 0) {return null;}
+            actual += ch;
+            continue;
+        }
+        if (ch === ',' && profundidad === 1) {args.push(actual); actual = ''; continue;}
+        actual += ch;
+    }
+    return null;
+}
+
 /* [318A-7V20] RC-3: mapper de clases del MISMO archivo llamado dentro de un
  * atributo de clase (`claseAdicional={obtenerClase()}` en IndicadorPlan.tsx,
  * className={`etiqueta ${obtenerClasePrioridad(p)}`} en ListaProyectos.tsx).
@@ -1026,6 +1295,16 @@ function resolverExpresionClase(body: string, variables: Map<string, Set<string>
                 tokens.add(token);
             }
         }
+        return;
+    }
+    /* [318A-7V23] Template literal en posición de clase (el('li', `tarea
+     * ${CLASES[tarea.estado]}`) en tareasMeta.ts:62 de GH): los segmentos
+     * estáticos son clases y cada ${} se resuelve por indirección (ident),
+     * subíndice sobre mapa (M1) o literales embebidos. contextoAttr=true: el
+     * valor en esta posición ES una cadena de clases por construcción. Un
+     * template sin cierre balanceado cae al camino de literales de abajo. */
+    if (trimmed.startsWith('`') && trimmed.endsWith('`') && trimmed.length >= 2) {
+        addTemplateClassTokens(trimmed.slice(1, -1), variables, tokens, familyPrefixes, true);
         return;
     }
     addQuotedClassTokens(trimmed, tokens, familyPrefixes);
@@ -1259,6 +1538,60 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         resolverLlamadaMapper(match[1], source, tokens);
     }
 
+    /* [318A-7V23] el(tag, cls) posicional (ver REGEX_EL_FACTORY): el 2º
+     * argumento porta la clase por el MISMO pipeline que createElement
+     * (literales, ternarios/concat, templates con ${} e identificadores por
+     * indirección). El divisor balanceado sustituye a `([^)]*)` para no
+     * tronchar args multilínea o con paréntesis internos. */
+    REGEX_EL_FACTORY.lastIndex = 0;
+    while ((match = REGEX_EL_FACTORY.exec(source)) !== null) {
+        if (!isCodeMatch(source, match.index)) {continue;}
+        const previo = previousCodeCharacter(source, match.index);
+        /* Solo `x.el(` (método) o `$el(` (otra función) se excluyen: el `\b`
+         * del regex ya impide el pegado a identificador (`panel(` no casa),
+         * pero previousCodeCharacter salta blancos y vería la 'n' de
+         * `return el(` — un guard [\w] rechazaría TODAS las llamadas en
+         * posición de sentencia/return. */
+        if (previo === '.' || previo === '$') {continue;}
+        const args = dividirArgumentosLlamada(source, match.index + match[0].length - 1);
+        if (!args || args.length < 2) {continue;}
+        /* 1er argumento tag literal ('div'): con tag dinámico u otra
+         * semántica del mismo nombre, fuera por diseño (ver regex). */
+        if (!/^\s*['"][A-Za-z][\w-]*['"]\s*$/.test(args[0])) {continue;}
+        resolverExpresionClase(args[1], variables, tokens, familyPrefixes);
+        resolverLlamadaMapper(args[1], source, tokens);
+    }
+
+    /* [318A-7V23] Call-sites de carriers del mismo archivo (ver
+     * detectarCarriersMismoArchivo): los literales string en posiciones
+     * portadoras son las clases que el runtime aplica
+     * (`crearStat('+', n, 'git-adiciones')`). Solo literales (quoted o
+     * template); un ident/boolean/número nunca se indexa. Las definiciones
+     * casan el mismo patrón pero sus parámetros son idents y no aportan, así
+     * que la regla es uniformemente segura sin distinguir def de llamada. */
+    const carriers = detectarCarriersMismoArchivo(source);
+    if (carriers.size > 0) {
+        const reLlamadaCarrier = /\b([A-Za-z_$][\w$]*)\s*\(/g;
+        while ((match = reLlamadaCarrier.exec(source)) !== null) {
+            const posiciones = carriers.get(match[1]);
+            if (!posiciones || !isCodeMatch(source, match.index)) {continue;}
+            /* Igual que en el loop el(): solo '.' o '$' excluyen; un [\w]
+             * rechazaría `return crearStat(...)` (previo 'n' tras el salto). */
+            const previoLlamada = previousCodeCharacter(source, match.index);
+            if (previoLlamada === '.' || previoLlamada === '$') {continue;}
+            const argsLlamada = dividirArgumentosLlamada(source, match.index + match[0].length - 1);
+            if (!argsLlamada) {continue;}
+            for (const pos of posiciones) {
+                const arg = (argsLlamada[pos] ?? '').trim();
+                if (/^(['"])[\s\S]*\1$/.test(arg)) {
+                    addClassTokens(arg.slice(1, -1), tokens, familyPrefixes, true);
+                } else if (arg.startsWith('`') && arg.endsWith('`') && arg.length >= 2) {
+                    addTemplateClassTokens(arg.slice(1, -1), variables, tokens, familyPrefixes, true);
+                }
+            }
+        }
+    }
+
     REGEX_EXTERNAL_LINK_CLASS.lastIndex = 0;
     while ((match = REGEX_EXTERNAL_LINK_CLASS.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
@@ -1272,6 +1605,28 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         if (!isCodeMatch(source, match.index) || previousCodeCharacter(source, match.index) !== '.') {continue;}
         resolverExpresionClase(match[1], variables, tokens, familyPrefixes);
         resolverLlamadaMapper(match[1], source, tokens);
+    }
+
+    /* [318A-7V23] setAttribute('class', <expr>) directo: la vía de ATRIBUTO
+     * (className=/class=) no casa con llamadas, y la vía carrier solo cubre
+     * indirecciones. Mismo pipeline que classList (GH entradaContexto.ts:39:
+     * `circuloFondo.setAttribute('class', 'ctx-pista')`; iconos.ts:93: la
+     * concat `'ic' + (pequeno ? ' ic-xs' : '') + ...` aporta sus literales). */
+    REGEX_SET_ATTRIBUTE_CLASS.lastIndex = 0;
+    while ((match = REGEX_SET_ATTRIBUTE_CLASS.exec(source)) !== null) {
+        if (!isCodeMatch(source, match.index)) {continue;}
+        /* setAttribute es método (`x.setAttribute(`): el '.' previo es lo
+         * normal y se admite; solo '$' ($setAttribute) excluye. El match
+         * termina en la coma tras 'class', así que el '(' se busca hacia
+         * adelante (no es match.index + len - 1 como en el(), cuyo match
+         * termina en el paréntesis). */
+        if (previousCodeCharacter(source, match.index) === '$') {continue;}
+        const aperturaAttr = source.indexOf('(', match.index);
+        if (aperturaAttr < 0) {continue;}
+        const argsAttr = dividirArgumentosLlamada(source, aperturaAttr);
+        if (!argsAttr || argsAttr.length < 2) {continue;}
+        resolverExpresionClase(argsAttr[1], variables, tokens, familyPrefixes);
+        resolverLlamadaMapper(argsAttr[1], source, tokens);
     }
 
     for (const declaracion of escanearDeclaraciones(source)) {
@@ -1324,19 +1679,37 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         if (!isCodeMatch(source, declaracion.indice)) {continue;}
         const previo = previousCodeCharacter(source, declaracion.indice);
         if (previo && /[\w'"`]/.test(previo)) {continue;}
-        resolverConstruccionHtml(declaracion.valor, tokens, familyPrefixes);
+        resolverConstruccionHtml(declaracion.valor, variables, tokens, familyPrefixes);
     }
     for (const compuesto of escanearAsignacionesCompuestas(source)) {
         if (!isCodeMatch(source, compuesto.indice)) {continue;}
-        resolverConstruccionHtml(compuesto.valor, tokens, familyPrefixes);
+        resolverConstruccionHtml(compuesto.valor, variables, tokens, familyPrefixes);
+    }
+    /* [318A-7V23] returns y push con HTML: `return \`<span
+     * class="resumen">...\`` (mensajesUtil.ts:44/51-52 de GH) y
+     * `cuerpo.push(\`<span class="${clase}">...\`)` (:40) ensamblan markup en
+     * posiciones que ni declaraciones ni `+=` cubren; el literal `class="..."`
+     * dentro del template ES cadena de clases por construcción (regla M4). */
+    for (const retorno of escanearReturns(source)) {
+        if (!isCodeMatch(source, retorno.indice)) {continue;}
+        resolverConstruccionHtml(retorno.valor, variables, tokens, familyPrefixes);
+    }
+    for (const push of escanearPushs(source)) {
+        if (!isCodeMatch(source, push.indice)) {continue;}
+        resolverConstruccionHtml(push.valor, variables, tokens, familyPrefixes);
     }
 }
 
 /* [318A-7V22][M4] Extrae las clases de los atributos `class="..."` literales
  * dentro de un valor que construye HTML (template con `<tag` o asignación a
  * innerHTML/html). Solo procesa si el valor parece contener markup HTML; una
- * cadena de clases plana ya la cubre addDeclarationClassTokens (vía carriers). */
-function resolverConstruccionHtml(valor: string, tokens: Set<string>, familyPrefixes?: Set<string>): void {
+ * cadena de clases plana ya la cubre addDeclarationClassTokens (vía carriers).
+ * [318A-7V23] El contenido interpolado (`class="${clase}"`) se resuelve contra
+ * el mapa de declaraciones igual que un template de atributo (mensajesUtil.ts
+ * de GH: cuerpo.push(`<span class="${clase}">`) con `clase` valiendo
+ * ctx/add/del/elididas; iconoHtml: `<svg class="${cls}">` con cls={ic,ic-xs}).
+ * Sin variables el ${} quedaba sin resolver y esas clases se reportaban. */
+function resolverConstruccionHtml(valor: string, variables: Map<string, Set<string>>, tokens: Set<string>, familyPrefixes?: Set<string>): void {
     /* Guard rápido: sin '<' no hay construcción de HTML. */
     if (!valor.includes('<')) {
         return;
@@ -1356,8 +1729,9 @@ function resolverConstruccionHtml(valor: string, tokens: Set<string>, familyPref
             continue;
         }
         /* Contenido con interpolación: descomponer el template para tokenizar
-         * segmentos estáticos y registrar familias pegadas. */
-        addClassTokens(contenido, tokens, familyPrefixes, true);
+         * segmentos estáticos, resolver ${ident} por indirección y registrar
+         * familias pegadas (ver addTemplateClassTokens). */
+        addTemplateClassTokens(contenido, variables, tokens, familyPrefixes, true);
     }
 }
 

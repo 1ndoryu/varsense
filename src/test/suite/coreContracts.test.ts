@@ -1644,4 +1644,182 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'scratchpadVistaPreviaTitulo--h5'), false);
     assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'scratchpadVistaPreviaChecklist'), false);
   });
+
+  /* [318A-7V23][T1] Factoría el(tag, cls): el 2º argumento string cuenta
+   * como uso aunque el archivo NUNCA mencione el nombre suelto: literal,
+   * ternario, template con lookup de mapa y llamada multilínea tras return. */
+  test('el factory second argument counts as usage (literal, ternary, map, multiline)', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: [
+          '.elEtiquetaViva { color: red; }',
+          '.elTernVivaA { color: green; }',
+          '.elTernVivaB { color: blue; }',
+          '.elMapaVivaX { color: orange; }',
+          '.elMultViva { color: teal; }',
+          '.elMuerta { color: purple; }',
+        ].join('\n'),
+      },
+      '/workspace/src/fabrica.ts': {
+        languageId: 'typescript',
+        content: [
+          'declare function el(tag: string, cls?: string): unknown;',
+          'const MAPA: Record<string, string> = { a: \'elMapaVivaX\' };',
+          'declare const cond: boolean;',
+          'declare const clave: string;',
+          'el(\'div\', \'elEtiquetaViva\');',
+          'el(\'span\', cond ? \'elTernVivaA\' : \'elTernVivaB\');',
+          'el(\'li\', `item ${MAPA[clave]}`);',
+          'function construir(): unknown {',
+          '  return el(\'div\',',
+          '    \'elMultViva\');',
+          '}',
+          'export { construir };',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'elMuerta');
+  });
+
+  /* [318A-7V23][T2] HTML construido en return/push con class="...": el
+   * escaneo de returns y push cubre templates estáticos; la clase sin
+   * retorno ni push se sigue reportando. */
+  test('class attributes in return and push templates count as usage', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: [
+          '.retVivaA { color: red; }',
+          '.retVivaB { color: green; }',
+          '.retPushViva { color: blue; }',
+          '.retMuerta { color: purple; }',
+        ].join('\n'),
+      },
+      '/workspace/src/vista.ts': {
+        languageId: 'typescript',
+        content: [
+          'declare const w: string;',
+          'function render(): string {',
+          '  if (w) {',
+          '    return `<span class="retVivaA">x</span>`;',
+          '  }',
+          '  return `<div class="retVivaB">y</div>`;',
+          '}',
+          'const partes: string[] = [];',
+          'partes.push(`<b class="retPushViva">z</b>`);',
+          'export { render, partes };',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'retMuerta');
+  });
+
+  /* [318A-7V23][T3] Carriers mismo-archivo: el parámetro que llega al 2º
+   * arg de el() propaga el literal del call-site, incluido el reenvío
+   * de un helper a otro (envolver → crear). */
+  test('same-file parameter carriers propagate call-site literals (incl. forward)', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: [
+          '.carDirecta { color: red; }',
+          '.carReenvio { color: green; }',
+          '.carMuerta { color: purple; }',
+        ].join('\n'),
+      },
+      '/workspace/src/ayudas.ts': {
+        languageId: 'typescript',
+        content: [
+          'declare function el(tag: string, cls?: string): unknown;',
+          'function crear(color: string, clase: string): unknown {',
+          '  return el(\'span\', clase);',
+          '}',
+          'crear(\'red\', \'carDirecta\');',
+          'function envolver(extra: string): unknown {',
+          '  return crear(\'blue\', extra);',
+          '}',
+          'envolver(\'carReenvio\');',
+          'export { crear, envolver };',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'carMuerta');
+  });
+
+  /* [318A-7V23][T4] setAttribute('class', ...) directo: el 2º argumento
+   * cuenta como uso (literal y ternario). */
+  test('setAttribute class second argument counts as usage', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: [
+          '.attrVivaA { color: red; }',
+          '.attrVivaB { color: green; }',
+          '.attrVivaC { color: blue; }',
+          '.attrMuerta { color: purple; }',
+        ].join('\n'),
+      },
+      '/workspace/src/nodo.ts': {
+        languageId: 'typescript',
+        content: [
+          'declare const nodo: { setAttribute(n: string, v: string): void };',
+          'declare const cond: boolean;',
+          'nodo.setAttribute(\'class\', \'attrVivaA\');',
+          'nodo.setAttribute(\'class\', cond ? \'attrVivaB\' : \'attrVivaC\');',
+          'export { nodo };',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'attrMuerta');
+  });
+
+  /* [318A-7V23][T5] classList.contains/chequeos: contains también indexa
+   * su argumento (antes solo add/toggle/remove). */
+  test('classList.contains argument counts as usage', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: [
+          '.lstViva { color: red; }',
+          '.lstMuerta { color: purple; }',
+        ].join('\n'),
+      },
+      '/workspace/src/lista.ts': {
+        languageId: 'typescript',
+        content: [
+          'declare const d: { classList: { contains(c: string): boolean } };',
+          'export function tiene(): boolean {',
+          '  return d.classList.contains(\'lstViva\');',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'lstMuerta');
+  });
 });
