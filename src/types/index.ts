@@ -175,7 +175,13 @@ export enum DiagnosticType {
      * Los componentes no deben reimplementar estilos de <Button> — usar variante/tamano. */
     EstiloBotonEspecifico = 'estiloBotonEspecifico',
     TokenDuplicado = 'tokenDuplicado',
-    TokenNoUsado = 'tokenNoUsado'
+    TokenNoUsado = 'tokenNoUsado',
+    /* [149A-1 F3.15] Mismo valor en archivos distintos con nombres similares.
+     * Regla separada: NO toca token-duplicate (318A-7V8, same-file). */
+    TokenDuplicadoCrossArchivo = 'tokenDuplicadoCrossArchivo',
+    /* [149A-1 F3.13] Mencion de tarea en comentario sin marcador de tarea
+     * (TODO:/TODO(/FIXME/XXX). La prosa con articulo no marca. */
+    TodoProsaSinMarcador = 'todoProsaSinMarcador'
 }
 
 /*

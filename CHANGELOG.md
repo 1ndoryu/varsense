@@ -5,6 +5,47 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.2] - 2026-09-14
+
+### Agregado
+- [149A-1 F3.11] `orphan-plantilla-resuelta`: `claseHuerfana` resuelve
+  expresiones exactas antes de marcar (concatenacion `'pref-' + ident`,
+  templates anidados, ternarios compuestos) con evaluador fail-closed
+  (literales/identificadores declarados/ternarios; llamadas, miembros y
+  desconocidos no resuelven). Solo añade tokens de uso: 0 FP por
+  construccion. Tope `MAX_COMBINACIONES_CLASE_EXACTA=25`.
+- [149A-1 F3.13] `todo-prosa-sin-marcador` (`todoProsaSinMarcador`,
+  warning, `todoProseDetection` en `varsense.config.json`): exige marcador
+  `TODO:`/`TODO(`/`FIXME`/`XXX` en comentarios; no marca prosa española
+  con articulo (`el|la|los|las|lo`), cuantificador minusculo en ultima
+  posicion (caso real `persistentIndex` "re-parsear todo."), strings, URLs
+  ni compuestos (`todo-list`); `TODO` mayusculo solo si marca (se exige
+  `TODO:`). H11: 0 hits en self-scan tras las guardas.
+  Enganche verificado en `analyzeDocument` (opcion A del plan; sin
+  fallback a sentinel).
+- [149A-1 F3.15] `duplicado-cross-crate`
+  (`token-duplicado-cross-archivo`, information escalable a warning,
+  `tokenDetection.crossFile` en `varsense.config.json`): mismo valor en
+  archivos distintos con similitud de nombres Levenshtein >= 0.75, mensaje
+  con ambas rutas y similitud. `token-duplicate` (same-file, 318A-7V8)
+  intacto; overrides de cascada (mismo nombre) no marcan. Tope
+  `MAX_HALLAZGOS_CROSS_FILE=25`.
+- [149A-1 F3.12] Opcion `hardcodedDetection.severity` (default `warning`
+  intacto, 089A-3): solo cambia la severidad del finding core cuando el
+  proyecto la fija. Sin `DiagnosticType` nuevo.
+
+### Aparcado
+- [149A-1 F3.14] `ui-fanout-directorio` aparcada (escalera H11): el plan
+  solo fija la politica de excepcion y el modelo de diagnosticos de
+  VarSense es por documento sin agregacion por directorio; inventar la
+  semantica (umbral, alcance, ancla) seria alcance no pedido con riesgo
+  de ruido. Reabrir con semantica explicita si el gate lo requiere.
+
+### Verificado
+- `coreContracts`: 54 pruebas PASS (39 previas + 15 [149A-1]).
+- Precision H11: self-scan del repo sin falsos positivos en las reglas
+  nuevas (ver evidencia en commit).
+
 ## [2.2.1] - 2026-08-11
 
 ### Mejorado

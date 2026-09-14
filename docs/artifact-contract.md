@@ -20,7 +20,7 @@ desde source queda como **modo de desarrollo explícito**.
    {
      "schemaVersion": 1,
      "name": "varsense",
-     "version": "2.2.1",
+      "version": "2.2.2",
      "commit": "<sha256 del commit del release>",
      "protocol": 1,
      "capabilities": ["all", "scan", "orphan-classes", "index-dir", "files-from"],

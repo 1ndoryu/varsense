@@ -20,13 +20,20 @@ export interface VarsenseBannedPropertyConfig {
     propiedades: string[];
 }
 
+export interface VarsenseTodoProseConfig {
+    habilitado: boolean;
+    severidad: CoreSeverity;
+}
+
 export interface VarsenseDocumentAnalysisConfig {
     hardcoded: VarsenseHardcodedConfig;
     inline: VarsenseInlineConfig;
     bannedProperties: VarsenseBannedPropertyConfig;
+    todoProse: VarsenseTodoProseConfig;
     tokens: {
         duplicate: { habilitado: boolean; severidad: CoreSeverity };
         unused: { habilitado: boolean; severidad: CoreSeverity };
+        crossFile: { habilitado: boolean; severidad: CoreSeverity };
     };
 }
 
@@ -220,6 +227,154 @@ function analyzeScriptInlineStyles(
 }
 
 /*
+ * [149A-1 F3.13] Mencion de tarea sin marcador en comentarios: exige
+ * marcador de tarea (TODO:/TODO(/FIXME/XXX).
+ * Solo inspecciona regiones de comentario real: el barrido enmascara
+ * literales '...' "..." `...` (templates opacos, sin ${} anidado) para no
+ * marcar prosa dentro de strings. Guardas 0 FP:
+ *   - formas con `:`/`(`/`[` → marcador valido, no marca;
+ *   - prosa con articulo (el|la|los|las|lo) → no marca;
+ *   - cuantificador en ultima posicion del comentario → en minusculas es
+ *     prosa española, no marca; la forma mayuscula sola si marca porque
+ *     se exige la forma con dos puntos;
+ *   - compuestos con guion (tipo todo-list) → no marca;
+ *   - `/todo` (URL/ruta dentro del comentario) → no marca.
+ * FIXME/XXX nunca marcan (son marcadores validos por si mismos).
+ */
+const PATRON_TODO_PROSA = /\btodo\b/gi;
+const ARTICULOS_PROSA = new Set(['el', 'la', 'los', 'las', 'lo']);
+
+function extraerRegionesComentario(texto: string): Array<{ inicio: number; fin: number }> {
+    const regiones: Array<{ inicio: number; fin: number }> = [];
+    let i = 0;
+    let literal: string | null = null;
+
+    while (i < texto.length) {
+        const actual = texto[i];
+        const siguiente = i + 1 < texto.length ? texto[i + 1] : '';
+
+        if (literal !== null) {
+            if (actual === '\\') {
+                i += 2;
+                continue;
+            }
+            if (actual === literal) {
+                literal = null;
+            }
+            i++;
+            continue;
+        }
+
+        if (actual === "'" || actual === '"' || actual === '`') {
+            literal = actual;
+            i++;
+            continue;
+        }
+
+        if (actual === '/' && siguiente === '/') {
+            let fin = texto.indexOf('\n', i + 2);
+            if (fin === -1) {
+                fin = texto.length;
+            }
+            regiones.push({ inicio: i + 2, fin });
+            i = fin;
+            continue;
+        }
+
+        if (actual === '/' && siguiente === '*') {
+            const cierre = texto.indexOf('*/', i + 2);
+            const fin = cierre === -1 ? texto.length : cierre;
+            regiones.push({ inicio: i + 2, fin });
+            i = cierre === -1 ? texto.length : cierre + 2;
+            continue;
+        }
+
+        i++;
+    }
+
+    return regiones;
+}
+
+function esTodoProsaSinMarcador(textoComentario: string, indice: number, forma: string): boolean {
+    const anterior = indice > 0 ? textoComentario[indice - 1] : '';
+    /* URL/ruta dentro del comentario (https://…/todo). */
+    if (anterior === '/') {
+        return false;
+    }
+
+    let j = indice + forma.length;
+    while (j < textoComentario.length && /\s/.test(textoComentario[j])) {
+        j++;
+    }
+    const siguiente = j < textoComentario.length ? textoComentario[j] : '';
+    /* Marcador valido TODO:/TODO(/TODO[. */
+    if (siguiente === ':' || siguiente === '(' || siguiente === '[') {
+        return false;
+    }
+    /* Compuesto tipo todo-list: sustantivo, no tarea. */
+    if (siguiente === '-') {
+        return false;
+    }
+
+    /* Prosa española "todo el|la|los|las|lo …": no es una tarea. */
+    let k = j;
+    let palabra = '';
+    while (k < textoComentario.length && /[A-Za-z]/.test(textoComentario[k])) {
+        palabra += textoComentario[k];
+        k++;
+    }
+    if (ARTICULOS_PROSA.has(palabra.toLowerCase())) {
+        return false;
+    }
+
+    /* Ultima palabra del comentario ("re-parsear todo.", "todo, …"): en
+     * minusculas es el cuantificador español ("todo" = "everything"), no
+     * una tarea; en mayusculas (TODO) es la taquigrafia de tarea y marca
+     * porque se exige TODO: con dos puntos. */
+    const resto = textoComentario.slice(k);
+    if (/^[\s.,;!?…)\]}]*$/.test(resto)) {
+        return forma === 'TODO';
+    }
+
+    return true;
+}
+
+function analyzeTodoProse(
+    document: CoreTextDocument,
+    config: VarsenseDocumentAnalysisConfig
+): CoreFinding[] {
+    if (!config.todoProse.habilitado) {
+        return [];
+    }
+
+    const texto = document.getText();
+    const hallazgos: CoreFinding[] = [];
+
+    for (const region of extraerRegionesComentario(texto)) {
+        const comentario = texto.slice(region.inicio, region.fin);
+        PATRON_TODO_PROSA.lastIndex = 0;
+        let match: RegExpExecArray | null;
+
+        while ((match = PATRON_TODO_PROSA.exec(comentario)) !== null) {
+            if (!esTodoProsaSinMarcador(comentario, match.index, match[0])) {
+                continue;
+            }
+            const offset = region.inicio + match.index;
+            const inicio = positionAtOffset(document, offset);
+            const fin = positionAtOffset(document, offset + match[0].length);
+            hallazgos.push(finding(
+                DiagnosticType.TodoProsaSinMarcador,
+                `Mencion a 'todo' sin marcador de tarea - usa TODO:, TODO(...), FIXME o XXX`,
+                config.todoProse.severidad,
+                { start: inicio, end: fin }
+            ));
+        }
+    }
+
+    return hallazgos;
+}
+
+/*
  * Parsea comentarios de supresion y devuelve las lineas suprimidas.
  * Replica la semantica del provider (parsearSupresiones) para que el CLI y
  * el editor reporten el mismo conteo:
@@ -285,15 +440,15 @@ export function analyzeVarsenseDocument(
             : hallazgos;
 
     if (CSS_LANGUAGE_IDS.has(document.languageId)) {
-        return filtrar(analyzeCssDocument(document, variableIndex, config));
+        return filtrar([...analyzeTodoProse(document, config), ...analyzeCssDocument(document, variableIndex, config)]);
     }
 
     if (REACT_LANGUAGE_IDS.has(document.languageId)) {
-        return filtrar(analyzeReactInlineStyles(document, config));
+        return filtrar([...analyzeTodoProse(document, config), ...analyzeReactInlineStyles(document, config)]);
     }
 
     if (SCRIPT_LANGUAGE_IDS.has(document.languageId)) {
-        return filtrar(analyzeScriptInlineStyles(document, config));
+        return filtrar([...analyzeTodoProse(document, config), ...analyzeScriptInlineStyles(document, config)]);
     }
 
     return [];

@@ -442,6 +442,8 @@ function addTemplateClassTokens(value: string, variables: Map<string, Set<string
     if (familyPrefixes) {
         registrarPrefijosFamilia(value, familyPrefixes, contextoAttr);
     }
+    /* [149A-1 F3.11] expansion exacta del template completo antes de marcar. */
+    agregarClasesExactas(expandirPlantillaContenido(value, variables), tokens);
     const { segmentos, expresiones } = descomponerTemplate(value);
     for (const segmento of segmentos) {
         for (const clase of segmento.split(/\s+/)) {
@@ -453,6 +455,8 @@ function addTemplateClassTokens(value: string, variables: Map<string, Set<string
 
     for (const body of expresiones) {
         const trimmed = body.trim();
+        /* [149A-1 F3.11] interpolaciones compuestas (${'a-' + v}). */
+        agregarClasesExactas(resolverExpresionClaseExacta(trimmed, variables), tokens);
         if (/^[A-Za-z_$][\w$]*$/.test(trimmed)) {
             const resuelto = variables.get(trimmed);
             if (resuelto) {
@@ -570,6 +574,9 @@ function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): M
         } else if (valor.startsWith('[')) {
             addQuotedClassTokens(valor, tokensVariable, familyPrefixes);
         }
+        /* [149A-1 F3.11] expresiones compuestas ('a-' + v, ternarios con
+         * templates) contra declaraciones previas del mismo archivo. */
+        agregarClasesExactas(resolverExpresionClaseExacta(valor, variables), tokensVariable);
         if (tokensVariable.size > 0) {
             variables.set(nombre, tokensVariable);
         }
@@ -587,11 +594,233 @@ function pareceTernarioDeLiterales(valor: string): boolean {
     return /\?\s*['"`]/.test(valor);
 }
 
+/* [149A-1 F3.11] orphan-plantilla-resuelta: resolucion exacta de expresiones
+ * de clase compuestas ANTES de marcar. La indireccion cubria solo
+ * identificadores puros (className={x}); las concatenaciones ('ico-' + v),
+ * los ternarios compuestos (cond ? 'a-' + v : 'b') y los templates con vars
+ * (`pref-${v}`) quedaban sin resolver y su clase exacta se reportaba
+ * huerfana (FP). El evaluador expande la expresion contra el mapa de
+ * declaraciones y devuelve las cadenas exactas; devuelve null (fail-closed)
+ * ante llamadas, accesos a miembro, identificadores desconocidos o
+ * combinatoria excesiva, conservando el comportamiento previo (familias y
+ * literales). Solo ANade tokens de uso: jamas crea un reporte nuevo (H11:
+ * 0 FP por construccion) y confia en el mapa igual que la indireccion
+ * existente (mismo nivel de aproximacion, sin nueva clase de confianza). */
+const MAX_COMBINACIONES_CLASE_EXACTA = 25;
+const REGEX_IDENTIFICADOR_PURO = /^[A-Za-z_$][\w$]*$/;
+
+/* Contenido de un literal completo (quotes, dobles o template balanceado).
+ * Null si la expresion no es un unico literal (p.ej. 'a' + 'b'). */
+function contenidoLiteral(expr: string): { comilla: string; contenido: string } | null {
+    const trimmed = expr.trim();
+    if (trimmed.length < 2) {
+        return null;
+    }
+    const comilla = trimmed[0];
+    if (comilla !== "'" && comilla !== '"' && comilla !== '`') {
+        return null;
+    }
+    if (comilla === '`') {
+        const cierre = finTemplateLiteral(trimmed, 0);
+        return cierre === trimmed.length - 1 ? { comilla, contenido: trimmed.slice(1, cierre) } : null;
+    }
+    let i = 1;
+    while (i < trimmed.length) {
+        const c = trimmed[i];
+        if (c === '\\') {
+            i += 2;
+            continue;
+        }
+        if (c === comilla) {
+            return i === trimmed.length - 1 ? { comilla, contenido: trimmed.slice(1, i) } : null;
+        }
+        i++;
+    }
+    return null;
+}
+
+interface EstadoDivision { quote: string; profundidad: number }
+
+/* Avanza un indice respetando strings simples/dobles; ante un backtick salta
+ * con el escaner balanceado (soporta ${...} anidados). */
+function saltarAtomico(expr: string, i: number, estado: EstadoDivision): number {
+    const c = expr[i];
+    if (estado.quote) {
+        if (c === '\\') {
+            return i + 2;
+        }
+        if (c === estado.quote) {
+            estado.quote = '';
+        }
+        return i + 1;
+    }
+    if (c === '"' || c === "'") {
+        estado.quote = c;
+        return i + 1;
+    }
+    if (c === '`') {
+        const cierre = finTemplateLiteral(expr, i);
+        return cierre < 0 ? expr.length : cierre + 1;
+    }
+    if (c === '(' || c === '[' || c === '{') {
+        estado.profundidad++;
+    } else if (c === ')' || c === ']' || c === '}') {
+        estado.profundidad--;
+    }
+    return i + 1;
+}
+
+/* Divide por '+' a profundidad 0. Null si no hay concatenacion superior. */
+function dividirConcatenacion(expr: string): string[] | null {
+    const partes: string[] = [];
+    const estado: EstadoDivision = { quote: '', profundidad: 0 };
+    let inicio = 0;
+    let i = 0;
+    while (i < expr.length) {
+        const c = expr[i];
+        if (!estado.quote && estado.profundidad === 0 && c === '+') {
+            partes.push(expr.slice(inicio, i));
+            inicio = i + 1;
+            i++;
+            continue;
+        }
+        i = saltarAtomico(expr, i, estado);
+    }
+    if (partes.length === 0) {
+        return null;
+    }
+    partes.push(expr.slice(inicio));
+    return partes;
+}
+
+/* Divide un ternario superior en [rama, alternativa]. Excluye '?.' y '??'.
+ * Null si no hay forma cond ? a : b a profundidad 0. */
+function dividirTernario(expr: string): [string, string] | null {
+    const estado: EstadoDivision = { quote: '', profundidad: 0 };
+    let qi = -1;
+    let i = 0;
+    while (i < expr.length) {
+        const c = expr[i];
+        if (!estado.quote && estado.profundidad === 0 && c === '?'
+            && expr[i + 1] !== '.' && expr[i + 1] !== '?' && expr[i - 1] !== '?') {
+            qi = i;
+            break;
+        }
+        i = saltarAtomico(expr, i, estado);
+    }
+    if (qi < 0) {
+        return null;
+    }
+    const estadoDos: EstadoDivision = { quote: '', profundidad: 0 };
+    let j = qi + 1;
+    while (j < expr.length) {
+        const c = expr[j];
+        if (!estadoDos.quote && estadoDos.profundidad === 0 && c === ':') {
+            return [expr.slice(qi + 1, j), expr.slice(j + 1)];
+        }
+        j = saltarAtomico(expr, j, estadoDos);
+    }
+    return null;
+}
+
+/* Expande el contenido de un template (sin backticks) sustituyendo cada
+ * interpolacion por sus valores exactos. Null si alguna no resuelve. */
+function expandirPlantillaContenido(contenido: string, variables: Map<string, Set<string>>): string[] | null {
+    if (!contenido.includes('${')) {
+        return [contenido];
+    }
+    const { segmentos, expresiones } = descomponerTemplate(contenido);
+    let resultados = [''];
+    for (let k = 0; k < expresiones.length; k++) {
+        const opciones = resolverExpresionClaseExacta(expresiones[k].trim(), variables);
+        if (!opciones || opciones.length === 0) {
+            return null;
+        }
+        const combinado: string[] = [];
+        for (const base of resultados) {
+            for (const opcion of opciones) {
+                combinado.push(base + segmentos[k] + opcion);
+                if (combinado.length > MAX_COMBINACIONES_CLASE_EXACTA) {
+                    return null;
+                }
+            }
+        }
+        resultados = combinado;
+    }
+    const sufijo = segmentos[segmentos.length - 1] ?? '';
+    return resultados.map(base => base + sufijo);
+}
+
+/* Resuelve una expresion de clase a sus cadenas exactas o null. */
+function resolverExpresionClaseExacta(expr: string, variables: Map<string, Set<string>>): string[] | null {
+    const trimmed = expr.trim();
+    if (!trimmed) {
+        return null;
+    }
+    if (REGEX_IDENTIFICADOR_PURO.test(trimmed)) {
+        const resuelto = variables.get(trimmed);
+        return resuelto && resuelto.size > 0 ? [...resuelto] : null;
+    }
+    const literal = contenidoLiteral(trimmed);
+    if (literal) {
+        return literal.comilla === '`'
+            ? expandirPlantillaContenido(literal.contenido, variables)
+            : [literal.contenido];
+    }
+    const ternario = dividirTernario(trimmed);
+    if (ternario) {
+        const ramas = resolverExpresionClaseExacta(ternario[0], variables);
+        const alternativa = resolverExpresionClaseExacta(ternario[1], variables);
+        return ramas && alternativa ? [...ramas, ...alternativa] : null;
+    }
+    const partes = dividirConcatenacion(trimmed);
+    if (partes) {
+        let resultados = [''];
+        for (const parte of partes) {
+            const opciones = resolverExpresionClaseExacta(parte, variables);
+            if (!opciones || opciones.length === 0) {
+                return null;
+            }
+            const combinado: string[] = [];
+            for (const base of resultados) {
+                for (const opcion of opciones) {
+                    combinado.push(base + opcion);
+                    if (combinado.length > MAX_COMBINACIONES_CLASE_EXACTA) {
+                        return null;
+                    }
+                }
+            }
+            resultados = combinado;
+        }
+        return resultados;
+    }
+    if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+        return resolverExpresionClaseExacta(trimmed.slice(1, -1), variables);
+    }
+    return null;
+}
+
+/* Anade las cadenas exactas como tokens de uso (split + forma de clase). */
+function agregarClasesExactas(exactas: string[] | null, tokens: Set<string>): void {
+    if (!exactas) {
+        return;
+    }
+    for (const exacta of exactas) {
+        for (const clase of exacta.split(/\s+/)) {
+            if (clase.length > 1 && /^[a-zA-Z_][\w-]*$/.test(clase)) {
+                tokens.add(clase);
+            }
+        }
+    }
+}
+
 /* [J-8] Resuelve un identificador puro (className={clases}) contra el mapa de
  * declaraciones; si no es un identificador, extrae los literales embebidos
  * (ternarios, templates). */
 function resolverExpresionClase(body: string, variables: Map<string, Set<string>>, tokens: Set<string>, familyPrefixes?: Set<string>): void {
     const trimmed = body.trim();
+    /* [149A-1 F3.11] resolucion exacta aditiva antes del flujo previo. */
+    agregarClasesExactas(resolverExpresionClaseExacta(trimmed, variables), tokens);
     if (/^[A-Za-z_$][\w$]*$/.test(trimmed)) {
         const resuelto = variables.get(trimmed);
         if (resuelto) {
@@ -764,6 +993,9 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         const previous = previousCodeCharacter(source, declaracion.indice);
         if (previous && /[\w'"`]/.test(previous)) {continue;}
         addDeclarationClassTokens(declaracion.valor, tokens, familyPrefixes);
+        /* [149A-1 F3.11] className/contentClass compuestos: el mapa ya esta
+         * completo aqui (todas las declaraciones del archivo). */
+        agregarClasesExactas(resolverExpresionClaseExacta(normalizarValorLiteral(declaracion.valor), variables), tokens);
     }
 }
 

@@ -28,6 +28,113 @@ function normalizedValue(value: string): string {
     return value.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+/* [149A-1 F3.15] Distancia Levenshtein iterativa (O(n*m) acotado por la
+ * longitud de nombres de token, típicamente < 40). */
+function levenshtein(a: string, b: string): number {
+    if (a === b) {
+        return 0;
+    }
+    if (a.length === 0) {
+        return b.length;
+    }
+    if (b.length === 0) {
+        return a.length;
+    }
+    let previa = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+        const actual = [i];
+        for (let j = 1; j <= b.length; j++) {
+            actual[j] = Math.min(
+                previa[j] + 1,
+                actual[j - 1] + 1,
+                previa[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+            );
+        }
+        previa = actual;
+    }
+    return previa[b.length];
+}
+
+function similitudNombres(a: string, b: string): number {
+    const normalizados = [a, b].map(nombre => nombre.replace(/^--/, '').toLowerCase());
+    const maximo = Math.max(normalizados[0].length, normalizados[1].length);
+    if (maximo === 0) {
+        return 0;
+    }
+    return 1 - levenshtein(normalizados[0], normalizados[1]) / maximo;
+}
+
+/* [149A-1 F3.15] duplicado-cross-crate: mismo valor en archivos DISTINTOS
+ * con nombres similares (>= 0.75). Regla separada info→warning con rutas y
+ * similitud en el mensaje; token-duplicate (same-file, 318A-7V8) intacto.
+ * Guardas 0 FP: mismo nombre en varios archivos = override de cascada
+ * (no marca); coincidencia de valor con nombres disimiles = dominios
+ * independientes (no marca, caso auditoria --radioMinimo/--ptr-translateY).
+ * Tope determinista de hallazgos para acotar ruido en repos grandes. */
+const UMBRAL_SIMILITUD_CROSS_FILE = 0.75;
+const MAX_HALLAZGOS_CROSS_FILE = 25;
+
+export function analyzeCrossFileDuplicates(
+    variablesPorArchivo: Map<string, CssVariable[]>,
+    config: VarsenseDocumentAnalysisConfig,
+): CoreFinding[] {
+    if (!config.tokens.crossFile.habilitado) {
+        return [];
+    }
+
+    const porValor = new Map<string, IndexedVariable[]>();
+    for (const [file, definitions] of variablesPorArchivo) {
+        for (const variable of definitions) {
+            const clave = normalizedValue(variable.valor);
+            if (!clave) {
+                continue;
+            }
+            const grupo = porValor.get(clave) ?? [];
+            grupo.push({ variable, file });
+            porValor.set(clave, grupo);
+        }
+    }
+
+    const hallazgos: CoreFinding[] = [];
+    for (const grupo of porValor.values()) {
+        const ordenado = [...grupo].sort((x, y) =>
+            x.file === y.file
+                ? x.variable.nombre.localeCompare(y.variable.nombre)
+                : x.file.localeCompare(y.file)
+        );
+        for (let i = 0; i < ordenado.length && hallazgos.length < MAX_HALLAZGOS_CROSS_FILE; i++) {
+            for (let j = i + 1; j < ordenado.length && hallazgos.length < MAX_HALLAZGOS_CROSS_FILE; j++) {
+                const a = ordenado[i];
+                const b = ordenado[j];
+                if (a.file === b.file || a.variable.nombre === b.variable.nombre) {
+                    continue;
+                }
+                const similitud = similitudNombres(a.variable.nombre, b.variable.nombre);
+                if (similitud < UMBRAL_SIMILITUD_CROSS_FILE) {
+                    continue;
+                }
+                hallazgos.push(tokenFinding(
+                    'token-duplicado-cross-archivo',
+                    `Token '${b.variable.nombre}' (${b.file}) repite el valor de '${a.variable.nombre}' (${a.file}) con nombre similar (similitud ${similitud.toFixed(2)}).`,
+                    config.tokens.crossFile.severidad,
+                    b.variable,
+                    {
+                        canonical: a.variable.nombre,
+                        file: b.file,
+                        otherFile: a.file,
+                        value: b.variable.valor,
+                        similarity: Number(similitud.toFixed(2)),
+                    },
+                ));
+            }
+        }
+        if (hallazgos.length >= MAX_HALLAZGOS_CROSS_FILE) {
+            break;
+        }
+    }
+    return hallazgos;
+}
+
 export function analyzeTokenRules(
     variablesPorArchivo: Map<string, CssVariable[]>,
     documents: Array<{ file: string; document: CoreTextDocument }>,

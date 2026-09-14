@@ -8,7 +8,7 @@ import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
 import { FilePersistentIndexStore, PARSER_VERSION, PERSISTENT_INDEX_FILENAME, buildVariableReverseIndex, configHashFor, indexIdentity } from '@/core/persistentIndex';
 import { ClassIndexBuilder } from '@/core/classIndexBuilder';
 import { analyzeVarsenseDocument, orphanClassToFinding } from '@/core/analyzeDocument';
-import { analyzeTokenRules } from '@/core/tokenRules';
+import { analyzeCrossFileDuplicates, analyzeTokenRules } from '@/core/tokenRules';
 import { VarsenseReportEntry, generarReporteMarkdown } from '@/core/report';
 import {
     DEFAULT_CSS_PATTERNS,
@@ -449,6 +449,13 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     const analysisDurationMs = Date.now() - startedAnalysis;
     timer.mark('analyzeMs');
     for (const finding of analyzeTokenRules(variableResult.variablesPorArchivo, documents, analysisConfig, usageIndex)) {
+        if (isFindingScoped(finding, scopedFiles)) {
+            findings.push({ ruta: String(finding.metadata?.file), finding });
+        }
+    }
+    /* [149A-1 F3.15] Duplicados cross-archivo: regla separada con el mismo
+     * alcance que token-duplicate; no modifica su semántica same-file. */
+    for (const finding of analyzeCrossFileDuplicates(variableResult.variablesPorArchivo, analysisConfig)) {
         if (isFindingScoped(finding, scopedFiles)) {
             findings.push({ ruta: String(finding.metadata?.file), finding });
         }

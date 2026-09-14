@@ -4,7 +4,7 @@ import { findingToDiagnostic } from '../../core/vscodeAdapter';
 import { parsearDocumento } from '../../parsers/cssParser';
 import { analyzeVarsenseDocument } from '../../core/analyzeDocument';
 import { buildAnalysisConfig } from '../../core/config';
-import { analyzeTokenRules } from '../../core/tokenRules';
+import { analyzeCrossFileDuplicates, analyzeTokenRules } from '../../core/tokenRules';
 import { VariableIndexBuilder } from '../../core/variableIndexBuilder';
 import { ClassIndexBuilder } from '../../core/classIndexBuilder';
 import { NodeWorkspaceFileProvider } from '../../core/nodeProviders';
@@ -1065,31 +1065,374 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.ok(String(duplicados[0].message).includes('--dashboard-fondoSecundario'));
   });
 
-  /* [318A-7V8] Auditoría FN: si el canonical de un valor cae en otro archivo
-   * y el par real esta en un tercer archivo, el par intra-archivo NO debe
-   * perderse (el agrupado por archivo+valor garantiza canonical por archivo). */
-  test('token-duplicate conserva pares intra-archivo aunque otro archivo tenga el mismo valor', async () => {
+  /* [149A-1 F3.11] orphan-plantilla-resuelta: concatenacion con
+   * identificador declarado ('botonPrimario' + variante) resuelve la clase
+   * exacta antes de marcar; antes solo quedaba el token parcial y la clase
+   * se reportaba huerfana (FP). */
+  test('[149A-1] resuelve concatenacion con identificador declarado', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: '.botonPrimarioActivo { color: red; }\n.otraMuerta { color: blue; }',
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          "const variante = 'Activo';",
+          "const cls = 'botonPrimario' + variante;",
+          'const Vista = () => <div className={cls} />;',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'otraMuerta');
+  });
+
+  /* [149A-1 F3.11] Concatenacion directa en JSX: className={'ico-' + nombre}. */
+  test('[149A-1] resuelve concatenacion directa en expresion JSX', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: '.icoLupa { color: red; }\n.icoMuerto { color: blue; }',
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          "const nombre = 'Lupa';",
+          "const Vista = () => <div className={'ico' + nombre} />;",
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'icoMuerto');
+  });
+
+  /* [149A-1 F3.11] Ternario compuesto: ambas ramas resuelven exacto
+   * (cond ? 'panel-' + modo : 'panelBase'). */
+  test('[149A-1] resuelve ternario compuesto con concatenacion en rama', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: '.panelCompacto { color: red; }\n.panelBase { color: red; }\n.panelMuerto { color: blue; }',
+      },
+      '/workspace/src/view.ts': {
+        languageId: 'typescript',
+        content: [
+          "const modo = 'Compacto';",
+          "const t = modo === 'X' ? 'panel' + modo : 'panelBase';",
+          'el.classList.add(t);',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelMuerto');
+  });
+
+  /* [149A-1 F3.11] Fail-closed: identificador desconocido o llamada no
+   * resuelven y el comportamiento previo se conserva (huerfana real sigue
+   * reportada, sin crash). */
+  test('[149A-1] no resuelve identificadores desconocidos ni llamadas', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: '.yReal { color: red; }\n.zReal { color: blue; }',
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'const Vista = () => <div className={\'y-\' + desconocido} />;',
+          'otro.classList.add(\'z-\' + helper(\'x\'));',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 2);
+  });
+
+  /* [149A-1 F3.11] Template con var const en atributo sigue en uso y la
+   * expansion exacta no introduce reportes nuevos. */
+  test('[149A-1] template con variable const resuelve exacto sin reportes nuevos', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/styles.css': {
+        languageId: 'css',
+        content: '.prefOk { color: red; }\n.prefMuerta { color: blue; }',
+      },
+      '/workspace/src/view.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          "const v = 'Ok';",
+          'const Vista = () => <span className={`pref${v}`} />;',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'prefOk'), false);
+  });
+
+  /* [149A-1 F3.12] hardcodedDetection mantiene warning por defecto (089A-3):
+   * la opcion solo cambia la severidad cuando el proyecto la fija. */
+  test('[149A-1] hardcodedDetection mantiene warning por defecto', () => {
+    const config = buildAnalysisConfig({});
+
+    assert.strictEqual(config.hardcoded.severidad, 'warning');
+  });
+
+  /* [149A-1 F3.12] hardcodedDetection.severity error llega al core (solo UI:
+   * el provider VS Code ya la aplica via SEVERITY_MAP; aqui se verifica el
+   * camino core -> finding). */
+  test('[149A-1] hardcodedDetection.severity error se propaga al finding', async () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/styles.css',
+      fileName: '/workspace/src/styles.css',
+      languageId: 'css',
+      content: '.boton { color: #ff0000; }',
+    });
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
+
+    const porDefecto = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+    const enError = analyzeVarsenseDocument(
+      documento, indice, buildAnalysisConfig({ hardcodedDetection: { severity: 'error' } })
+    );
+    const hardcodedDefecto = porDefecto.filter(hallazgo => hallazgo.ruleId === 'valorHardcoded');
+    const hardcodedError = enError.filter(hallazgo => hallazgo.ruleId === 'valorHardcoded');
+
+    assert.strictEqual(hardcodedDefecto.length, 1);
+    assert.strictEqual(hardcodedDefecto[0].severity, 'warning');
+    assert.strictEqual(hardcodedError.length, 1);
+    assert.strictEqual(hardcodedError[0].severity, 'error');
+  });
+
+  /* [149A-1] Testigo de no-regresion: inline-styles-react ya existe como
+   * cssInlineReact (style={{}} + style={ident}); F3.13 real es
+   * todo-prosa-sin-marcador (tests siguientes). */
+  test('[149A-1] cssInlineReact cubre style={{}} y style={ident} sin duplicar', async () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/View.tsx',
+      fileName: '/workspace/src/View.tsx',
+      languageId: 'typescriptreact',
+      content: [
+        'const estilos = { color: tema };',
+        'const A = () => <div style={{ color: tema }} />;',
+        'const B = () => <div style={estilos} />;',
+      ].join('\n'),
+    });
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
+
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+
+    assert.strictEqual(hallazgos.length, 2);
+    assert.ok(hallazgos.every(hallazgo => hallazgo.ruleId === 'cssInlineReact'));
+  });
+
+  /* [149A-1 F3.13] Mencion de tarea sin marcador en comentarios: marca
+   * (incluso la forma mayuscula sin dos puntos: se exige TODO:). */
+  test('[149A-1] todo desnudo en comentario marca con severidad warning', async () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/util.ts',
+      fileName: '/workspace/src/util.ts',
+      languageId: 'typescript',
+      content: [
+        '// todo refactor pendiente',
+        '// TODO pendiente sin dos puntos',
+        'export const x = 1;',
+      ].join('\n'),
+    });
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
+
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+    const prosa = hallazgos.filter(hallazgo => hallazgo.ruleId === 'todoProsaSinMarcador');
+
+    assert.strictEqual(hallazgos.length, 2);
+    assert.strictEqual(prosa.length, 2);
+    assert.ok(prosa.every(hallazgo => hallazgo.severity === 'warning'));
+    assert.strictEqual(prosa[0].range.start.line, 0);
+    assert.strictEqual(prosa[1].range.start.line, 1);
+  });
+
+  /* [149A-1 F3.13] 0 FP: marcadores validos, prosa española, strings, URLs
+   * y compuestos no marcan. */
+  test('[149A-1] todo-prosa no marca marcadores ni prosa ni strings ni URLs', async () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/util.ts',
+      fileName: '/workspace/src/util.ts',
+      languageId: 'typescript',
+      content: [
+        '// TODO: formato valido',
+        '// TODO(x): formato valido',
+        '// FIXME formato valido',
+        '/* XXX formato valido */',
+        '/* Comando: Escanear todo el proyecto */',
+        'const s = "todo el mundo";',
+        '// ver https://ejemplo.com/todo para detalles',
+        '// revisar todo-list del sprint',
+        'export const x = 1;',
+      ].join('\n'),
+    });
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
+
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+
+    assert.strictEqual(hallazgos.length, 0);
+  });
+
+  /* [149A-1 F3.13-H11] Cuantificador en ultima posicion y articulo "lo":
+   * prosa española real (caso persistentIndex) no marca; la forma
+   * mayuscula sola si marca porque se exige la forma con dos puntos. */
+  test('[149A-1] cuantificador final y articulo lo no marcan, mayuscula sola si', async () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/util.ts',
+      fileName: '/workspace/src/util.ts',
+      languageId: 'typescript',
+      content: [
+        '/* Hash estable: un cambio obliga a re-parsear todo. */',
+        '// Revisar todo lo demas manana',
+        '// TODO',
+        'export const x = 1;',
+      ].join('\n'),
+    });
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
+
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}))
+      .filter(hallazgo => hallazgo.ruleId === 'todoProsaSinMarcador');
+
+    assert.strictEqual(hallazgos.length, 1);
+    assert.strictEqual(hallazgos[0].severity, 'warning');
+  });
+
+  /* [149A-1 F3.13] todoProseDetection.enabled=false desactiva la regla. */
+  test('[149A-1] todoProseDetection deshabilitado no marca', async () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/util.ts',
+      fileName: '/workspace/src/util.ts',
+      languageId: 'typescript',
+      content: '// todo desnudo pero regla apagada',
+    });
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
+
+    const hallazgos = analyzeVarsenseDocument(
+      documento, indice, buildAnalysisConfig({ todoProseDetection: { enabled: false } })
+    );
+
+    assert.strictEqual(hallazgos.length, 0);
+  });
+
+  /* [149A-1 F3.15] duplicado-cross-crate: mismo valor en archivos distintos
+   * con nombres similares marca info con ambas rutas y similitud. */
+  test('[149A-1] cross-file con nombres similares marca info con rutas', async () => {
     const provider = new MemoryWorkspaceProvider({
       '/workspace/src/a.css': {
         languageId: 'css',
-        content: ':root { --valorA: #fff; }',
+        content: ':root { --color-borde: #e5e5e5; }',
       },
       '/workspace/src/b.css': {
         languageId: 'css',
-        content: ':root { --valorB1: #fff; --valorB2: #fff; }',
+        content: ':root { --color-bordes: #e5e5e5; }',
       },
     });
     const builder = new VariableIndexBuilder(provider, provider);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
-    const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
-      file,
-      document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
-    }));
-    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
-    const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
+    const hallazgos = analyzeCrossFileDuplicates(result.variablesPorArchivo, buildAnalysisConfig({}));
 
-    assert.strictEqual(duplicados.length, 1);
-    assert.ok(String(duplicados[0].message).includes('--valorB2'));
+    assert.strictEqual(hallazgos.length, 1);
+    assert.strictEqual(hallazgos[0].ruleId, 'token-duplicado-cross-archivo');
+    assert.strictEqual(hallazgos[0].severity, 'information');
+    assert.ok(String(hallazgos[0].message).includes('--color-bordes'));
+    assert.ok(String(hallazgos[0].message).includes('/workspace/src/a.css'));
+    assert.ok(String(hallazgos[0].message).includes('/workspace/src/b.css'));
+  });
+
+  /* [149A-1 F3.15] 0 FP: el caso de auditoria 318A-7V8 (mismo valor '0' en
+   * dominios independientes) no marca por nombres disimiles. */
+  test('[149A-1] cross-file no marca coincidencia de valor con nombres disimiles', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/pullToRefresh.css': {
+        languageId: 'css',
+        content: ':root { --ptr-translateY: 0; }',
+      },
+      '/workspace/src/dashboard.css': {
+        languageId: 'css',
+        content: ':root { --dashboard-radioMinimo: 0; }',
+      },
+    });
+    const builder = new VariableIndexBuilder(provider, provider);
+
+    const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
+    const hallazgos = analyzeCrossFileDuplicates(result.variablesPorArchivo, buildAnalysisConfig({}));
+
+    assert.strictEqual(hallazgos.length, 0);
+  });
+
+  /* [149A-1 F3.15] 0 FP: mismo nombre y valor en varios archivos es override
+   * de cascada, no duplicado. */
+  test('[149A-1] cross-file no marca mismo nombre con mismo valor (override)', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/base.css': {
+        languageId: 'css',
+        content: ':root { --color-fondo: #fff; }',
+      },
+      '/workspace/src/tema.css': {
+        languageId: 'css',
+        content: ':root { --color-fondo: #fff; }',
+      },
+    });
+    const builder = new VariableIndexBuilder(provider, provider);
+
+    const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
+    const hallazgos = analyzeCrossFileDuplicates(result.variablesPorArchivo, buildAnalysisConfig({}));
+
+    assert.strictEqual(hallazgos.length, 0);
+  });
+
+  /* [149A-1 F3.15] tokenDetection.crossFile.enabled=false desactiva la regla
+   * y la severidad es configurable (escalera info→warning). */
+  test('[149A-1] cross-file desactivable y con severidad configurable', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/a.css': {
+        languageId: 'css',
+        content: ':root { --color-borde: #e5e5e5; }',
+      },
+      '/workspace/src/b.css': {
+        languageId: 'css',
+        content: ':root { --color-bordes: #e5e5e5; }',
+      },
+    });
+    const builder = new VariableIndexBuilder(provider, provider);
+
+    const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
+    const apagado = analyzeCrossFileDuplicates(
+      result.variablesPorArchivo, buildAnalysisConfig({ tokenDetection: { crossFile: { enabled: false } } })
+    );
+    const enWarning = analyzeCrossFileDuplicates(
+      result.variablesPorArchivo, buildAnalysisConfig({ tokenDetection: { crossFile: { severity: 'warning' } } })
+    );
+
+    assert.strictEqual(apagado.length, 0);
+    assert.strictEqual(enWarning.length, 1);
+    assert.strictEqual(enWarning[0].severity, 'warning');
   });
 });

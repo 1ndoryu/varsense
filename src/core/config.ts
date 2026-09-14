@@ -29,9 +29,14 @@ export interface VarsenseConfigFile {
         excludeClassPatterns?: string[];
         severity?: CoreSeverity;
     };
+    todoProseDetection?: {
+        enabled?: boolean;
+        severity?: CoreSeverity;
+    };
     tokenDetection?: {
         duplicate?: { enabled?: boolean; severity?: CoreSeverity };
         unused?: { enabled?: boolean; severity?: CoreSeverity };
+        crossFile?: { enabled?: boolean; severity?: CoreSeverity };
     };
 }
 
@@ -70,13 +75,14 @@ const DEFAULT_HARDCODED_PROPERTIES: Record<string, boolean> = {
 const VALID_SEVERITIES = new Set<CoreSeverity>(['error', 'warning', 'information', 'hint']);
 const CONFIG_KEYS = new Set([
     'variableFiles', 'includePatterns', 'excludePatterns', 'scanAllFiles',
-    'hardcodedDetection', 'inlineDetection', 'bannedProperties', 'orphanClassDetection', 'tokenDetection',
+    'hardcodedDetection', 'inlineDetection', 'bannedProperties', 'orphanClassDetection', 'todoProseDetection', 'tokenDetection',
 ]);
 const NESTED_KEYS: Record<string, Set<string>> = {
     hardcodedDetection: new Set(['enabled', 'severity', 'properties', 'allowedValues']),
     inlineDetection: new Set(['enabled', 'severity']),
     bannedProperties: new Set(['enabled', 'severity', 'properties']),
     orphanClassDetection: new Set(['minClassLength', 'excludeClassPatterns', 'severity']),
+    todoProseDetection: new Set(['enabled', 'severity']),
     tokenDetection: new Set(['duplicate', 'unused']),
 };
 
@@ -157,7 +163,7 @@ export function validateVarsenseConfig(value: unknown): asserts value is Varsens
     }
 
     const tokens = config.tokenDetection as Record<string, unknown> | undefined;
-    for (const key of ['duplicate', 'unused'] as const) {
+    for (const key of ['duplicate', 'unused', 'crossFile'] as const) {
         const section = tokens?.[key] as Record<string, unknown> | undefined;
         if (section?.enabled !== undefined && typeof section.enabled !== 'boolean') {
             throw new Error(`varsense.config.json: 'tokenDetection.${key}.enabled' debe ser boolean`);
@@ -189,6 +195,10 @@ export function buildAnalysisConfig(config: VarsenseConfigFile): VarsenseDocumen
             severidad: severityOrDefault(config.bannedProperties?.severity, 'warning'),
             propiedades: config.bannedProperties?.properties ?? ['box-shadow'],
         },
+        todoProse: {
+            habilitado: config.todoProseDetection?.enabled ?? true,
+            severidad: severityOrDefault(config.todoProseDetection?.severity, 'warning'),
+        },
         tokens: {
             duplicate: {
                 habilitado: config.tokenDetection?.duplicate?.enabled ?? true,
@@ -197,6 +207,10 @@ export function buildAnalysisConfig(config: VarsenseConfigFile): VarsenseDocumen
             unused: {
                 habilitado: config.tokenDetection?.unused?.enabled ?? true,
                 severidad: severityOrDefault(config.tokenDetection?.unused?.severity, 'hint'),
+            },
+            crossFile: {
+                habilitado: config.tokenDetection?.crossFile?.enabled ?? true,
+                severidad: severityOrDefault(config.tokenDetection?.crossFile?.severity, 'information'),
             },
         },
     };
