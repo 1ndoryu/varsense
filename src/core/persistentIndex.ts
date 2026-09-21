@@ -19,8 +19,9 @@ import type { VarsenseConfigFile } from './config';
 
 export const PERSISTENT_INDEX_SCHEMA_VERSION = 1;
 /* Bump al cambiar la semántica de parseo/extracción que alimenta el índice.
- * 3: [318A-7V14] consumerFamilyPrefixes (template-literal family prefixes). */
-export const PARSER_VERSION = '4';
+ * 3: [318A-7V14] consumerFamilyPrefixes (template-literal family prefixes).
+ * 5: [318A-7V24] consumerCarriers + consumerCarrierCalls (carriers cross-file). */
+export const PARSER_VERSION = '5';
 export const PERSISTENT_INDEX_FILENAME = 'varsense-index.json';
 
 export interface PersistentIndexEntry {
@@ -32,6 +33,13 @@ export interface PersistentIndexEntry {
      * presente junto a consumerTokens para reusar una entrada; una entrada
      * vieja (sin el campo) se re-parsea (PARSER_VERSION 2→3). */
     consumerFamilyPrefixes?: string[];
+    /* [318A-7V24] Carriers propios del archivo (fn → posiciones portadoras) y
+     * call-sites con literales ({f, p, l}). Solo lo que el archivo aporta por
+     * sí mismo: el cruce cross-file se computa en memoria por ejecución para
+     * no acoplar la entrada de B al contenido de A. Se exigen presentes junto
+     * a consumerTokens para reusar una entrada (criterio V14). */
+    consumerCarriers?: Record<string, number[]>;
+    consumerCarrierCalls?: Array<{ fn: string; pos: number; literal: string }>;
     variables?: CssVariable[];
     /* [028A-8 tramo 4] Usos var(--x) referenciados por este archivo CSS: permite
      * resolver consumidores de una definición sin recorrer el workspace. */

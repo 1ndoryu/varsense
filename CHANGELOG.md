@@ -5,6 +5,18 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3] - 2026-09-21
+
+### Corregido
+- [318A-7 V20] `claseHuerfana`: indexa productores de clase fuera del atributo (`clase +=`, transportadoras `clase*`, mappers en `className`).
+- [318A-7 V21] `claseHuerfana`: excluye submodulos con `.git` como directorio, `imageClass` como carrier, artefacto `url()`, RC-4 push/propiedad-objeto variable.
+- [318A-7 V22] `claseHuerfana`: corrige falsos positivos de runtime M1-M5 (PT 163 a 151, 0 falsos negativos).
+- [318A-7 V23] `claseHuerfana`: segundo argumento de `el()`, returns/push de HTML, carriers mismo-archivo, `setAttribute class` (GH 324 a 5).
+- [318A-7 V24] `claseHuerfana`: `setProperty` runtime indexado, carriers cross-file, fix `setAttribute` sink.
+
+### Verificado
+- Suite: 62/62 PASS; self-scan GH 0/0.
+
 ## [2.2.2] - 2026-09-14
 
 ### Agregado

@@ -328,6 +328,22 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
     /* --files-from limita findings reportados; los índices globales se mantienen para exactitud. */
     const includedCandidates = candidates.filter(file => isIncluded(file.fsPath, args.workspacePath, includePatterns) && isScopedFile(file.fsPath, scopedFiles));
     timer.mark('discoveryMs');
+    /* [318A-7V24] Completa el índice de variables ANTES de analizar:
+     * 1) definiciones runtime setProperty('--x') de los scripts incluidos;
+     * 2) CSS incluidos con scope (:host, #id, .clase) que variableFiles no
+     * cubre. Sin esto, var(--sidebar-ancho)/var(--lateral-ancho) y las 12
+     * variables setProperty de GH se reportan como variableNoDefinida. */
+    await variableBuilder.agregarDefinicionesRuntime(
+        includedCandidates,
+        variableResult.indice.variables,
+        variableResult.variablesPorArchivo
+    );
+    for (const file of includedCandidates) {
+        if (!file.fsPath.endsWith('.css') || variableResult.variablesPorArchivo.has(file.fsPath)) {
+            continue;
+        }
+        await variableBuilder.addFileToIndex(file, variableResult.indice.variables, variableResult.variablesPorArchivo);
+    }
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
 
     for (const file of includedCandidates) {
@@ -418,6 +434,19 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     /* --files-from limita findings reportados; los índices globales se mantienen para exactitud. */
     const includedCandidates = candidates.filter(file => isIncluded(file.fsPath, args.workspacePath, includePatterns));
     timer.mark('discoveryMs');
+    /* [318A-7V24] Igual que en scan: definiciones runtime + CSS con scope
+     * antes del análisis (ver comentario en analyzeScanTarget). */
+    await variableBuilder.agregarDefinicionesRuntime(
+        includedCandidates,
+        variableResult.indice.variables,
+        variableResult.variablesPorArchivo
+    );
+    for (const file of includedCandidates) {
+        if (!file.fsPath.endsWith('.css') || variableResult.variablesPorArchivo.has(file.fsPath)) {
+            continue;
+        }
+        await variableBuilder.addFileToIndex(file, variableResult.indice.variables, variableResult.variablesPorArchivo);
+    }
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
     const analysisConfig = buildAnalysisConfig(configFile);
     /* [028A-8 tramo 4] Con índice persistente + alcance scoped, los usos de
