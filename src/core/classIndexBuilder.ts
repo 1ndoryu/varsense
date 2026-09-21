@@ -819,6 +819,11 @@ function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): M
          * su consumidora). Sin resolver, el set de claseLeida queda sin la
          * clase compuesta y `itemNotificacion--leida` se reporta huérfana. */
         resolverTemplatesDeVariables(valor, variables, tokensVariable);
+        /* [149A-1 F3.11] expresiones compuestas ('a-' + v, ternarios con
+         * templates) contra declaraciones previas del mismo archivo.
+         * Complementa a M2 (casos distintos, mismo punto): sin esta llamada
+         * caen los contratos core [149A-1] de concatenacion/ternario. */
+        agregarClasesExactas(resolverExpresionClaseExacta(valor, variables), tokensVariable);
         if (tokensVariable.size > 0) {
             variables.set(nombre, tokensVariable);
         }
