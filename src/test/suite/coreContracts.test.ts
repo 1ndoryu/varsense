@@ -1092,6 +1092,105 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.ok(String(duplicados[0].message).includes('--dashboard-fondoSecundario'));
   });
 
+  /* [229A-1] token-duplicate: el mismo valor en ambitos de cascada distintos
+   * es shadowing intencional, no alias. Caso real coolify-manager-rs:
+   * --vpsColorTexto12 = rgba(25,25,24,0.12) en .vpsPortal y en
+   * html:has(.vpsPortal). */
+  test('[229A-1] token-duplicate no colapsa shadowing entre ambitos distintos', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/portal.css': {
+        languageId: 'css',
+        content: [
+          '.vpsPortal { --vpsColorTexto12: rgba(25, 25, 24, 0.12); }',
+          'html:has(.vpsPortal) { --vpsColorTexto12: rgba(25, 25, 24, 0.12); }',
+        ].join('\n'),
+      },
+    });
+    const builder = new VariableIndexBuilder(provider, provider);
+
+    const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
+    const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
+      file,
+      document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
+    }));
+    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
+    const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
+
+    assert.strictEqual(duplicados.length, 0);
+  });
+
+  /* [229A-1] token-duplicate: mismo valor y MISMO ambito sigue marcando
+   * (el ambito no ciega duplicados reales intra-bloque). */
+  test('[229A-1] token-duplicate marca mismo valor en el mismo ambito', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/variables.css': {
+        languageId: 'css',
+        content: ':root { --aliasUno: #ffffff; --aliasDos: #ffffff; }',
+      },
+    });
+    const builder = new VariableIndexBuilder(provider, provider);
+
+    const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
+    const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
+      file,
+      document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
+    }));
+    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
+    const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
+
+    assert.strictEqual(duplicados.length, 1);
+    assert.ok(String(duplicados[0].message).includes('--aliasDos'));
+  });
+
+  /* [229A-1] token-duplicate: repetir el default neutro 0/0px entre tokens
+   * de posicion no es alias evitable. Caso real coolify-manager-rs:
+   * --menuPosTop/--menuPosLeft = 0px en ContextMenu.css. */
+  test('[229A-1] token-duplicate exime defaults triviales 0 y 0px', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/menu.css': {
+        languageId: 'css',
+        content: '.menu { --menuPosTop: 0px; --menuPosLeft: 0px; --menuAncho: 0; --menuAlto: 0; }',
+      },
+    });
+    const builder = new VariableIndexBuilder(provider, provider);
+
+    const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
+    const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
+      file,
+      document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
+    }));
+    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
+    const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
+
+    assert.strictEqual(duplicados.length, 0);
+  });
+
+  /* [229A-1] cssInlineReact: style={{}} cuyas claves son TODAS custom
+   * properties (--*) es definicion runtime de tokens (mismo patron eximido
+   * que setProperty), no estilo inline. Caso real coolify-manager-rs:
+   * MenuContextual.tsx style={{ "--menuPosTop": ..., "--menuPosLeft": ... }}.
+   * El caso mixto (una prop real) sigue marcando. */
+  test('[229A-1] cssInlineReact exime objeto style solo con custom properties', async () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/Menu.tsx',
+      fileName: '/workspace/src/Menu.tsx',
+      languageId: 'typescriptreact',
+      content: [
+        'const A = () => <div style={{ "--menuPosTop": `${top}px`, "--menuPosLeft": `${left}px` }} />;',
+        'const B = () => <div style={{ "--soloToken": valor }} />;',
+        'const C = () => <div style={{ "--token": valor, color: tema }} />;',
+      ].join('\n'),
+    });
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
+
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+    const inline = hallazgos.filter(hallazgo => hallazgo.ruleId === 'cssInlineReact');
+
+    assert.strictEqual(inline.length, 1);
+    assert.strictEqual(inline[0].range.start.line, 2);
+  });
+
   /* [149A-1 F3.11] orphan-plantilla-resuelta: concatenacion con
    * identificador declarado ('botonPrimario' + variante) resuelve la clase
    * exacta antes de marcar; antes solo quedaba el token parcial y la clase

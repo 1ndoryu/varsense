@@ -31,6 +31,8 @@ export interface CssVariable {
     esColor?: boolean;
     /* Frecuencia de uso en el proyecto */
     frecuenciaUso: number;
+    /* [229A-1] Selector del bloque donde se define (ambito de cascada). Solo lo informa parsearSoloDefiniciones; ausente = ambito desconocido y agrupa como antes. */
+    ambito?: string;
 }
 
 /*
