@@ -176,7 +176,20 @@ export function analyzeTokenRules(
             if (!key) {
                 continue;
             }
-            const groupKey = `${entry.file}\u0000${key}`;
+            /* [229A-1] Eximir defaults triviales de posicionamiento: repetir
+             * `0`/`0px` entre tokens de posicion (--menuPosTop, --x, ...) no
+             * es un alias evitable, es el valor neutro del dominio (mismo
+             * patron que los allowedValues hardcodeados de 318A-7V12). */
+            if (key === '0' || key === '0px') {
+                continue;
+            }
+            /* [229A-1] El mismo valor en ambitos de cascada distintos es
+             * shadowing intencional (p.ej. --vpsColorTexto12 en .vpsPortal
+             * y en html:has(.vpsPortal)): agrupar por archivo+ambito+valor
+             * para no colapsar overrides legitimos. Sin ambito informado
+             * (runtime) se agrupa como antes. */
+            const ambito = entry.variable.ambito ?? '';
+            const groupKey = `${entry.file}\u0000${ambito}\u0000${key}`;
             const group = byFileValue.get(groupKey) ?? [];
             group.push(entry);
             byFileValue.set(groupKey, group);
