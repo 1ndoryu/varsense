@@ -5,6 +5,23 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.4] - 2026-09-23
+
+### Corregido
+- [229A-1] `cssInlineReact`: `style={{...}}` cuyas claves son TODAS custom
+  properties (`--*`) es definicion runtime de tokens (mismo patron eximido
+  que `setProperty`), no estilo inline. FP real: MenuContextual.tsx de
+  coolify-manager-rs.
+- [229A-1] `token-duplicate`: agrupa por archivo+ambito+valor; el mismo valor
+  en ambitos de cascada distintos es shadowing intencional (FP real:
+  `--vpsColorTexto12` en `.vpsPortal` vs `html:has(.vpsPortal)`).
+- [229A-1] `token-duplicate`: exime defaults triviales `0`/`0px` (valor neutro
+  del dominio posicion, FP real: `--menuPosTop`/`--menuPosLeft`).
+- Alinea `package-lock.json` 2.2.2->2.2.4 con `package.json`.
+
+### Verificado
+- Suite: 125/125 PASS; coolify-manager-rs `varsense all` 0/0/0/0 en 103 archivos.
+
 ## [2.2.3] - 2026-09-21
 
 ### Corregido
