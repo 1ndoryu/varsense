@@ -5,6 +5,31 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.5] - 2026-09-28
+
+### Retirado
+- [289A-1] `todo-prosa-sin-marcador` (`todoProsaSinMarcador`, F3.13): una
+  regla, un dueño. La regla vive ahora en Sentinel Core
+  (`todo-prosa-sin-marcador`, 0.7.15) con paridad total verificada
+  (15 fixtures: mismos 5 archivos, misma linea/columna/severidad; incluye el
+  FP heredado `Toaster.tsx` "por encima de todo,").
+- Se retiran `DiagnosticType.TodoProsaSinMarcador`, `analyzeTodoProse`,
+  el barrido y el campo `todoProse`; los 3 tests F3.13 se sustituyen por 1
+  test de compat.
+- `todoProseDetection` sigue ACEPTADA en `varsense.config.json` pero se
+  ignora (no rompe configs existentes); se retira en la proxima major.
+
+### Verificado
+- `compile:tests` (tsc + esbuild) EXIT 0; `eslint src --quiet` EXIT 0;
+  `check-core-no-vscode` OK; `smoke-lsp-stdio` OK.
+- Suite headless (mocha TDD + stub `vscode`, puente `@/`): 99/99 PASS —
+  `coreContracts` 78/78 (incl. nuevo test 289A-1 de compat) + CLI/
+  equivalencia/LSP 21/21. `extension.test.ts` (23 tests) exige host VS Code,
+  área no tocada por esta retirada.
+- Sunset funcional: scan CLI 2.2.5 sobre las 15 fixtures de paridad con
+  `todoProseDetection.enabled:true` → 15 archivos, 0 hallazgos
+  (2.2.4 daba 5 `todoProsaSinMarcador`); config aceptada sin crash.
+
 ## [2.2.4] - 2026-09-23
 
 ### Corregido

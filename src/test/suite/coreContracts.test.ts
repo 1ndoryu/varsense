@@ -1370,9 +1370,11 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.ok(hallazgos.every(hallazgo => hallazgo.ruleId === 'cssInlineReact'));
   });
 
-  /* [149A-1 F3.13] Mencion de tarea sin marcador en comentarios: marca
-   * (incluso la forma mayuscula sin dos puntos: se exige TODO:). */
-  test('[149A-1] todo desnudo en comentario marca con severidad warning', async () => {
+  /* [289A-1] todo-prosa-sin-marcador RETIRADA a Sentinel Core (0.7.15):
+   * VarSense ya no la reporta; `todoProseDetection` se acepta pero se ignora
+   * (compat con `varsense.config.json` existentes). Casos que antes marcaban
+   * ahora dan 0 hallazgos en VarSense (los cubre Sentinel). */
+  test('[289A-1] todoProseDetection aceptada pero ignorada: ex-menciones no marcan', async () => {
     const documento = createCoreDocument({
       uri: 'file:///workspace/src/util.ts',
       fileName: '/workspace/src/util.ts',
@@ -1380,60 +1382,6 @@ suite('VarSense editor-agnostic core contracts', () => {
       content: [
         '// todo refactor pendiente',
         '// TODO pendiente sin dos puntos',
-        'export const x = 1;',
-      ].join('\n'),
-    });
-    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
-    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
-
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
-    const prosa = hallazgos.filter(hallazgo => hallazgo.ruleId === 'todoProsaSinMarcador');
-
-    assert.strictEqual(hallazgos.length, 2);
-    assert.strictEqual(prosa.length, 2);
-    assert.ok(prosa.every(hallazgo => hallazgo.severity === 'warning'));
-    assert.strictEqual(prosa[0].range.start.line, 0);
-    assert.strictEqual(prosa[1].range.start.line, 1);
-  });
-
-  /* [149A-1 F3.13] 0 FP: marcadores validos, prosa española, strings, URLs
-   * y compuestos no marcan. */
-  test('[149A-1] todo-prosa no marca marcadores ni prosa ni strings ni URLs', async () => {
-    const documento = createCoreDocument({
-      uri: 'file:///workspace/src/util.ts',
-      fileName: '/workspace/src/util.ts',
-      languageId: 'typescript',
-      content: [
-        '// TODO: formato valido',
-        '// TODO(x): formato valido',
-        '// FIXME formato valido',
-        '/* XXX formato valido */',
-        '/* Comando: Escanear todo el proyecto */',
-        'const s = "todo el mundo";',
-        '// ver https://ejemplo.com/todo para detalles',
-        '// revisar todo-list del sprint',
-        'export const x = 1;',
-      ].join('\n'),
-    });
-    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
-    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
-
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
-
-    assert.strictEqual(hallazgos.length, 0);
-  });
-
-  /* [149A-1 F3.13-H11] Cuantificador en ultima posicion y articulo "lo":
-   * prosa española real (caso persistentIndex) no marca; la forma
-   * mayuscula sola si marca porque se exige la forma con dos puntos. */
-  test('[149A-1] cuantificador final y articulo lo no marcan, mayuscula sola si', async () => {
-    const documento = createCoreDocument({
-      uri: 'file:///workspace/src/util.ts',
-      fileName: '/workspace/src/util.ts',
-      languageId: 'typescript',
-      content: [
-        '/* Hash estable: un cambio obliga a re-parsear todo. */',
-        '// Revisar todo lo demas manana',
         '// TODO',
         'export const x = 1;',
       ].join('\n'),
@@ -1441,29 +1389,14 @@ suite('VarSense editor-agnostic core contracts', () => {
     const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}))
-      .filter(hallazgo => hallazgo.ruleId === 'todoProsaSinMarcador');
-
-    assert.strictEqual(hallazgos.length, 1);
-    assert.strictEqual(hallazgos[0].severity, 'warning');
-  });
-
-  /* [149A-1 F3.13] todoProseDetection.enabled=false desactiva la regla. */
-  test('[149A-1] todoProseDetection deshabilitado no marca', async () => {
-    const documento = createCoreDocument({
-      uri: 'file:///workspace/src/util.ts',
-      fileName: '/workspace/src/util.ts',
-      languageId: 'typescript',
-      content: '// todo desnudo pero regla apagada',
-    });
-    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
-    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
-
-    const hallazgos = analyzeVarsenseDocument(
+    const porDefecto = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+    const explicita = analyzeVarsenseDocument(
       documento, indice, buildAnalysisConfig({ todoProseDetection: { enabled: false } })
     );
 
-    assert.strictEqual(hallazgos.length, 0);
+    assert.strictEqual(porDefecto.length, 0);
+    assert.strictEqual(explicita.length, 0);
+    assert.ok(!porDefecto.some(hallazgo => hallazgo.ruleId === 'todoProsaSinMarcador'));
   });
 
   /* [149A-1 F3.15] duplicado-cross-crate: mismo valor en archivos distintos

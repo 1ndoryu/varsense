@@ -180,10 +180,9 @@ export enum DiagnosticType {
     TokenNoUsado = 'tokenNoUsado',
     /* [149A-1 F3.15] Mismo valor en archivos distintos con nombres similares.
      * Regla separada: NO toca token-duplicate (318A-7V8, same-file). */
-    TokenDuplicadoCrossArchivo = 'tokenDuplicadoCrossArchivo',
-    /* [149A-1 F3.13] Mencion de tarea en comentario sin marcador de tarea
-     * (TODO:/TODO(/FIXME/XXX). La prosa con articulo no marca. */
-    TodoProsaSinMarcador = 'todoProsaSinMarcador'
+    TokenDuplicadoCrossArchivo = 'tokenDuplicadoCrossArchivo'
+    /* [289A-1] TodoProsaSinMarcador RETIRADO: la regla vive en Sentinel Core
+     * (`todo-prosa-sin-marcador`, 0.7.15). Valor no reutilizado. */
 }
 
 /*

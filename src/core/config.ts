@@ -29,6 +29,8 @@ export interface VarsenseConfigFile {
         excludeClassPatterns?: string[];
         severity?: CoreSeverity;
     };
+    /* [289A-1 DEPRECADA] Aceptada pero ignorada: la regla vive en Sentinel
+     * Core (`todo-prosa-sin-marcador`). Se retira en la proxima major. */
     todoProseDetection?: {
         enabled?: boolean;
         severity?: CoreSeverity;
@@ -195,10 +197,9 @@ export function buildAnalysisConfig(config: VarsenseConfigFile): VarsenseDocumen
             severidad: severityOrDefault(config.bannedProperties?.severity, 'warning'),
             propiedades: config.bannedProperties?.properties ?? ['box-shadow'],
         },
-        todoProse: {
-            habilitado: config.todoProseDetection?.enabled ?? true,
-            severidad: severityOrDefault(config.todoProseDetection?.severity, 'warning'),
-        },
+        /* [289A-1] todoProseDetection aceptada-pero-ignorada (compat): la
+         * regla vive en Sentinel Core. `CONFIG_KEYS`/`NESTED_KEYS` la siguen
+         * aceptando para no romper `varsense.config.json` existentes. */
         tokens: {
             duplicate: {
                 habilitado: config.tokenDetection?.duplicate?.enabled ?? true,
