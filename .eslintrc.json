@@ -13,7 +13,7 @@
   ],
   "rules": {
     "@typescript-eslint/naming-convention": "off",
-    "@typescript-eslint/semi": ["error", "always"],
+    "semi": ["error", "always"],
     "@typescript-eslint/no-unused-vars": ["warn", {"argsIgnorePattern": "^_", "varsIgnorePattern": "^_"}],
     "@typescript-eslint/no-explicit-any": "warn",
     "@typescript-eslint/no-floating-promises": "off",
@@ -26,7 +26,6 @@
     "curly": "error",
     "eqeqeq": ["error", "always"],
     "no-throw-literal": "error",
-    "semi": "off",
     "prefer-const": "warn"
   },
   "ignorePatterns": ["dist/**", "node_modules/**", "**/*.d.ts", "**/test/**"]

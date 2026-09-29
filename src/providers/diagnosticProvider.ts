@@ -11,6 +11,7 @@ import {DiagnosticType} from '@/types';
 import {ParseResult} from '@/types';
 import {parsearDocumento} from '@/parsers/cssParser';
 import {VariableScanner} from '@/services/variableScanner';
+import {obtenerResolver} from '@/services/variableResolver';
 import {obtenerConfigService} from '@/services/configService';
 import {esLenguajeSoportado, debounce, coincideConPatron} from '@/utils/fileUtils';
 import { documentFromVsCode, rangeToVsCodeRange } from '@/core/vscodeAdapter';
@@ -667,8 +668,7 @@ export class DiagnosticCodeActionProvider implements vscode.CodeActionProvider {
             return acciones;
         }
 
-        /* Buscar variables sugeridas */
-        const {obtenerResolver} = require('@/services/variableResolver') as typeof import('@/services/variableResolver');
+        /* Buscar variables sugeridas (import estático: variableResolver no depende de este provider, sin ciclo) */
         const sugerencias = obtenerResolver().sugerirVariablesParaValor(data.valor, 3);
 
         for (const variable of sugerencias) {
