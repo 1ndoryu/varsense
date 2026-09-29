@@ -4,7 +4,9 @@
 
 import * as path from 'path';
 import Mocha from 'mocha';
-import glob from 'glob';
+/* glob>=11 no expone default bajo require(esm) (__esModule sin default):
+ * named import `sync` valido en v9-v13. */
+import { sync as globSync } from 'glob';
 
 /* [045A-1] Los tests se compilan con tsc, asi que los imports @/... quedan como require('@/...').
  * El bundle de la extension si resuelve alias con esbuild, pero la suite necesita este puente runtime. */
@@ -35,8 +37,8 @@ export function run(): Promise<void> {
 
     const testsRoot = path.resolve(__dirname, '..');
 
-    /* Buscar archivos de test usando glob.sync */
-    const files = glob.sync('**/**.test.js', { cwd: testsRoot });
+    /* Buscar archivos de test usando globSync */
+    const files = globSync('**/**.test.js', { cwd: testsRoot });
     
     /* Agregar archivos de test */
     files.forEach(f => mocha.addFile(path.resolve(testsRoot, f)));

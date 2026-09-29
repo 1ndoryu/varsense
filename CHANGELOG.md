@@ -5,6 +5,16 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.7] - 2026-09-29
+
+### Corregido
+- Runner de la suite (`src/test/suite/index.ts`): `glob>=11` no expone
+  `default` bajo `require(esm)` (namespace con `__esModule` sin `default`),
+  asi que `glob.sync` reventaba con `TypeError` antes de correr un solo test.
+  Se usa el named import `sync` (valido en glob v9-v13). Regresion
+  introducida por el bump de dependencias de 2.2.6 (mocha 10/11 -> 12
+  arrastra glob v13). Suite VS Code: 122/122 PASS.
+
 ## [2.2.6] - 2026-09-29
 
 ### Seguridad
