@@ -5,6 +5,15 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.6] - 2026-09-29
+
+### Seguridad
+- `npm audit` 26 -> 0: `esbuild` 0.21/0.25 -> 0.28, `mocha` 10/11 -> 12,
+  `typescript-eslint` 7/8.33 -> 8, `eslint` 8.57. Bump de dependencias dev
+  y de build; sin cambios funcionales en reglas.
+- `semi` adaptada a regla base (ya no usa `require` diferido); `import`
+  estatico en lugar de `require` diferido donde aplicaba.
+
 ## [2.2.5] - 2026-09-28
 
 ### Retirado
