@@ -5,6 +5,18 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.8] - 2026-09-30
+
+### Corregido
+- Falsos `token-unused` por BEM en prosa (`src/parsers/cssParser.ts`):
+  `parsearSoloDefiniciones()` y `parsearDefinicionesRuntime()` aplicaban su
+  regex sobre el texto CRUDO, así que `.boton--primario:hover` dentro de un
+  comentario casaba `--primario` + `:` y el valor se extendía hasta el `;`
+  fuera del comentario. Ambas rutas usan ahora `this._textoSinComentarios`
+  (`eliminarComentarios` rellena con espacios: offsets intactos). Suite VS
+  Code: 122/122 PASS. Limitación documentada: comentarios `//` en TS no se
+  tocan (riesgo de partir `https://`).
+
 ## [2.2.7] - 2026-09-29
 
 ### Corregido
