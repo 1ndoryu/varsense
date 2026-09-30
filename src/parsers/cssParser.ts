@@ -127,7 +127,12 @@ export class CssParser {
      */
     public parsearSoloDefiniciones(): CssVariable[] {
         const variables: CssVariable[] = [];
-        const texto = this._documento.getText();
+        /* [FIX-fantasma] Buscar definiciones sobre el texto sin comentarios
+         * (offsets preservados por relleno con espacios): `.boton--primario:hover`
+         * en prosa casa `--primario` + `:` y el valor se extendia hasta el `;`
+         * siguiente fuera del comentario -> token-unused fantasma (caso TASKS
+         * --primario en modalCreacionRapida.css:92 y accionesItem.css:29). */
+        const texto = this._textoSinComentarios;
         const ambitos = mapearAmbitosBloques(texto);
 
         /* Regex optimizada para buscar solo definiciones de variables */
@@ -168,7 +173,11 @@ export class CssParser {
      */
     public parsearDefinicionesRuntime(): CssVariable[] {
         const variables: CssVariable[] = [];
-        const texto = this._documento.getText();
+        /* [FIX-fantasma] Igual que en parsearSoloDefiniciones: un
+         * `.setProperty('--x', ...)` mencionado en un comentario de bloque no
+         * define nada (caso --fantasma). No se tocan comentarios de linea `//`
+         * (riesgo con `https://` en strings): limitacion documentada. */
+        const texto = this._textoSinComentarios;
         const runtimeDefRegex = /\.setProperty\s*\(\s*(['"`])--([\w-]+)\1/g;
         let match: RegExpExecArray | null;
 
