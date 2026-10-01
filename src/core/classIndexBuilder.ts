@@ -52,8 +52,12 @@ const DEFAULT_MIN_LENGTH = 3;
  * El patrón se reutiliza en attr/template/jsx-expr para que los tres
  * formularios de valor cubran las mismas props. */
 /* Los tres patrones comparten la alternancia de props portadoras:
- * className/class y cualquier prop cuyo nombre empiece por clase/Clase. */
-const REGEX_CLASS_ATTR = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*["']([^"']+)["']/g;
+ * className/class, cualquier prop cuyo nombre empiece por clase/Clase y
+ * [299A-13 F2] cualquier prop que termine en ClassName (panelClassName en
+ * ChatBell.tsx:90 / NotificationBell.tsx:71 de NAKOMI: el valor se reenvía
+ * tal cual al className del dropdown). Los formularios objeto (clase: x)
+ * cubren la misma alternancia. */
+const REGEX_CLASS_ATTR = /(?:className|class|[Cc]lase[\w$]*|[\w$]*ClassName)\s*=\s*["']([^"']+)["']/g;
 /* [318A-7V18] Apertura de template literal en atributo de clase:
  * className/class/*clase={...`template`...}. El scanner balanceado
  * (finTemplateLiteral/finExpresion) sustituye al regex plano [J-8]
@@ -61,12 +65,12 @@ const REGEX_CLASS_ATTR = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*["']([^"']+)[
  * (claseAdicional={`a ${x ? `b${y}` : ''}`} en SelectorNivel/ModalExperimentos)
  * ni con post-procesado tras el cierre (className={`a ${x}`.trim()} en
  * AccionesItem). */
-const REGEX_CLASS_TEMPLATE_INICIO = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*\{\s*`/g;
+const REGEX_CLASS_TEMPLATE_INICIO = /(?:className|class|[Cc]lase[\w$]*|[\w$]*ClassName)\s*=\s*\{\s*`/g;
 /* [J-8] JSX/TSX className={expr} con ternarios y literales: cubre
  * className={cond ? 'a' : 'b'} y className={'a b'}. Los identificadores
  * puros se resuelven por indirección de variables (ver recopilarDeclaraciones).
  * [318A-7V2] Ídem para props *clase (claseAdicional={cond ? 'a' : 'b'}). */
-const REGEX_CLASS_JSX_EXPR = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*\{([^{}]*)\}/g;
+const REGEX_CLASS_JSX_EXPR = /(?:className|class|[Cc]lase[\w$]*|[\w$]*ClassName)\s*=\s*\{([^{}]*)\}/g;
 /* Vanilla TS/DOM factories commonly pass classes as object attributes:
  * createEl('div', { className: 'panel panel--active' }). Keep this parser
  * framework-agnostic while covering the project's createEl contract.
@@ -80,12 +84,12 @@ const REGEX_CLASS_JSX_EXPR = /(?:className|class|[Cc]lase[\w$]*)\s*=\s*\{([^{}]*
  * interpolado en className={`activity-image ${item.imageClass}`}). Solo
  * casan claves finales: classification/classList no terminan en Class y
  * quedan fuera por diseño (son dato/método, no carrier). */
-const REGEX_CLASS_OBJECT = /(?:['"]?(?:className|class|[Cc]lase[\w$]*|[\w$]*[Cc]lass)['"]?)\s*:\s*(?:['"]([^'"]+)['"]|[`]([^`]+)[`])/g;
+const REGEX_CLASS_OBJECT = /(?:['"]?(?:className|class|[Cc]lase[\w$]*|[\w$]*[Cc]lass|[\w$]*ClassName)['"]?)\s*:\s*(?:['"]([^'"]+)['"]|[`]([^`]+)[`])/g;
 /* [318A-7V21] RC-4: propiedad objeto con VALOR VARIABLE (`className:
  * clases.join(' ')` en notifications-popover.ts:83). La vía literal de arriba
  * no casa; aquí se captura el identificador (con su `.join(...)` opcional) y
  * se resuelve por indirección contra el mapa de declaraciones + pushs. */
-const REGEX_CLASS_OBJECT_VAR = /(?:['"]?(?:className|class|[Cc]lase[\w$]*|[\w$]*[Cc]lass)['"]?)\s*:\s*([A-Za-z_$][\w$]*)(?:\s*\.\s*join\s*\([^)]*\))?\s*(?=[,}])/g;
+const REGEX_CLASS_OBJECT_VAR = /(?:['"]?(?:className|class|[Cc]lase[\w$]*|[\w$]*[Cc]lass|[\w$]*ClassName)['"]?)\s*:\s*([A-Za-z_$][\w$]*)(?:\s*\.\s*join\s*\([^)]*\))?\s*(?=[,}])/g;
 const REGEX_CLASS_FACTORY = /createContainer\s*\(\s*['"]([^'"]+)['"]/g;
 const REGEX_EXTERNAL_LINK_CLASS = /createExternalLink\s*\([^,]+,[^,]+,\s*['"]([^'"]+)['"]/g;
 /* [J-8] createElement(tag, 'clase') posicional: Glory-Laminal pasa la clase
@@ -207,6 +211,116 @@ function extraerValoresDeMapaClase(valor: string): string[] {
         valores.push(match[2]);
     }
     return valores;
+}
+
+/* [299A-13 F3b] Cierre balanceado de un objeto literal desde su '{' de
+ * apertura: respeta strings con escape, templates (vía finTemplateLiteral)
+ * y comentarios de línea/bloque. -1 sin cierre. */
+function finObjetoLiteral(source: string, apertura: number): number {
+    let profundidad = 0;
+    let quote = '';
+    let escaped = false;
+    for (let cursor = apertura; cursor < source.length; cursor++) {
+        const current = source[cursor];
+        if (quote) {
+            if (escaped) {escaped = false;}
+            else if (current === '\\') {escaped = true;}
+            else if (current === quote) {quote = '';}
+            continue;
+        }
+        if (current === '`') {
+            const cierre = finTemplateLiteral(source, cursor);
+            if (cierre < 0) {return -1;}
+            cursor = cierre;
+            continue;
+        }
+        if (current === '"' || current === "'") {quote = current; continue;}
+        if (current === '/' && source[cursor + 1] === '/') {
+            const salto = source.indexOf('\n', cursor + 2);
+            cursor = salto < 0 ? source.length : salto;
+            continue;
+        }
+        if (current === '/' && source[cursor + 1] === '*') {
+            const cierre = source.indexOf('*/', cursor + 2);
+            if (cierre < 0) {return -1;}
+            cursor = cierre + 1;
+            continue;
+        }
+        if (current === '{') {profundidad++;}
+        else if (current === '}') {
+            profundidad--;
+            if (profundidad === 0) {return cursor;}
+        }
+    }
+    return -1;
+}
+
+/* [299A-13 F3b] Mapas de clases exportados de UN archivo: `export const
+ * PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = { pendiente:
+ * 'pagoEstado--pendiente', ... }` (api/payments.ts:133 de NAKOMI). Solo
+ * exportados (importables cross-file; los locales ya los cubre M1 vía
+ * variables); solo valores con forma de clase; la anotación de tipo no
+ * puede contener llaves (fail-closed). Exportada para tests. */
+export function extraerMapasExportados(source: string): Record<string, string[]> {
+    const mapas: Record<string, string[]> = {};
+    const reExportMapa = /export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::\s*[^=;{]+)?=\s*\{/g;
+    let match: RegExpExecArray | null;
+    while ((match = reExportMapa.exec(source)) !== null) {
+        if (!isCodeMatch(source, match.index)) {continue;}
+        const nombre = match[1];
+        if (mapas[nombre]) {continue;}
+        const apertura = match.index + match[0].length - 1;
+        const cierre = finObjetoLiteral(source, apertura);
+        if (cierre < 0) {continue;}
+        const clases = extraerValoresDeMapaClase(source.slice(apertura, cierre + 1))
+            .filter(valor => valor.length > 1 && /^[a-zA-Z_][\w-]*$/.test(valor));
+        if (clases.length > 0) {mapas[nombre] = [...new Set(clases)];}
+    }
+    return mapas;
+}
+
+/* [299A-13 F3b] Nombres importados por ruta relativa (`import {
+ * STATUS_CLASS } from '../api/admin-users'`, `import D from './x'`,
+ * `import * as Ns from './y'`). Solo specs que empiezan por '.' (código
+ * propio; librerías fuera por diseño). `import type` se ignora (sin valor
+ * runtime). Exportada para tests. */
+export function extraerNombresImportadosRelativos(source: string): Set<string> {
+    const nombres = new Set<string>();
+    const reImport = /import\s+([^'";]+?)\s+from\s*(['"])(\.[^'"]*)\2/g;
+    let match: RegExpExecArray | null;
+    while ((match = reImport.exec(source)) !== null) {
+        if (!isCodeMatch(source, match.index)) {continue;}
+        if (/^import\s+type\b/.test(match[0])) {continue;}
+        const clausula = match[1].trim();
+        /* Miembros nombrados: se extraen por grupo {..} ANTES de partir por
+         * comas (partir la cláusula entera rompería `{ A, B as C }` en
+         * `{ A` + ` B as C }` y el alias del segundo miembro se perdería). */
+        const reGrupoNombrado = /\{([^}]*)\}/g;
+        let grupo: RegExpExecArray | null;
+        while ((grupo = reGrupoNombrado.exec(clausula)) !== null) {
+            for (const miembro of grupo[1].split(',')) {
+                const m = miembro.trim();
+                if (!m || m.startsWith('type ')) {continue;}
+                const alias = /\bas\s+([A-Za-z_$][\w$]*)\s*$/.exec(m);
+                const final = alias ? alias[1] : m.split(/\s+/)[0];
+                if (/^[A-Za-z_$][\w$]*$/.test(final)) {nombres.add(final);}
+            }
+        }
+        /* Default + namespace: lo que queda fuera de los grupos. */
+        const sinGrupos = clausula.replace(/\{[^}]*\}/g, ' ');
+        for (const parte of sinGrupos.split(',')) {
+            const p = parte.trim();
+            if (!p || p.startsWith('{') || p.startsWith('type ')) {continue;}
+            if (p.startsWith('*')) {
+                const alias = /\bas\s+([A-Za-z_$][\w$]*)\s*$/.exec(p);
+                if (alias) {nombres.add(alias[1]);}
+            } else {
+                const base = p.split(/\s+/)[0];
+                if (/^[A-Za-z_$][\w$]*$/.test(base)) {nombres.add(base);}
+            }
+        }
+    }
+    return nombres;
 }
 
 /* [318A-7V22][M2] Compone los tokens de templates que interpolan variables
@@ -591,6 +705,19 @@ function registrarPrefijosFamilia(value: string, familyPrefixes: Set<string>, co
     }
 }
 
+/* [299A-13 F5] Nombre portador de clases: className/contentClass o cualquier
+ * identificador que empiece por clase/Clase (claseVariante, claseTamano,
+ * clases...). Convención del design system del área (ver bloque V2): una
+ * declaración con este nombre contiene clases por construcción, así que sus
+ * templates registran familia con contextoAttr=true aunque vivan fuera de un
+ * atributo (`const claseVariante = `boton${...}`` en Button.tsx:19 de NAKOMI,
+ * consumido luego en className: sin esto, `boton` nunca era familia y
+ * botonPrimario/botonMediano se reportaban). Fuente única para los tres
+ * gates de emisión (declaraciones, compuestos, push). Exportada para tests. */
+export function esNombrePortadorClase(nombre: string): boolean {
+    return nombre === 'className' || nombre === 'contentClass' || /^[Cc]lase/.test(nombre);
+}
+
 function addClassTokens(value: string, tokens: Set<string>, familyPrefixes?: Set<string>, contextoAttr = false): void {
     if (familyPrefixes) {
         registrarPrefijosFamilia(value, familyPrefixes, contextoAttr);
@@ -633,7 +760,7 @@ const REGEX_SWITCH_CASE = /\bcase\s*['"]([A-Za-z_][\w-]*)['"]\s*:/g;
  * interpolan como clases (CabeceraArbitraje: switch (viabilidad.estado) +
  * className={\`estadoViabilidad ${viabilidad.estado}\`}).
  * La parte 2 se resuelve en extraerTokensDeTexto, que tiene el source. */
-function addTemplateClassTokens(value: string, variables: Map<string, Set<string>>, tokens: Set<string>, familyPrefixes?: Set<string>, contextoAttr = false): void {
+function addTemplateClassTokens(value: string, variables: Map<string, Set<string>>, tokens: Set<string>, familyPrefixes?: Set<string>, contextoAttr = false, importsPropios?: Set<string>, referenciasMapa?: Set<string>): void {
     if (familyPrefixes) {
         registrarPrefijosFamilia(value, familyPrefixes, contextoAttr);
     }
@@ -664,14 +791,33 @@ function addTemplateClassTokens(value: string, variables: Map<string, Set<string
          * atributo de clase: `CLASES_FUENTE[config.tamanoFuente]`
          * (PanelRecordatorios.tsx:91). Todas las claves del Record son
          * alcanzables en runtime (la variable es el mapa completo), así que
-         * el subíndice resuelve el set de la variable igual que un ident. */
-        const subindice = /^([A-Za-z_$][\w$]*)\s*\[[^\]]+\]$/.exec(trimmed);
+         * el subíndice resuelve el set de la variable igual que un ident.
+         * [299A-13 F3b-2] Se tolera fallback literal (`MAPA[x] || ''` en
+         * UsuariosFila.tsx:80 / HostingDetalle.tsx:155) y acceso por punto
+         * (`MAPA.prop` simple, sin llamada detrás). */
+        const sinFallback = sinFallbackClase(trimmed);
+        const subindice = /^([A-Za-z_$][\w$]*)\s*\[[^\]]+\]$/.exec(sinFallback);
         if (subindice) {
             const resueltoMapa = variables.get(subindice[1]);
             if (resueltoMapa) {
                 for (const token of resueltoMapa) {
                     tokens.add(token);
                 }
+            }
+            /* [299A-13 F3b] Mapa importado (`STATUS_CLASS[order.status]` en
+             * SeccionUsuarios/UsuariosFila.tsx de NAKOMI: el Record vive en
+             * api/admin-users.ts y las variables locales no lo conocen). El
+             * nombre traído por import relativo se registra como referencia
+             * para la unión post-hoc (fase 2 del scan); la fase 2 añade los
+             * valores del archivo que lo exporta. Referencias a nombres no
+             * importados se ignoran (fail-closed: podría ser un global). */
+            else if (importsPropios?.has(subindice[1])) {
+                referenciasMapa?.add(subindice[1]);
+            }
+        } else {
+            const punto = /^([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)$/.exec(sinFallback);
+            if (punto) {
+                resolverAccesoPuntoMapa(punto[1], variables, tokens, importsPropios, referenciasMapa);
             }
         }
         for (const literal of extraerLiterales(body)) {
@@ -719,21 +865,21 @@ function previousCodeCharacter(source: string, index: number): string {
     return cursor >= 0 ? source[cursor] : '';
 }
 
-function addQuotedClassTokens(value: string, tokens: Set<string>, familyPrefixes?: Set<string>): void {
+function addQuotedClassTokens(value: string, tokens: Set<string>, familyPrefixes?: Set<string>, contextoAttr = false): void {
     for (const literal of extraerLiterales(value)) {
-        addClassTokens(literal, tokens, familyPrefixes);
+        addClassTokens(literal, tokens, familyPrefixes, contextoAttr);
     }
 }
 
-function addDeclarationClassTokens(value: string, tokens: Set<string>, familyPrefixes?: Set<string>): void {
+function addDeclarationClassTokens(value: string, tokens: Set<string>, familyPrefixes?: Set<string>, contextoAttr = false): void {
     const trimmed = value.trim();
     if (/^(['"`])[\s\S]*\1$/.test(trimmed)) {
-        addClassTokens(trimmed.slice(1, -1), tokens, familyPrefixes);
-        addQuotedClassTokens(trimmed, tokens, familyPrefixes);
+        addClassTokens(trimmed.slice(1, -1), tokens, familyPrefixes, contextoAttr);
+        addQuotedClassTokens(trimmed, tokens, familyPrefixes, contextoAttr);
         return;
     }
     if (pareceTernarioDeLiterales(trimmed)) {
-        addQuotedClassTokens(trimmed, tokens, familyPrefixes);
+        addQuotedClassTokens(trimmed, tokens, familyPrefixes, contextoAttr);
     }
 }
 
@@ -775,13 +921,18 @@ function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): M
         }
         const valor = normalizarValorLiteral(declaracion.valor);
         const tokensVariable = new Set<string>();
+        /* [299A-13 F5] Una declaración portadora (`const claseVariante =
+         * `boton${...}``) registra su familia con contexto de clase aunque
+         * el template viva fuera de un atributo. Vale para las tres formas
+         * de valor (literal, ternario, array). */
+        const contextoPortador = esNombrePortadorClase(nombre);
         if (/^(['"`])[\s\S]*\1$/.test(valor)) {
-            addClassTokens(valor.slice(1, -1), tokensVariable, familyPrefixes);
-            addQuotedClassTokens(valor, tokensVariable, familyPrefixes);
+            addClassTokens(valor.slice(1, -1), tokensVariable, familyPrefixes, contextoPortador);
+            addQuotedClassTokens(valor, tokensVariable, familyPrefixes, contextoPortador);
         } else if (pareceTernarioDeLiterales(valor)) {
-            addQuotedClassTokens(valor, tokensVariable, familyPrefixes);
+            addQuotedClassTokens(valor, tokensVariable, familyPrefixes, contextoPortador);
         } else if (valor.startsWith('[')) {
-            addQuotedClassTokens(valor, tokensVariable, familyPrefixes);
+            addQuotedClassTokens(valor, tokensVariable, familyPrefixes, contextoPortador);
         } else if (valor.trim().startsWith('{')) {
             /* [318A-7V22][M1] Mapa/objeto literal de clases: una variable
              * tipada como Record<Tipo, string> cuyos valores son clases
@@ -1077,6 +1228,25 @@ function textosSinkDeCuerpo(cuerpo: string): string[] {
         const args = dividirArgumentosLlamada(source, match.index + match[0].indexOf('('));
         if (args && args.length >= 2) {textos.push(args[1]);}
     }
+    /* [299A-13 F4] Helpers rest+join (`function combinarClases(...clases) {
+     * return clases.filter(Boolean).join(' ')}` en Modal.tsx:12 de NAKOMI): el
+     * parámetro fluye al string de clases vía return, no vía sink clásico, así
+     * que la función nunca era carrier y el literal del call-site
+     * (`combinarClases('modalBaseContenedor', ...)`) se perdía. El
+     * `return <expr con .join(`> (y la flecha `=> <expr con .join(`>) se
+     * trata como texto de sink: el ident mencionado ahí es portador. Solo
+     * .join (idioma de composición de clases: clsx/classnames/join casero);
+     * un `return x` plano NO es sink (evita que cualquier getter sea carrier).
+     * Límite documentado: un join() no-de-clases (csv/slug) llamado con un
+     * literal con forma de clase bendeciría esa clase; no observado en el área. */
+    const reReturnJoin = /\breturn\s+([^;]+)/g;
+    while ((match = reReturnJoin.exec(source)) !== null) {
+        if (match[1].includes('.join(')) {textos.push(match[1]);}
+    }
+    const reArrowJoin = /=>\s*([^;{}]+)/g;
+    while ((match = reArrowJoin.exec(source)) !== null) {
+        if (match[1].includes('.join(')) {textos.push(match[1]);}
+    }
     /* Contenido de class="..." en templates del cuerpo (iconoHtml:
      * `<svg class="${cls}">`): el local interpolado resuelve a un hop. */
     const reAttrHtml = /\bclass\s*=\s*(["'])([\s\S]*?)\1/g;
@@ -1315,7 +1485,53 @@ function cuerpoDeFuncionEn(source: string, nombre: string): string | null {
     return null;
 }
 
-function resolverLlamadaMapper(body: string, source: string, tokens: Set<string>): void {
+/* [299A-13 F3b-2] `MAPA[x] || ''` (UsuariosFila.tsx:80,
+ * HostingDetalle.tsx:155 de NAKOMI): el fallback literal rompía el match
+ * exacto del subíndice y el mapa importado nunca se registraba. Solo se
+ * despoja un fallback de literal único (`||`/`??` + string); cualquier otra
+ * forma conserva el fail-closed previo. */
+function sinFallbackClase(expr: string): string {
+    return expr.replace(/\s*(?:\|\||\?\?)\s*(?:'[^']*'|"[^"]*"|`[^`]*`)\s*$/, '');
+}
+
+/* [299A-13 F3b-2] Cuerpo de función sin strings (comillas simples/dobles con
+ * escape) para buscar formas de código (`MAPA[x]`, `MAPA.prop`) sin que un
+ * literal las falsee. Los templates se conservan: pueden contener código. */
+function sinStringsClase(cuerpo: string): string {
+    let out = '';
+    let quote = '';
+    let escaped = false;
+    for (let i = 0; i < cuerpo.length; i++) {
+        const c = cuerpo[i];
+        if (quote) {
+            if (escaped) {escaped = false;}
+            else if (c === '\\') {escaped = true;}
+            else if (c === quote) {quote = '';}
+            continue;
+        }
+        if (c === '"' || c === "'") {quote = c; continue;}
+        out += c;
+    }
+    return out;
+}
+
+/* [299A-13 F3b-2] Acceso por punto sobre un mapa (`PAYMENT_STATUS_CLASS.
+ * released` en SeccionPagos.parts.tsx:16 de NAKOMI): misma regla que el
+ * subíndice — set local o referencia al mapa importado para la fase 2.
+ * Solo `Nombre.prop` simple (sin `(` detrás: no llamadas); las cadenas con
+ * más puntos pertenecen al camino switch preexistente. */
+function resolverAccesoPuntoMapa(nombre: string, variables: Map<string, Set<string>>, tokens: Set<string>, importsPropios?: Set<string>, referenciasMapa?: Set<string>): void {
+    const resueltoLocal = variables.get(nombre);
+    if (resueltoLocal) {
+        for (const token of resueltoLocal) {
+            tokens.add(token);
+        }
+    } else if (importsPropios?.has(nombre)) {
+        referenciasMapa?.add(nombre);
+    }
+}
+
+function resolverLlamadaMapper(body: string, source: string, tokens: Set<string>, importsPropios?: Set<string>, referenciasMapa?: Set<string>): void {
     const llamada = body.trim().match(/^([A-Za-z_$][\w$]*)\s*\(/);
     if (!llamada) {
         return;
@@ -1339,6 +1555,26 @@ function resolverLlamadaMapper(body: string, source: string, tokens: Set<string>
             break;
         }
         reReturn.lastIndex = reReturn.lastIndex + finStatement + 1;
+    }
+    /* [299A-13 F3b-2] Helper que envuelve un mapa importado (`return ...
+     * PAYMENT_STATUS_CLASS[payment.status]` / `PAYMENT_STATUS_CLASS.released`
+     * en paymentStatusClass de SeccionPagos.parts.tsx:15-16 de NAKOMI,
+     * invocado como ${paymentStatusClass(payment)} en :76): el cuerpo no
+     * aporta literales y el return-literal de arriba no ve nada. Se registra
+     * la referencia al mapa importado para la fase 2 (unión post-hoc). Solo
+     * nombres traídos por import relativo; el cuerpo se escanea sin strings
+     * para no falsear con literales. Sin import no hay registro (fail-closed:
+     * podría ser un mapa local ya cubierto por M1 o un global). */
+    if (importsPropios && referenciasMapa) {
+        const codigo = sinStringsClase(cuerpo);
+        const reUsoMapa = /\b([A-Za-z_$][\w$]*)\s*\[[^\]\n]*\]|\b([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\b(?!\s*\()/g;
+        let uso: RegExpExecArray | null;
+        while ((uso = reUsoMapa.exec(codigo)) !== null) {
+            const nombre = uso[1] ?? uso[2];
+            if (importsPropios.has(nombre)) {
+                referenciasMapa.add(nombre);
+            }
+        }
     }
 }
 
@@ -1569,7 +1805,7 @@ function agregarClasesExactas(exactas: string[] | null, tokens: Set<string>): vo
 /* [J-8] Resuelve un identificador puro (className={clases}) contra el mapa de
  * declaraciones; si no es un identificador, extrae los literales embebidos
  * (ternarios, templates). */
-function resolverExpresionClase(body: string, variables: Map<string, Set<string>>, tokens: Set<string>, familyPrefixes?: Set<string>): void {
+function resolverExpresionClase(body: string, variables: Map<string, Set<string>>, tokens: Set<string>, familyPrefixes?: Set<string>, importsPropios?: Set<string>, referenciasMapa?: Set<string>): void {
     const trimmed = body.trim();
     /* [149A-1 F3.11] resolucion exacta aditiva antes del flujo previo. */
     agregarClasesExactas(resolverExpresionClaseExacta(trimmed, variables), tokens);
@@ -1589,8 +1825,31 @@ function resolverExpresionClase(body: string, variables: Map<string, Set<string>
      * valor en esta posición ES una cadena de clases por construcción. Un
      * template sin cierre balanceado cae al camino de literales de abajo. */
     if (trimmed.startsWith('`') && trimmed.endsWith('`') && trimmed.length >= 2) {
-        addTemplateClassTokens(trimmed.slice(1, -1), variables, tokens, familyPrefixes, true);
+        addTemplateClassTokens(trimmed.slice(1, -1), variables, tokens, familyPrefixes, true, importsPropios, referenciasMapa);
         return;
+    }
+    /* [299A-13 F3b] Subíndice en posición de expresión (`className={
+     * STATUS_CLASS[order.status]}` en UsuariosFila.tsx:80, `el('li',
+     * CLASES[x])` vanilla): resuelve el set local (misma regla M1 que en
+     * template) o registra la referencia al mapa importado para la fase 2.
+     * [299A-13 F3b-2] Tolera fallback literal (`MAPA[x] || ''`) y acceso por
+     * punto simple (`MAPA.prop`, sin llamada detrás). */
+    const sinFallbackExpr = sinFallbackClase(trimmed);
+    const subindiceExpr = /^([A-Za-z_$][\w$]*)\s*\[[^\]]+\]$/.exec(sinFallbackExpr);
+    if (subindiceExpr) {
+        const resueltoLocal = variables.get(subindiceExpr[1]);
+        if (resueltoLocal) {
+            for (const token of resueltoLocal) {
+                tokens.add(token);
+            }
+        } else if (importsPropios?.has(subindiceExpr[1])) {
+            referenciasMapa?.add(subindiceExpr[1]);
+        }
+    } else {
+        const puntoExpr = /^([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)$/.exec(sinFallbackExpr);
+        if (puntoExpr) {
+            resolverAccesoPuntoMapa(puntoExpr[1], variables, tokens, importsPropios, referenciasMapa);
+        }
     }
     addQuotedClassTokens(trimmed, tokens, familyPrefixes);
 }
@@ -1725,7 +1984,7 @@ function isInsideString(source: string, index: number): boolean {
         const current = source[cursor];
         if (quote) {
             if (escaped) {escaped = false;}
-            else if (current === '\\\\') {escaped = true;}
+            else if (current === '\\') {escaped = true;}
             else if (current === quote) {quote = '';}
         } else if (current === '"' || current === "'" || current === '`') {
             quote = current;
@@ -1738,12 +1997,16 @@ function isCodeMatch(source: string, matchIndex: number): boolean {
     return !isInsideString(source, matchIndex);
 }
 
-function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes?: Set<string>): void {
+function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes?: Set<string>, referenciasMapa?: Set<string>): void {
     const source = removeComments(texto);
     let match: RegExpExecArray | null;
     /* [J-8] La indirección requiere conocer las declaraciones antes de
      * resolver los usos (className={ident}). Se recopila una vez por archivo. */
     const variables = recopilarDeclaraciones(source, familyPrefixes);
+    /* [299A-13 F3b] Nombres traídos por import relativo: permiten distinguir
+     * un mapa importado (`STATUS_CLASS` de otro archivo) de un global
+     * desconocido al registrar referencias para la fase 2. */
+    const importsPropios = extraerNombresImportadosRelativos(source);
 
     REGEX_CLASS_ATTR.lastIndex = 0;
     while ((match = REGEX_CLASS_ATTR.exec(source)) !== null) {
@@ -1767,12 +2030,12 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         const valor = source.slice(apertura + 1, cierre);
         /* contextoAttr=true: el contenido de un template en atributo de clase
          * ES una cadena de clases por construcción (regla V18). */
-        addTemplateClassTokens(valor, variables, tokens, familyPrefixes, true);
+        addTemplateClassTokens(valor, variables, tokens, familyPrefixes, true, importsPropios, referenciasMapa);
         resolverSwitchTemplate(valor, source, tokens);
         /* [318A-7V20] RC-3: mapper llamado dentro del template de clase
          * (`etiqueta ${obtenerClasePrioridad(p)}` en ListaProyectos.tsx). */
         for (const exp of descomponerTemplate(valor).expresiones) {
-            resolverLlamadaMapper(exp, source, tokens);
+            resolverLlamadaMapper(exp, source, tokens, importsPropios, referenciasMapa);
         }
     }
 
@@ -1781,8 +2044,8 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
     REGEX_CLASS_JSX_EXPR.lastIndex = 0;
     while ((match = REGEX_CLASS_JSX_EXPR.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
-        resolverExpresionClase(match[1], variables, tokens, familyPrefixes);
-        resolverLlamadaMapper(match[1], source, tokens);
+        resolverExpresionClase(match[1], variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
+        resolverLlamadaMapper(match[1], source, tokens, importsPropios, referenciasMapa);
     }
 
     REGEX_CLASS_OBJECT.lastIndex = 0;
@@ -1803,7 +2066,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         if (!isCodeMatch(source, match.index)) {continue;}
         const previous = previousCodeCharacter(source, match.index);
         if (previous !== '{' && previous !== ',') {continue;}
-        resolverExpresionClase(match[1], variables, tokens, familyPrefixes);
+        resolverExpresionClase(match[1], variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
     }
 
     REGEX_CLASS_FACTORY.lastIndex = 0;
@@ -1819,8 +2082,8 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
     REGEX_CREATE_ELEMENT_CLASS.lastIndex = 0;
     while ((match = REGEX_CREATE_ELEMENT_CLASS.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
-        resolverExpresionClase(match[1], variables, tokens, familyPrefixes);
-        resolverLlamadaMapper(match[1], source, tokens);
+        resolverExpresionClase(match[1], variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
+        resolverLlamadaMapper(match[1], source, tokens, importsPropios, referenciasMapa);
     }
 
     /* [318A-7V23] el(tag, cls) posicional (ver REGEX_EL_FACTORY): el 2º
@@ -1843,8 +2106,8 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         /* 1er argumento tag literal ('div'): con tag dinámico u otra
          * semántica del mismo nombre, fuera por diseño (ver regex). */
         if (!/^\s*['"][A-Za-z][\w-]*['"]\s*$/.test(args[0])) {continue;}
-        resolverExpresionClase(args[1], variables, tokens, familyPrefixes);
-        resolverLlamadaMapper(args[1], source, tokens);
+        resolverExpresionClase(args[1], variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
+        resolverLlamadaMapper(args[1], source, tokens, importsPropios, referenciasMapa);
     }
 
     /* [318A-7V23] Call-sites de carriers del mismo archivo (ver
@@ -1871,7 +2134,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
                 if (/^(['"])[\s\S]*\1$/.test(arg)) {
                     addClassTokens(arg.slice(1, -1), tokens, familyPrefixes, true);
                 } else if (arg.startsWith('`') && arg.endsWith('`') && arg.length >= 2) {
-                    addTemplateClassTokens(arg.slice(1, -1), variables, tokens, familyPrefixes, true);
+                    addTemplateClassTokens(arg.slice(1, -1), variables, tokens, familyPrefixes, true, importsPropios, referenciasMapa);
                 }
             }
         }
@@ -1888,8 +2151,8 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
     REGEX_CLASS_LIST.lastIndex = 0;
     while ((match = REGEX_CLASS_LIST.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index) || previousCodeCharacter(source, match.index) !== '.') {continue;}
-        resolverExpresionClase(match[1], variables, tokens, familyPrefixes);
-        resolverLlamadaMapper(match[1], source, tokens);
+        resolverExpresionClase(match[1], variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
+        resolverLlamadaMapper(match[1], source, tokens, importsPropios, referenciasMapa);
     }
 
     /* [318A-7V23] setAttribute('class', <expr>) directo: la vía de ATRIBUTO
@@ -1910,20 +2173,21 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         if (aperturaAttr < 0) {continue;}
         const argsAttr = dividirArgumentosLlamada(source, aperturaAttr);
         if (!argsAttr || argsAttr.length < 2) {continue;}
-        resolverExpresionClase(argsAttr[1], variables, tokens, familyPrefixes);
-        resolverLlamadaMapper(argsAttr[1], source, tokens);
+        resolverExpresionClase(argsAttr[1], variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
+        resolverLlamadaMapper(argsAttr[1], source, tokens, importsPropios, referenciasMapa);
     }
 
     for (const declaracion of escanearDeclaraciones(source)) {
-        const esCarrier = declaracion.nombre === 'className' || declaracion.nombre === 'contentClass'
-            || /^[Cc]lase/.test(declaracion.nombre);
+        const esCarrier = esNombrePortadorClase(declaracion.nombre);
         if (!esCarrier) {
             continue;
         }
         if (!isCodeMatch(source, declaracion.indice)) {continue;}
         const previous = previousCodeCharacter(source, declaracion.indice);
         if (previous && /[\w'"`]/.test(previous)) {continue;}
-        addDeclarationClassTokens(declaracion.valor, tokens, familyPrefixes);
+        /* [299A-13 F5] contextoAttr=true: la declaración ya es portadora por
+         * nombre; sus templates registran familia (boton/input/textarea). */
+        addDeclarationClassTokens(declaracion.valor, tokens, familyPrefixes, true);
         /* [149A-1 F3.11] className/contentClass compuestos: el mapa ya esta
          * completo aqui (todas las declaraciones del archivo). */
         agregarClasesExactas(resolverExpresionClaseExacta(normalizarValorLiteral(declaracion.valor), variables), tokens);
@@ -1932,23 +2196,21 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
      * emiten directo al archivo; recopilarDeclaraciones ya los fusionó al set
      * de la variable para la vía de indirección className={clase}. */
     for (const compuesto of escanearAsignacionesCompuestas(source)) {
-        const esCarrierCompuesto = /^[Cc]lase/.test(compuesto.nombre)
-            || compuesto.nombre === 'className' || compuesto.nombre === 'contentClass';
+        const esCarrierCompuesto = esNombrePortadorClase(compuesto.nombre);
         if (!esCarrierCompuesto || !isCodeMatch(source, compuesto.indice)) {
             continue;
         }
-        addQuotedClassTokens(compuesto.valor, tokens, familyPrefixes);
+        addQuotedClassTokens(compuesto.valor, tokens, familyPrefixes, true);
     }
     /* [318A-7V21] RC-4: `clases.push('...')` sobre un carrier emite directo
      * al archivo (misma regla que los compuestos); el set para indirección ya
      * se fusionó en recopilarDeclaraciones. */
     for (const push of escanearPushs(source)) {
-        const esCarrierPush = /^[Cc]lase/.test(push.nombre)
-            || push.nombre === 'className' || push.nombre === 'contentClass';
+        const esCarrierPush = esNombrePortadorClase(push.nombre);
         if (!esCarrierPush || !isCodeMatch(source, push.indice)) {
             continue;
         }
-        addQuotedClassTokens(push.valor, tokens, familyPrefixes);
+        addQuotedClassTokens(push.valor, tokens, familyPrefixes, true);
     }
 
     /* [318A-7V22][M4] Construcción de HTML en runtime: templates que
@@ -1967,11 +2229,11 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         if (!isCodeMatch(source, declaracion.indice)) {continue;}
         const previo = previousCodeCharacter(source, declaracion.indice);
         if (previo && /[\w'"`]/.test(previo)) {continue;}
-        resolverConstruccionHtml(declaracion.valor, variables, tokens, familyPrefixes);
+        resolverConstruccionHtml(declaracion.valor, variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
     }
     for (const compuesto of escanearAsignacionesCompuestas(source)) {
         if (!isCodeMatch(source, compuesto.indice)) {continue;}
-        resolverConstruccionHtml(compuesto.valor, variables, tokens, familyPrefixes);
+        resolverConstruccionHtml(compuesto.valor, variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
     }
     /* [318A-7V23] returns y push con HTML: `return \`<span
      * class="resumen">...\`` (mensajesUtil.ts:44/51-52 de GH) y
@@ -1980,11 +2242,11 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
      * dentro del template ES cadena de clases por construcción (regla M4). */
     for (const retorno of escanearReturns(source)) {
         if (!isCodeMatch(source, retorno.indice)) {continue;}
-        resolverConstruccionHtml(retorno.valor, variables, tokens, familyPrefixes);
+        resolverConstruccionHtml(retorno.valor, variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
     }
     for (const push of escanearPushs(source)) {
         if (!isCodeMatch(source, push.indice)) {continue;}
-        resolverConstruccionHtml(push.valor, variables, tokens, familyPrefixes);
+        resolverConstruccionHtml(push.valor, variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
     }
 }
 
@@ -1997,7 +2259,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
  * de GH: cuerpo.push(`<span class="${clase}">`) con `clase` valiendo
  * ctx/add/del/elididas; iconoHtml: `<svg class="${cls}">` con cls={ic,ic-xs}).
  * Sin variables el ${} quedaba sin resolver y esas clases se reportaban. */
-function resolverConstruccionHtml(valor: string, variables: Map<string, Set<string>>, tokens: Set<string>, familyPrefixes?: Set<string>): void {
+function resolverConstruccionHtml(valor: string, variables: Map<string, Set<string>>, tokens: Set<string>, familyPrefixes?: Set<string>, importsPropios?: Set<string>, referenciasMapa?: Set<string>): void {
     /* Guard rápido: sin '<' no hay construcción de HTML. */
     if (!valor.includes('<')) {
         return;
@@ -2019,7 +2281,7 @@ function resolverConstruccionHtml(valor: string, variables: Map<string, Set<stri
         /* Contenido con interpolación: descomponer el template para tokenizar
          * segmentos estáticos, resolver ${ident} por indirección y registrar
          * familias pegadas (ver addTemplateClassTokens). */
-        addTemplateClassTokens(contenido, variables, tokens, familyPrefixes, true);
+        addTemplateClassTokens(contenido, variables, tokens, familyPrefixes, true, importsPropios, referenciasMapa);
     }
 }
 
@@ -2043,6 +2305,8 @@ export class ClassIndexBuilder {
         familyPrefixes: Set<string>;
         carriers: Map<string, Set<number>>;
         llamadas: CarrierCallSite[];
+        mapasExportados: Record<string, string[]>;
+        referenciasMapa: Set<string>;
     }>();
 
     constructor(
@@ -2088,7 +2352,7 @@ export class ClassIndexBuilder {
 
         throwIfCancelled(options.token);
         onProgress?.('Extrayendo tokens de consumidores', 0, 1);
-        const { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, totalArchivos: archivosConsumo } = await this.extractConsumerTokens(
+        const { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, filesMapasExportados, filesReferenciasMapa, totalArchivos: archivosConsumo } = await this.extractConsumerTokens(
             consumerPatterns,
             options.exclude,
             options.token
@@ -2116,6 +2380,34 @@ export class ClassIndexBuilder {
                         llamadasCrossCarrier.set(clase, archivos);
                     }
                 }
+            }
+        }
+        /* [299A-13 F3b] Unión global de mapas de clases exportados (nombre →
+         * valores con forma de clase de TODOS los archivos que lo exportan) y
+         * resolución post-hoc de referencias: un archivo que referencia por
+         * subíndice un mapa importado (`STATUS_CLASS[order.status]` en
+         * UsuariosFila.tsx, exportado por api/admin-users.ts) recibe los
+         * valores del mapa como tokens propios. La referencia al mapa que el
+         * propio archivo exporta se ignora (ya está cubierta por la vía local
+         * M1: el export también es declaración local). */
+        const mapasUnion = new Map<string, Set<string>>();
+        for (const mapas of filesMapasExportados.values()) {
+            for (const [nombre, valores] of Object.entries(mapas)) {
+                const union = mapasUnion.get(nombre) ?? new Set<string>();
+                for (const valor of valores) {union.add(valor);}
+                mapasUnion.set(nombre, union);
+            }
+        }
+        for (const [fsPath, referencias] of filesReferenciasMapa) {
+            if (referencias.size === 0) {continue;}
+            const propios = filesMapasExportados.get(fsPath);
+            const tokensArchivo = filesTokens.get(fsPath);
+            if (!tokensArchivo) {continue;}
+            for (const nombre of referencias) {
+                if (propios?.[nombre]) {continue;}
+                const valores = mapasUnion.get(nombre);
+                if (!valores) {continue;}
+                for (const valor of valores) {tokensArchivo.add(valor);}
             }
         }
 
@@ -2270,6 +2562,8 @@ export class ClassIndexBuilder {
         filesFamilyPrefixes: Map<string, Set<string>>;
         filesCarriers: Map<string, Map<string, Set<number>>>;
         filesLlamadas: Map<string, CarrierCallSite[]>;
+        filesMapasExportados: Map<string, Record<string, string[]>>;
+        filesReferenciasMapa: Map<string, Set<string>>;
         totalArchivos: number;
     }> {
         const files = await this.findUniqueFiles(patterns, exclude, token);
@@ -2277,6 +2571,8 @@ export class ClassIndexBuilder {
         const filesFamilyPrefixes = new Map<string, Set<string>>();
         const filesCarriers = new Map<string, Map<string, Set<number>>>();
         const filesLlamadas = new Map<string, CarrierCallSite[]>();
+        const filesMapasExportados = new Map<string, Record<string, string[]>>();
+        const filesReferenciasMapa = new Map<string, Set<string>>();
         let totalTokens = 0;
         for (const fsPath of this.consumerFileCache.keys()) {
             if (!files.has(fsPath)) {
@@ -2302,6 +2598,8 @@ export class ClassIndexBuilder {
                 filesFamilyPrefixes.set(file.fsPath, cached.familyPrefixes);
                 filesCarriers.set(file.fsPath, cached.carriers);
                 filesLlamadas.set(file.fsPath, cached.llamadas);
+                filesMapasExportados.set(file.fsPath, cached.mapasExportados);
+                filesReferenciasMapa.set(file.fsPath, cached.referenciasMapa);
                 totalTokens += cached.tokens.size;
             } catch (error) {
                 if (error instanceof CancellationError) {
@@ -2311,7 +2609,7 @@ export class ClassIndexBuilder {
             }
         }
 
-        return { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, totalArchivos: files.size };
+        return { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, filesMapasExportados, filesReferenciasMapa, totalArchivos: files.size };
     }
 
     /* [028A-8] Carga las definiciones CSS de un archivo reutilizando el índice
@@ -2358,14 +2656,19 @@ export class ClassIndexBuilder {
         familyPrefixes: Set<string>;
         carriers: Map<string, Set<number>>;
         llamadas: CarrierCallSite[];
+        mapasExportados: Record<string, string[]>;
+        referenciasMapa: Set<string>;
     }> {
         const hash = this.persistentStore ? await sha256File(file.fsPath) : null;
         const store = this.persistentStore;
         const stored = hash ? store?.getEntry(file.fsPath) : undefined;
         /* [318A-7V14] La familia se exige persistida: una entrada vieja (sin
-         * consumerFamilyPrefixes) se re-parsea aunque el hash coincida. */
+         * consumerFamilyPrefixes) se re-parsea aunque el hash coincida.
+         * [299A-13 F3b] Ídem para mapas exportados + referencias (entradas de
+         * PARSER_VERSION 5 se re-parsean aunque el schema no haya cambiado). */
         if (stored?.hash === hash && stored.consumerTokens && stored.consumerFamilyPrefixes
-            && stored.consumerCarriers && stored.consumerCarrierCalls) {
+            && stored.consumerCarriers && stored.consumerCarrierCalls
+            && stored.consumerExportedClassMaps && stored.consumerMapReferences) {
             if (store) {store.stats.reused++;}
             const cached = {
                 tokens: new Set<string>(stored.consumerTokens),
@@ -2374,6 +2677,8 @@ export class ClassIndexBuilder {
                     Object.entries(stored.consumerCarriers).map(([fn, poss]) => [fn, new Set<number>(poss)])
                 ),
                 llamadas: stored.consumerCarrierCalls.map(llamada => ({ ...llamada })),
+                mapasExportados: stored.consumerExportedClassMaps,
+                referenciasMapa: new Set<string>(stored.consumerMapReferences),
             };
             this.consumerFileCache.set(file.fsPath, cached);
             return cached;
@@ -2383,7 +2688,15 @@ export class ClassIndexBuilder {
         const texto = document.getText();
         const fileTokens = new Set<string>();
         const fileFamilyPrefixes = new Set<string>();
-        extraerTokensDeTexto(texto, fileTokens, fileFamilyPrefixes);
+        const fileReferenciasMapa = new Set<string>();
+        extraerTokensDeTexto(texto, fileTokens, fileFamilyPrefixes, fileReferenciasMapa);
+        /* [299A-13 F3b] Mapas de clases exportados (`export const
+         * PAYMENT_STATUS_CLASS: Record<...> = {...}`). Solo scripts: el
+         * `export const` es un idioma JS/TS (mismo gate que carriers). */
+        let mapasExportados: Record<string, string[]> = {};
+        if (/\.(ts|tsx|jsx|js|mjs|cjs)$/.test(file.fsPath)) {
+            mapasExportados = extraerMapasExportados(texto);
+        }
         let carriers = new Map<string, Set<number>>();
         let llamadas: CarrierCallSite[] = [];
         if (/\.(ts|tsx|jsx|js|mjs|cjs)$/.test(file.fsPath)) {
@@ -2393,7 +2706,7 @@ export class ClassIndexBuilder {
             );
             llamadas = extraccion.llamadas;
         }
-        const cached = { tokens: fileTokens, familyPrefixes: fileFamilyPrefixes, carriers, llamadas };
+        const cached = { tokens: fileTokens, familyPrefixes: fileFamilyPrefixes, carriers, llamadas, mapasExportados, referenciasMapa: fileReferenciasMapa };
         this.consumerFileCache.set(file.fsPath, cached);
         if (hash) {
             const previa = store?.getEntry(file.fsPath) ?? {};
@@ -2404,6 +2717,8 @@ export class ClassIndexBuilder {
                 consumerFamilyPrefixes: [...fileFamilyPrefixes],
                 consumerCarriers: Object.fromEntries([...carriers].map(([fn, poss]) => [fn, [...poss]])),
                 consumerCarrierCalls: llamadas,
+                consumerExportedClassMaps: mapasExportados,
+                consumerMapReferences: [...fileReferenciasMapa],
             });
             if (store) {store.stats.reparsed++;}
         }

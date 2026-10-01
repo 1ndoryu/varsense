@@ -5,6 +5,33 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.9] - 2026-10-01
+
+### Corregido
+- Falsos `claseHuerfana` en consumidores (`src/core/classIndexBuilder.ts`,
+  `[299A-13]`): `isInsideString()` tenia rama muerta (`'\\\\'` de 2 chars
+  en vez de `'\\'`), 5 REGEX solo veian `className` exacto (ahora sufijos
+  `*ClassName`/`*clase`/`*Clase`: `panelClassName`, `triggerClassName`),
+  `return`/`=>` con `.join(' ')` no eran sink (`combinarClases`), las
+  declaraciones carrier-named (`` `boton${...}` `` en `Button.tsx:19`) no
+  registraban familia fuera de atributo, y los `Record<string,string>`
+  exportados (`PAYMENT_STATUS_CLASS`, `STATUS_CLASS`) no cruzaban de
+  `api/*.ts` al `.tsx` que los usa (union `mapasUnion` + `finObjetoLiteral`
+  + `extraerNombresImportadosRelativos` + `PARSER_VERSION='6'`).
+- F3b-2: `MAPA[x] || ''`/`??` (fallback en `UsuariosFila.tsx:80`,
+  `HostingDetalle.tsx:155`), acceso por punto `PAGO.liberado` y helpers
+  que envuelven el mapa (`paymentStatusClass` en `SeccionPagos.parts.tsx`)
+  ahora resuelven via `sinFallbackClase`/`resolverAccesoPuntoMapa`/
+  `resolverLlamadaMapper`. Fail-closed: solo mapas importados por ruta
+  relativa; lo no importado se ignora.
+- 10 tests de regresion en `coreContracts.test.ts` (F1/F2/F4/F5/parser/
+  scan/fallback/helper). Suite headless: `coreContracts` 88/88 + CLI/
+  equivalencia/LSP 21/21 PASS; `compile:tests` EXIT 0; `eslint` 0 errores
+  (2 warnings preexistentes fuera de los hunks). NAKOMI L1: 35 -> 4
+  (resto: `uplot`/`u-legend`/`tiptap`/`is-editor-empty` de libreria, sin
+  allowlist aun). Limitaciones: sin `varsense-ignore`, sin mapas locales
+  dentro de funcion, anotacion de tipo sin llaves.
+
 ## [2.2.8] - 2026-09-30
 
 ### Corregido

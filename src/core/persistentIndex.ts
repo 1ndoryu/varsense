@@ -20,8 +20,10 @@ import type { VarsenseConfigFile } from './config';
 export const PERSISTENT_INDEX_SCHEMA_VERSION = 1;
 /* Bump al cambiar la semántica de parseo/extracción que alimenta el índice.
  * 3: [318A-7V14] consumerFamilyPrefixes (template-literal family prefixes).
- * 5: [318A-7V24] consumerCarriers + consumerCarrierCalls (carriers cross-file). */
-export const PARSER_VERSION = '5';
+ * 5: [318A-7V24] consumerCarriers + consumerCarrierCalls (carriers cross-file).
+ * 6: [299A-13 F3b] consumerExportedClassMaps + consumerMapReferences (mapas de
+ * clases exportados y referencias a mapas importados). */
+export const PARSER_VERSION = '6';
 export const PERSISTENT_INDEX_FILENAME = 'varsense-index.json';
 
 export interface PersistentIndexEntry {
@@ -40,6 +42,14 @@ export interface PersistentIndexEntry {
      * a consumerTokens para reusar una entrada (criterio V14). */
     consumerCarriers?: Record<string, number[]>;
     consumerCarrierCalls?: Array<{ fn: string; pos: number; literal: string }>;
+    /* [299A-13 F3b] Mapas de clases exportados por el archivo (nombre → valores
+     * con forma de clase) y nombres de mapas importados referenciados por
+     * subíndice en él. Solo lo que el archivo aporta por sí mismo: la unión
+     * cross-file se computa en memoria por ejecución (mismo criterio V14/V24:
+     * la entrada de B no depende del contenido de A). Se exigen presentes
+     * junto a consumerTokens para reusar una entrada. */
+    consumerExportedClassMaps?: Record<string, string[]>;
+    consumerMapReferences?: string[];
     variables?: CssVariable[];
     /* [028A-8 tramo 4] Usos var(--x) referenciados por este archivo CSS: permite
      * resolver consumidores de una definición sin recorrer el workspace. */

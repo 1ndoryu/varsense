@@ -8,7 +8,7 @@ import { buildAnalysisConfig } from '../../core/config';
 import { analyzeCrossFileDuplicates, analyzeTokenRules } from '../../core/tokenRules';
 import { VariableIndexBuilder } from '../../core/variableIndexBuilder';
 import { ClassIndexBuilder } from '../../core/classIndexBuilder';
-import { detectarCarriersMismoArchivo } from '../../core/classIndexBuilder';
+import { detectarCarriersMismoArchivo, extraerMapasExportados, extraerNombresImportadosRelativos, esNombrePortadorClase } from '../../core/classIndexBuilder';
 import { NodeWorkspaceFileProvider } from '../../core/nodeProviders';
 import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../core/workspaceProviders';
 import * as fs from 'fs';
@@ -2332,5 +2332,300 @@ suite('VarSense editor-agnostic core contracts', () => {
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'tarjetaMuerta');
+  });
+
+  /* [299A-13 F1] Comilla escapada dentro de string (Let\'s en
+   * SolucionHostingIsland.tsx:131): el escape muerto cerraba el string antes
+   * de tiempo y la comilla de cierre REAL abría un string fantasma que se
+   * tragaba la declaración y el uso posteriores (sondaEscapeViva huérfana FP).
+   * Con el escape vivo, el estado de comillas sobrevive y el uso resuelve. */
+  test('escaped quote inside string does not swallow later class usage', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: '.sondaEscapeViva { color: red; }\n.sondaEscapeMuerta { color: blue; }',
+      },
+      '/workspace/src/vista.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'const mensaje = \'Todo listo y verificado\\\' + resto\';',
+          'const clase = \'sondaEscapeViva\';',
+          'const vista = <span className={clase} />;',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'sondaEscapeMuerta');
+  });
+
+  /* [299A-13 F2] Props que TERMINAN en ClassName (panelClassName en
+   * ChatBell.tsx:90 / NotificationBell.tsx:71 de NAKOMI: reenvío tal cual al
+   * className del dropdown). Los tres formularios de valor las cubren igual
+   * que className. */
+  test('suffix *ClassName props (panelClassName) register their tokens', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: '.menuDesplegableVivo { color: red; }\n.menuDesplegableMuerto { color: blue; }',
+      },
+      '/workspace/src/Campana.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'export function Campana() {',
+          '  return <BotonDesplegable panelClassName="menuDesplegableVivo" />;',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'menuDesplegableMuerto');
+  });
+
+  /* [299A-13 F5] Declaración portadora fuera de atributo
+   * (`const claseVariante = `boton${...}`` en Button.tsx:19 de NAKOMI):
+   * registra su familia con contexto de clase aunque el template no viva en
+   * un atributo; sin esto el guard de prosa rechazaba `boton` y
+   * botonPrimario se reportaba huérfana (FP). La muerta vive FUERA de la
+   * familia (la familia exime a todos sus miembros por diseño). */
+  test('carrier-named template declaration registers its class family', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: [
+          '.botonBase { color: red; }',
+          '.botonPrimario { color: red; }',
+          '.panelMuerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/Boton.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'export function Boton({ variante = \'primario\' }: any) {',
+          '  const claseVariante = `boton${variante.charAt(0).toUpperCase() + variante.slice(1)}`;',
+          '  return <button className={`botonBase ${claseVariante}`} />;',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelMuerto');
+  });
+
+  /* [299A-13 F5] La convención de nombre portador en un solo punto: las tres
+   * vías de emisión (declaraciones, compuestos, push) la comparten. */
+  test('esNombrePortadorClase cubre className/contentClass y prefijos clase/Clase', () => {
+    assert.strictEqual(esNombrePortadorClase('className'), true);
+    assert.strictEqual(esNombrePortadorClase('contentClass'), true);
+    assert.strictEqual(esNombrePortadorClase('claseVariante'), true);
+    assert.strictEqual(esNombrePortadorClase('claseTamano'), true);
+    assert.strictEqual(esNombrePortadorClase('clases'), true);
+    assert.strictEqual(esNombrePortadorClase('ClaseExtra'), true);
+    assert.strictEqual(esNombrePortadorClase('titulo'), false);
+    assert.strictEqual(esNombrePortadorClase('variante'), false);
+    assert.strictEqual(esNombrePortadorClase('onClick'), false);
+    assert.strictEqual(esNombrePortadorClase('myclass'), false);
+  });
+
+  /* [299A-13 F4] Helper rest+join (`function combinarClases(...clases) {
+   * return clases.filter(Boolean).join(' ')}` en Modal.tsx:12 de NAKOMI): el
+   * `return <expr con .join(`> es texto de sink, la función es carrier y el
+   * literal del call-site (`modalPruebaContenedor`) se consume cross-file. */
+  test('rest+join helper is a carrier via its return statement', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: '.modalPruebaContenedor { color: red; }\n.modalPruebaMuerto { color: blue; }',
+      },
+      '/workspace/src/Modal.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'function combinarClases(...clases: Array<string | undefined>): string {',
+          '  return clases.filter(Boolean).join(\' \');',
+          '}',
+          'export function abrirModal(className?: string): unknown {',
+          '  return combinarClases(\'modalPruebaContenedor\', className);',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'modalPruebaMuerto');
+  });
+
+  /* [299A-13 F3b] Mapas exportados: solo `export const` con valores con forma
+   * de clase; los locales y los valores no-clase se ignoran (la vía M1 ya
+   * cubre los locales; la fase 2 une los exportados). */
+  test('extraerMapasExportados solo registra mapas exportados con valores clase', () => {
+    const mapas = extraerMapasExportados([
+      'export const ESTADO: Record<Estado, string> = {',
+      '  pendiente: \'clsUno\',',
+      '  listo: \'clsDos\',',
+      '};',
+      'const LOCAL = { dentro: \'clsTres\' };',
+      'export const VACIO: Record<string, string> = { n: 0, s: \'\' };',
+      'export const OTRO = { a: \'clsCuatro\' };',
+    ].join('\n'));
+
+    assert.deepStrictEqual(mapas, { ESTADO: ['clsUno', 'clsDos'], OTRO: ['clsCuatro'] });
+  });
+
+  /* [299A-13 F3b] Imports relativos: default, nombrados con alias y namespace
+   * de rutas '.'; librerías e `import type` fuera (sin valor runtime). */
+  test('extraerNombresImportadosRelativos solo trae nombres de codigo propio', () => {
+    const nombres = extraerNombresImportadosRelativos([
+      'import { A, B as C } from \'../api/x\';',
+      'import D from \'./y\';',
+      'import * as N from \'./z\';',
+      'import Dflt, { G as H } from \'./w\';',
+      'import { E } from \'react\';',
+      'import type { T } from \'./t\';',
+    ].join('\n'));
+
+    assert.deepStrictEqual([...nombres].sort(), ['A', 'C', 'D', 'Dflt', 'H', 'N']);
+  });
+
+  /* [299A-13 F3b] Mapa importado por subíndice (`className={
+   * STATUS_CLASS[order.status]}` en UsuariosFila.tsx:80 de NAKOMI, exportado
+   * por api/admin-users.ts:79): la referencia se une post-hoc con los valores
+   * del archivo que lo exporta; la muerta real sigue reportada. */
+  test('imported class map subscript resolves through the exporting file', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: [
+          '.pagoPrueba--pendiente { color: red; }',
+          '.pagoPrueba--listo { color: red; }',
+          '.pagoPrueba--muerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/api.ts': {
+        languageId: 'typescript',
+        content: [
+          'export type EstadoPrueba = \'pendiente\' | \'listo\';',
+          'export const MAPA_PRUEBA: Record<EstadoPrueba, string> = {',
+          '  pendiente: \'pagoPrueba--pendiente\',',
+          '  listo: \'pagoPrueba--listo\',',
+          '};',
+        ].join('\n'),
+      },
+      '/workspace/src/Fila.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'import { MAPA_PRUEBA } from \'./api\';',
+          'export function Fila({ estado }: any) {',
+          '  return <span className={MAPA_PRUEBA[estado]} />;',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'pagoPrueba--muerto');
+  });
+
+  /* [299A-13 F3b-2] Subíndice con fallback literal (`MAPA[x] || ''` en
+   * UsuariosFila.tsx:80 / HostingDetalle.tsx:155 de NAKOMI): el `|| ''`
+   * rompía el match exacto y statusActivo/Baneado/Suspendido quedaban
+   * huérfanas pese al import relativo. */
+  test('imported class map subscript with literal fallback resolves', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: [
+          '.estadoActivo { color: red; }',
+          '.estadoInactivo { color: red; }',
+          '.estadoMuerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/api.ts': {
+        languageId: 'typescript',
+        content: [
+          'export const ESTADO: Record<string, string> = {',
+          '  activo: \'estadoActivo\',',
+          '  inactivo: \'estadoInactivo\',',
+          '};',
+        ].join('\n'),
+      },
+      '/workspace/src/Fila.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'import { ESTADO } from \'./api\';',
+          'export function Fila({ e }: any) {',
+          '  return <span className={`filaBadge ${ESTADO[e] || \'\'}`}>{e}</span>;',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'estadoMuerto');
+  });
+
+  /* [299A-13 F3b-2] Helper que envuelve un mapa importado (`return ...
+   * PAYMENT_STATUS_CLASS[payment.status]` + `PAYMENT_STATUS_CLASS.released`
+   * en paymentStatusClass de SeccionPagos.parts.tsx:15-16 de NAKOMI,
+   * invocado como ${paymentStatusClass(payment)} en :76): el cuerpo no tiene
+   * literales, así que el camino return-literal no veía nada y los 5
+   * pagoEstado--* quedaban huérfanos. */
+  test('helper wrapping an imported class map resolves through phase 2', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/estilos.css': {
+        languageId: 'css',
+        content: [
+          '.pagoEnv--pendiente { color: red; }',
+          '.pagoEnv--liberado { color: red; }',
+          '.pagoEnv--muerto { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/api.ts': {
+        languageId: 'typescript',
+        content: [
+          'export const PAGO: Record<string, string> = {',
+          '  pendiente: \'pagoEnv--pendiente\',',
+          '  liberado: \'pagoEnv--liberado\',',
+          '};',
+        ].join('\n'),
+      },
+      '/workspace/src/Fila.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'import { PAGO } from \'./api\';',
+          'function clasePago(bypassed: boolean, estado: string): string {',
+          '  return bypassed ? PAGO.liberado : PAGO[estado];',
+          '}',
+          'export function Fila({ estado }: any) {',
+          '  return <span className={`pagoBadge ${clasePago(false, estado)}`}>{estado}</span>;',
+          '}',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.strictEqual(result.totalClasesHuerfanas, 1);
+    assert.strictEqual(result.clasesHuerfanas[0].nombre, 'pagoEnv--muerto');
   });
 });
