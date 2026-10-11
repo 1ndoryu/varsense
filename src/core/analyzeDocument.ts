@@ -26,7 +26,7 @@ export interface VarsenseDocumentAnalysisConfig {
     bannedProperties: VarsenseBannedPropertyConfig;
     tokens: {
         duplicate: { habilitado: boolean; severidad: CoreSeverity };
-        unused: { habilitado: boolean; severidad: CoreSeverity };
+        unused: { habilitado: boolean; severidad: CoreSeverity; excluirTokens?: string[] };
         crossFile: { habilitado: boolean; severidad: CoreSeverity };
     };
 }
