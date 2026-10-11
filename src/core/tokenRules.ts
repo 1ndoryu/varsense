@@ -210,6 +210,13 @@ export function analyzeTokenRules(
             if (key === '0' || key === '0px') {
                 continue;
             }
+            /* [GH-alias] Un token que referencia a otro (`var(--x)`) es un alias
+             * de diseño, no un valor repetido: dos roles que comparten color
+             * (--foco y --borde, ambos `var(--texto)`) son intencionales. Los
+             * literales repetidos siguen marcándose. */
+            if (/^var\(\s*--[\w-]+\s*\)$/.test(key)) {
+                continue;
+            }
             /* [229A-1] El mismo valor en ambitos de cascada distintos es
              * shadowing intencional (p.ej. --vpsColorTexto12 en .vpsPortal
              * y en html:has(.vpsPortal)): agrupar por archivo+ambito+valor

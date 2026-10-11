@@ -1165,6 +1165,29 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(duplicados.length, 0);
   });
 
+  /* [GH-alias] Los alias var(--x) no cuentan como valor repetido; un literal
+   * repetido en el mismo ámbito sigue marcando. */
+  test('[GH-alias] token-duplicate exime alias var(--x) y marca literales repetidos', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/variables.css': {
+        languageId: 'css',
+        content: ':root { --texto: #000000; --borde: var(--texto); --foco: var(--texto); --aliasUno: #111111; --aliasDos: #111111; }',
+      },
+    });
+    const builder = new VariableIndexBuilder(provider, provider);
+
+    const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
+    const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
+      file,
+      document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
+    }));
+    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
+    const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
+
+    assert.strictEqual(duplicados.length, 1);
+    assert.ok(String(duplicados[0].message).includes('--aliasDos'));
+  });
+
   /* [229A-1] cssInlineReact: style={{}} cuyas claves son TODAS custom
    * properties (--*) es definicion runtime de tokens (mismo patron eximido
    * que setProperty), no estilo inline. Caso real coolify-manager-rs:
