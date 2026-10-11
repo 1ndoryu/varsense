@@ -22,8 +22,10 @@ export const PERSISTENT_INDEX_SCHEMA_VERSION = 1;
  * 3: [318A-7V14] consumerFamilyPrefixes (template-literal family prefixes).
  * 5: [318A-7V24] consumerCarriers + consumerCarrierCalls (carriers cross-file).
  * 6: [299A-13 F3b] consumerExportedClassMaps + consumerMapReferences (mapas de
- * clases exportados y referencias a mapas importados). */
-export const PARSER_VERSION = '6';
+ * clases exportados y referencias a mapas importados).
+ * 7: [11AA-2] escalares exportados en consumerExportedClassMaps y referencias
+ * por identificador importado (`${CLASE}`) en consumerMapReferences. */
+export const PARSER_VERSION = '7';
 export const PERSISTENT_INDEX_FILENAME = 'varsense-index.json';
 
 export interface PersistentIndexEntry {
