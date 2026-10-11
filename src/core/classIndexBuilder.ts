@@ -260,7 +260,8 @@ function finObjetoLiteral(source: string, apertura: number): number {
  * 'pagoEstado--pendiente', ... }` (api/payments.ts:133 de NAKOMI). Solo
  * exportados (importables cross-file; los locales ya los cubre M1 vía
  * variables); solo valores con forma de clase; la anotación de tipo no
- * puede contener llaves (fail-closed). Exportada para tests. */
+ * puede contener llaves (fail-closed). [11AA-2] También escalares exportados
+ * (`export const X = 'a b'`), ver pasada posterior. Exportada para tests. */
 export function extraerMapasExportados(source: string): Record<string, string[]> {
     const mapas: Record<string, string[]> = {};
     const reExportMapa = /export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::\s*[^=;{]+)?=\s*\{/g;
@@ -274,6 +275,19 @@ export function extraerMapasExportados(source: string): Record<string, string[]>
         if (cierre < 0) {continue;}
         const clases = extraerValoresDeMapaClase(source.slice(apertura, cierre + 1))
             .filter(valor => valor.length > 1 && /^[a-zA-Z_][\w-]*$/.test(valor));
+        if (clases.length > 0) {mapas[nombre] = [...new Set(clases)];}
+    }
+    /* [11AA-2] Escalares exportados (`export const CLASE_TEXTO = 'a b';`) con
+     * literal completo: el cierre debe ser `;`, fin de línea o fin de archivo.
+     * `'x' + Y` queda fuera (fail-closed). Cada token con forma de clase cuenta;
+     * los que llevan brackets o espacios raros se descartan. */
+    const reExportEscalar = /export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::\s*[^=;{]+)?=\s*(['"])([^'"\\\r\n]*)\2(?=[ \t]*(?:;|\r?\n|$))/g;
+    let escalar: RegExpExecArray | null;
+    while ((escalar = reExportEscalar.exec(source)) !== null) {
+        if (!isCodeMatch(source, escalar.index)) {continue;}
+        const nombre = escalar[1];
+        if (mapas[nombre]) {continue;}
+        const clases = escalar[3].split(/\s+/).filter(token => token.length > 1 && /^[a-zA-Z_][\w-]*$/.test(token));
         if (clases.length > 0) {mapas[nombre] = [...new Set(clases)];}
     }
     return mapas;
@@ -785,6 +799,13 @@ function addTemplateClassTokens(value: string, variables: Map<string, Set<string
                 for (const token of resuelto) {
                     tokens.add(token);
                 }
+            }
+            /* [11AA-2] Escalar importado interpolado (`${CLASE_TEXTO}` con
+             * `export const CLASE_TEXTO = 'texto-publica'` en otro archivo, caso
+             * MN-Inmobiliaria/disenno.ts). Se registra como referencia para la
+             * unión post-hoc; los nombres no importados se ignoran. */
+            else if (importsPropios?.has(trimmed)) {
+                referenciasMapa?.add(trimmed);
             }
         }
         /* [318A-7V22][M1] Subíndice sobre un mapa de clases dentro de un
@@ -1815,6 +1836,10 @@ function resolverExpresionClase(body: string, variables: Map<string, Set<string>
             for (const token of resuelto) {
                 tokens.add(token);
             }
+        } else if (importsPropios?.has(trimmed)) {
+            /* [11AA-2] `className={CLASE_TEXTO}` con escalar importado: misma
+             * referencia que en template (fase 2 resuelve contra el exportador). */
+            referenciasMapa?.add(trimmed);
         }
         return;
     }

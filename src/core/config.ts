@@ -37,7 +37,7 @@ export interface VarsenseConfigFile {
     };
     tokenDetection?: {
         duplicate?: { enabled?: boolean; severity?: CoreSeverity };
-        unused?: { enabled?: boolean; severity?: CoreSeverity };
+        unused?: { enabled?: boolean; severity?: CoreSeverity; excludeTokens?: string[] };
         crossFile?: { enabled?: boolean; severity?: CoreSeverity };
     };
 }
@@ -85,7 +85,9 @@ const NESTED_KEYS: Record<string, Set<string>> = {
     bannedProperties: new Set(['enabled', 'severity', 'properties']),
     orphanClassDetection: new Set(['minClassLength', 'excludeClassPatterns', 'severity']),
     todoProseDetection: new Set(['enabled', 'severity']),
-    tokenDetection: new Set(['duplicate', 'unused']),
+    /* [MN-token] 'crossFile' estaba tipada y mapeada pero ausente aquí: un
+     * varsense.config.json con esa sección era rechazado por clave desconocida. */
+    tokenDetection: new Set(['duplicate', 'unused', 'crossFile']),
 };
 
 function assertStringArray(value: unknown, key: string): asserts value is string[] {
@@ -174,6 +176,10 @@ export function validateVarsenseConfig(value: unknown): asserts value is Varsens
             assertSeverity(section.severity, `tokenDetection.${key}.severity`);
         }
     }
+    const unusedSection = tokens?.unused as Record<string, unknown> | undefined;
+    if (unusedSection?.excludeTokens !== undefined) {
+        assertStringArray(unusedSection.excludeTokens, 'tokenDetection.unused.excludeTokens');
+    }
 }
 
 function severityOrDefault(value: CoreSeverity | undefined, fallback: CoreSeverity): CoreSeverity {
@@ -208,6 +214,7 @@ export function buildAnalysisConfig(config: VarsenseConfigFile): VarsenseDocumen
             unused: {
                 habilitado: config.tokenDetection?.unused?.enabled ?? true,
                 severidad: severityOrDefault(config.tokenDetection?.unused?.severity, 'hint'),
+                excluirTokens: config.tokenDetection?.unused?.excludeTokens ?? [],
             },
             crossFile: {
                 habilitado: config.tokenDetection?.crossFile?.enabled ?? true,
