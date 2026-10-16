@@ -2267,6 +2267,82 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.deepStrictEqual(result.clasesHuerfanas.map(clase => clase.nombre), []);
   });
 
+  /* [15A-25][T3b] El array con un elemento ternario SIGUE siendo array.
+   * `pareceTernarioDeLiterales` es un `?` seguido de comilla en cualquier
+   * posicion del valor, asi que
+   * `['badge', mapaVariante[variante], estilo === 'borde' ? 'badgeBorde' : '']`
+   * se clasificaba como ternario y los subindices sobre mapas locales no se
+   * resolvian: Badge.tsx, BotonBase.tsx, Modal.tsx, Avatar.tsx y
+   * Notificacion.tsx producian 24 clases huerfanas falsas. */
+  test('array con un elemento ternario no pierde sus subindices', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/badge.css': {
+        languageId: 'css',
+        content: [
+          '.badge { color: red; }',
+          '.badgeNeutro { color: green; }',
+          '.badgeXs { color: blue; }',
+          '.badgeBorde { border: 1px solid; }',
+        ].join('\n'),
+      },
+      '/workspace/src/Badge.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'const mapaVariante = {',
+          "  neutro: 'badgeNeutro',",
+          '};',
+          'const mapaTamano = {',
+          "  xs: 'badgeXs',",
+          '};',
+          'export const Badge = ({ variante, tamano, estilo }) => {',
+          "  const clases = ['badge', mapaVariante[variante], mapaTamano[tamano], estilo === 'borde' ? 'badgeBorde' : ''].filter(Boolean).join(' ');",
+          '  return <Tag className={clases} />;',
+          '};',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.deepStrictEqual(result.clasesHuerfanas.map(clase => clase.nombre), []);
+  });
+
+  /* [15A-25][T3c-control] El guardia de cierre `]` mantiene en la rama ternaria
+   * un valor cuya CONDICION empieza por array: ahi los subindices no existen y
+   * solo los literales del ternario son clases. */
+  test('ternario cuya condicion empieza por array no aporta subindices', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/cond.css': {
+        languageId: 'css',
+        content: [
+          '.condUno { color: red; }',
+          '.condTernaria { color: green; }',
+        ].join('\n'),
+      },
+      '/workspace/src/Cond.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'const mapaCond = {',
+          "  a: 'condUno',",
+          '};',
+          'export const Cond = ({ x }) => {',
+          "  const clases = [1, 2].includes(x) ? 'condTernaria' : '';",
+          '  return <Tag className={clases} />;',
+          '};',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.deepStrictEqual(
+      result.clasesHuerfanas.map(clase => clase.nombre),
+      ['condUno']
+    );
+  });
+
   /* [15A-25][T4-control] Un mapa que nadie indexa no aporta nada: sus valores
    * siguen siendo huerfanas (el subindice es lo que los hace alcanzables). */
   test('mapa de clases sin subindice no exime sus valores', async () => {

@@ -1015,11 +1015,19 @@ function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): M
         if (/^(['"`])[\s\S]*\1$/.test(valor)) {
             addClassTokens(valor.slice(1, -1), tokensVariable, familyPrefixes, contextoPortador);
             addQuotedClassTokens(valor, tokensVariable, familyPrefixes, contextoPortador);
-        } else if (pareceTernarioDeLiterales(valor)) {
-            addQuotedClassTokens(valor, tokensVariable, familyPrefixes, contextoPortador);
-        } else if (valor.startsWith('[')) {
+        } else if (valor.startsWith('[') && valor.endsWith(']')) {
+            /* [15A-25] El array va ANTES que el ternario: `pareceTernarioDeLiterales`
+             * es un `?` seguido de comilla en cualquier posicion, asi que un array
+             * con un elemento ternario (`['badge', mapaVariante[variante], estilo ===
+             * 'borde' ? 'badgeBorde' : '']`) se clasificaba como ternario y sus
+             * subindices sobre mapas locales no se resolvian: badgeXs, badgeNeutro,
+             * tamanoMd... salian huerfanas. El guardia de cierre `]` mantiene el
+             * ternario en su rama cuando la condicion es la que empieza por array
+             * (`[a, b].includes(x) ? 'y' : 'z'`). */
             addQuotedClassTokens(valor, tokensVariable, familyPrefixes, contextoPortador);
             resolverFragmentosDeArray(valor, variables, tokensVariable);
+        } else if (pareceTernarioDeLiterales(valor)) {
+            addQuotedClassTokens(valor, tokensVariable, familyPrefixes, contextoPortador);
         } else if (valor.trim().startsWith('{')) {
             /* [318A-7V22][M1] Mapa/objeto literal de clases: una variable
              * tipada como Record<Tipo, string> cuyos valores son clases
