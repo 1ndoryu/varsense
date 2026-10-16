@@ -46,6 +46,12 @@ class MemoryWorkspaceProvider implements WorkspaceFileProvider, DocumentProvider
   }
 }
 
+/* [15A-25] Indice vacio para los casos que solo miran el veredicto por
+ * documento (estilo inline, respaldos de var()) y no el indice de variables. */
+function indiceVacio() {
+  return { variables: new Map(), ultimaActualizacion: 0, archivosEscaneados: [] as string[] };
+}
+
 suite('VarSense editor-agnostic core contracts', () => {
   test('creates a document with stable line helpers', () => {
     const document = createCoreDocument({
@@ -2223,6 +2229,98 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'lstMuerta');
   });
 
+  /* [15A-25][T4] Un array de fragmentos compone clases en runtime: los
+   * elementos que son un subindice sobre un mapa local (o una variable local)
+   * no son literales y quedaban fuera del set. Caso KAMPLES: `const clases =
+   * ['badge', mapaVariante[variante], mapaTamano[tamano], ...]` en Badge.tsx,
+   * Avatar.tsx, BotonBase.tsx, Modal.tsx y Notificacion.tsx (24 hallazgos). */
+  test('array de fragmentos resuelve subindices sobre mapas locales', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/badge.css': {
+        languageId: 'css',
+        content: [
+          '.badge { color: red; }',
+          '.badgeNeutro { color: green; }',
+          '.badgeXs { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/Badge.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'const mapaVariante = {',
+          "  neutro: 'badgeNeutro',",
+          '};',
+          'const mapaTamano = {',
+          "  xs: 'badgeXs',",
+          '};',
+          'export const Badge = ({ variante, tamano }) => {',
+          "  const clases = ['badge', mapaVariante[variante], mapaTamano[tamano]].filter(Boolean).join(' ');",
+          '  return <Tag className={clases} />;',
+          '};',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.deepStrictEqual(result.clasesHuerfanas.map(clase => clase.nombre), []);
+  });
+
+  /* [15A-25][T4-control] Un mapa que nadie indexa no aporta nada: sus valores
+   * siguen siendo huerfanas (el subindice es lo que los hace alcanzables). */
+  test('mapa de clases sin subindice no exime sus valores', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/suelto.css': {
+        languageId: 'css',
+        content: '.sueltoUno { color: red; }',
+      },
+      '/workspace/src/Suelto.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'const mapaSinUso = {',
+          "  uno: 'sueltoUno',",
+          '};',
+          'export const Suelto = () => <div />;',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.deepStrictEqual(result.clasesHuerfanas.map(clase => clase.nombre), ['sueltoUno']);
+  });
+
+  /* [15A-25][T5] Plantilla anidada en una expresion de clase: el regex plano
+   * se corta en la interpolacion y la familia no se registraba.
+   * Caso KAMPLES: BadgesMetadata.tsx:109
+   * `className={on ? `tarjetaMetaBadgeClickable${claseExtra}` : undefined}`. */
+  test('familia de un template dentro de una expresion de clase', async () => {
+    const provider = new MemoryWorkspaceProvider({
+      '/workspace/src/meta.css': {
+        languageId: 'css',
+        content: [
+          '.tarjetaMetaBadgeClickable { color: red; }',
+          '.tarjetaMetaBadgeClickableSuave { color: blue; }',
+        ].join('\n'),
+      },
+      '/workspace/src/BadgesMetadata.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'export const BadgesMetadata = ({ on, claseExtra }) => (',
+          '  <span className={on ? `tarjetaMetaBadgeClickable${claseExtra}` : undefined} />',
+          ');',
+        ].join('\n'),
+      },
+    });
+    const builder = new ClassIndexBuilder(provider, provider);
+
+    const result = await builder.scan({ exclude: [], minLength: 3 });
+
+    assert.deepStrictEqual(result.clasesHuerfanas.map(clase => clase.nombre), []);
+  });
+
   /* [318A-7V24][T8] setProperty con literal '--x' define la variable en
    * runtime (GH: panelDerechoAncho.ts, barraLateral.ts...). Comilla simple
    * y doble valen; nombre dinámico se ignora. */
@@ -2277,6 +2375,130 @@ suite('VarSense editor-agnostic core contracts', () => {
     const hallazgos = analyzeVarsenseDocument(documento, construido.indice, buildAnalysisConfig({}));
 
     assert.deepStrictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'variableNoDefinida'), []);
+  });
+
+  /* [15A-25][T1] Un `style={{ '--x': v }}` define el token en runtime. El
+   * parser de CSS reconocia `setProperty` pero no el atributo `style`, asi que
+   * todo `var(--x)` cuyo unico origen era el TSX salia como variableNoDefinida
+   * (112 hallazgos en KAMPLES, todos de esta forma). */
+  test('style={{ --x }} del TSX define la variable que consume la hoja', async () => {
+    const archivos = {
+      '/workspace/src/panel.css': {
+        languageId: 'css',
+        content: '.panel { height: var(--altoPanel); }',
+      },
+      '/workspace/src/Panel.tsx': {
+        languageId: 'typescriptreact',
+        content: [
+          'export function Panel({ alto }: { alto: string }) {',
+          '  return <div className="panel" style={{ \'--altoPanel\': alto }} />;',
+          '}',
+        ].join('\n'),
+      },
+    };
+    const provider = new MemoryWorkspaceProvider(archivos);
+    const builder = new VariableIndexBuilder(provider, provider);
+    const construido = await builder.build({ patterns: ['**/*.css'], exclude: [] });
+    await builder.agregarDefinicionesRuntime(
+      [{ uri: 'file:///workspace/src/Panel.tsx', fsPath: '/workspace/src/Panel.tsx' }],
+      construido.indice.variables,
+      construido.variablesPorArchivo
+    );
+
+    assert.strictEqual(construido.indice.variables.has('--altoPanel'), true);
+    assert.strictEqual(
+      construido.variablesPorArchivo.get('/workspace/src/Panel.tsx')?.[0].linea,
+      1
+    );
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/panel.css',
+      fileName: '/workspace/src/panel.css',
+      languageId: 'css',
+      content: archivos['/workspace/src/panel.css'].content,
+    });
+
+    assert.deepStrictEqual(
+      analyzeVarsenseDocument(documento, construido.indice, buildAnalysisConfig({}))
+        .filter(hallazgo => hallazgo.ruleId === 'variableNoDefinida'),
+      []
+    );
+  });
+
+  /* [15A-25][T2] El objeto envuelto en un ternario es definicion de tokens,
+   * no estilo inline. El reconocedor anterior exigia `style={{` inmediato, asi
+   * que el ternario caia en la rama generica y se reportaba cssInlineReact. */
+  test('style={cond ? { --x } : undefined} no es estilo inline', () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/Barra.tsx',
+      fileName: '/workspace/src/Barra.tsx',
+      languageId: 'typescriptreact',
+      content: [
+        'export function Barra({ pct }: { pct: string }) {',
+        '  return <div style={pct ? { \'--porcentaje\': pct } as CSSProperties : undefined} />;',
+        '}',
+      ].join('\n'),
+    });
+
+    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}));
+
+    assert.deepStrictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'cssInlineReact'), []);
+  });
+
+  /* [15A-25][T2-control] El mismo reconocedor no exime un objeto que si
+   * declara una propiedad CSS: ahi el style={{}} sigue siendo estilo inline. */
+  test('style={{ color, --x }} mixto si es estilo inline', () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/Mezcla.tsx',
+      fileName: '/workspace/src/Mezcla.tsx',
+      languageId: 'typescriptreact',
+      content: [
+        'export function Mezcla({ v }: { v: string }) {',
+        '  return <div style={{ color: \'red\', \'--x\': v }} />;',
+        '}',
+      ].join('\n'),
+    });
+
+    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}));
+
+    assert.strictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'cssInlineReact').length, 1);
+  });
+
+  /* [15A-25][T3] El respaldo de un var() pasa por las MISMAS puertas que una
+   * declaracion directa: la puerta de propiedad y la lista de valores
+   * permitidos. Antes iba a pelo, y el mismo valor salia exento en
+   * `color: transparent` y reportado en
+   * `border-top: 3px solid var(--colorInsert, transparent)`; ademas `height`
+   * (fuera de properties) se colaba solo como respaldo de un var(). */
+  test('el respaldo de un var() respeta la puerta de propiedad y los valores permitidos', () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/respaldo.css',
+      fileName: '/workspace/src/respaldo.css',
+      languageId: 'css',
+      content: [
+        '.a { height: var(--alto, 120px); }',
+        '.b { border-top: 3px solid var(--colorInsert, transparent); }',
+        '.c { color: var(--texto, transparent); }',
+      ].join('\n'),
+    });
+
+    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}));
+
+    assert.deepStrictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'valorHardcoded'), []);
+  });
+
+  /* [15A-25][T3-control] Con la propiedad dentro de `properties` y un valor no
+   * permitido, el respaldo si es un hardcodeo accionable. */
+  test('el respaldo de un var() en propiedad vigilada si reporta hardcodeo', () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/respaldo.css',
+      fileName: '/workspace/src/respaldo.css',
+      languageId: 'css',
+      content: '.a { color: var(--texto, #ff0000); }',
+    });
+
+    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}));
+
+    assert.strictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'valorHardcoded').length, 1);
   });
 
   /* [318A-7V24][T6] Carrier cross-file vía setAttribute (patrón icono de GH:

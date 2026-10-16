@@ -71,6 +71,10 @@ const REGEX_CLASS_TEMPLATE_INICIO = /(?:className|class|[Cc]lase[\w$]*|[\w$]*Cla
  * puros se resuelven por indirección de variables (ver recopilarDeclaraciones).
  * [318A-7V2] Ídem para props *clase (claseAdicional={cond ? 'a' : 'b'}). */
 const REGEX_CLASS_JSX_EXPR = /(?:className|class|[Cc]lase[\w$]*|[\w$]*ClassName)\s*=\s*\{([^{}]*)\}/g;
+/* [15A-25] Apertura de la expresion de un atributo de clase, para delimitarla
+ * con el escaner balanceado (finObjetoLiteral) en vez de con `[^{}]*`, que se
+ * corta en la interpolacion de un template. */
+const REGEX_ATRIBUTO_CLASE = /(?:className|class|[Cc]lase[\w$]*|[\w$]*ClassName)\s*=\s*\{/g;
 /* Vanilla TS/DOM factories commonly pass classes as object attributes:
  * createEl('div', { className: 'panel panel--active' }). Keep this parser
  * framework-agnostic while covering the project's createEl contract.
@@ -924,6 +928,67 @@ function normalizarValorLiteral(value: string): string {
  * indirección de variable (const x = 'a b'; ...; className={x}). Solo
  * literales: una llamada a función (helper('clase')) NO resuelve, manteniendo
  * el contrato del test 'unusedPanel'. */
+/* [15A-25] Elementos de nivel superior de un array literal. Null si el valor
+ * no empieza por '['. Respeta strings y anidamiento (un array de arrays o una
+ * llamada dentro de un elemento no parten por sus comas). */
+function dividirElementosArray(valor: string): string[] | null {
+    const cuerpo = valor.trim();
+    if (!cuerpo.startsWith('[')) {
+        return null;
+    }
+    const elementos: string[] = [];
+    const estado: EstadoDivision = { quote: '', profundidad: 0 };
+    let inicio = 1;
+    let i = 1;
+    while (i < cuerpo.length) {
+        const c = cuerpo[i];
+        if (!estado.quote && estado.profundidad === 0 && (c === ',' || c === ']')) {
+            elementos.push(cuerpo.slice(inicio, i));
+            if (c === ']') {
+                return elementos;
+            }
+            inicio = i + 1;
+            i++;
+            continue;
+        }
+        i = saltarAtomico(cuerpo, i, estado);
+    }
+    return elementos;
+}
+
+/* [15A-25] Un array de fragmentos de clase compone en runtime: `const clases =
+ * ['badge', mapaVariante[variante], mapaTamano[tamano], ...]` y luego
+ * `className={clases}` (Badge.tsx, Avatar.tsx, BotonBase.tsx, Modal.tsx,
+ * Notificacion.tsx). Los elementos que no son literales —un subindice sobre un
+ * mapa local o una variable local— los aplica el runtime igual, pero
+ * `addQuotedClassTokens` solo ve comillas y la clase definida en el CSS salia
+ * huerfana. Se resuelven contra las declaraciones ya recopiladas del archivo:
+ * un nombre desconocido no aporta nada (fail-closed). */
+function resolverFragmentosDeArray(
+    valor: string,
+    variables: Map<string, Set<string>>,
+    tokens: Set<string>
+): void {
+    const elementos = dividirElementosArray(valor);
+    if (!elementos) {
+        return;
+    }
+    for (const elemento of elementos) {
+        const limpio = sinFallbackClase(elemento.trim());
+        const subindice = /^([A-Za-z_$][\w$]*)\s*\[[^\]]+\]$/.exec(limpio);
+        const nombre = subindice ? subindice[1] : (/^[A-Za-z_$][\w$]*$/.test(limpio) ? limpio : null);
+        if (!nombre) {
+            continue;
+        }
+        const resuelto = variables.get(nombre);
+        if (resuelto) {
+            for (const token of resuelto) {
+                tokens.add(token);
+            }
+        }
+    }
+}
+
 function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): Map<string, Set<string>> {
     const variables = new Map<string, Set<string>>();
 
@@ -954,6 +1019,7 @@ function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): M
             addQuotedClassTokens(valor, tokensVariable, familyPrefixes, contextoPortador);
         } else if (valor.startsWith('[')) {
             addQuotedClassTokens(valor, tokensVariable, familyPrefixes, contextoPortador);
+            resolverFragmentosDeArray(valor, variables, tokensVariable);
         } else if (valor.trim().startsWith('{')) {
             /* [318A-7V22][M1] Mapa/objeto literal de clases: una variable
              * tipada como Record<Tipo, string> cuyos valores son clases
@@ -2071,6 +2137,30 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         if (!isCodeMatch(source, match.index)) {continue;}
         resolverExpresionClase(match[1], variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
         resolverLlamadaMapper(match[1], source, tokens, importsPropios, referenciasMapa);
+    }
+
+    /* [15A-25] Plantillas dentro de una expresion de clase. El regex de arriba
+     * se corta en la primera llave y una interpolacion la contiene: en
+     * `className={on ? `tarjetaMetaBadgeClickable${extra}` : undefined}`
+     * (BadgesMetadata.tsx:109) solo llegaba el fragmento previo, sin backtick de
+     * cierre, y la familia no se registraba: `.tarjetaMetaBadgeClickable` salia
+     * huerfana. Aqui el atributo se delimita balanceando llaves y se recorren
+     * las plantillas COMPLETAS que contenga, con el mismo tratamiento que la
+     * plantilla de clase directa (contextoAttr: su contenido es una cadena de
+     * clases por construccion). */
+    REGEX_ATRIBUTO_CLASE.lastIndex = 0;
+    while ((match = REGEX_ATRIBUTO_CLASE.exec(source)) !== null) {
+        if (!isCodeMatch(source, match.index)) {continue;}
+        const aperturaAtributo = match.index + match[0].length - 1;
+        const cierreAtributo = finObjetoLiteral(source, aperturaAtributo);
+        if (cierreAtributo < 0) {continue;}
+        for (let cursor = aperturaAtributo + 1; cursor < cierreAtributo; cursor++) {
+            if (source[cursor] !== '`') {continue;}
+            const finPlantilla = finTemplateLiteral(source, cursor);
+            if (finPlantilla < 0) {break;}
+            addTemplateClassTokens(source.slice(cursor + 1, finPlantilla), variables, tokens, familyPrefixes, true, importsPropios, referenciasMapa);
+            cursor = finPlantilla;
+        }
     }
 
     REGEX_CLASS_OBJECT.lastIndex = 0;

@@ -6,6 +6,7 @@
 import {CssVariable, CssDeclaration, CssRule, ParseResult, VariableUsage, HardcodedValue, BannedPropertyUsage} from '@/types';
 import { CorePosition, CoreRange, CoreTextDocument, createCoreRange, positionAtOffset } from '@/core/types';
 import {extraerVariablesDeValor, esDefinicionVariable, obtenerNombreVariable, esValorHardcodeado, extraerValorLimpio, crearUsosVariable} from './valueParser';
+import {REGEX_ATRIBUTO_ESTILO, clavesDeExpresionEstilo, finExpresionEstilo, nombreCustomProperty} from './estiloInline';
 import {esColor} from '@/utils/colorUtils';
 
 /*
@@ -86,9 +87,28 @@ export class CssParser {
                     /* Recolectar usos de variables */
                     resultado.usosVariables.push(...declaracion.variablesUsadas);
 
-                    /* Verificar fallbacks hardcodeados */
+                    /* [15A-25] Verificar fallbacks hardcodeados con los MISMOS
+                     * dos filtros que una declaracion directa (ver
+                     * detectarHardcodeados): la puerta de propiedad y la lista de
+                     * valores permitidos. Antes iba a pelo, y por eso el mismo
+                     * valor salia exento en `color: transparent` y reportado en
+                     * `border-top: 3px solid var(--colorInsert, transparent)`, y
+                     * `height: 120px` (layout, fuera de `properties`) se colaba
+                     * solo cuando venia como respaldo de un var(). En KAMPLES eran
+                     * 17 hallazgos, todos de esta forma y ninguno accionable: el
+                     * remedio que la regla prescribe —usar una variable— ya esta
+                     * aplicado en la propia declaracion. */
+                    if (!(this._opciones.debeVerificarPropiedad?.(declaracion.propiedad) ?? true)) {
+                        continue;
+                    }
                     for (const uso of declaracion.variablesUsadas) {
-                        if (uso.fallback && esValorHardcodeado(uso.fallback)) {
+                        if (!uso.fallback) {
+                            continue;
+                        }
+                        if (this._opciones.esValorPermitido?.(uso.fallback)) {
+                            continue;
+                        }
+                        if (esValorHardcodeado(uso.fallback)) {
                             resultado.valoresHardcoded.push({
                                 propiedad: declaracion.propiedad,
                                 valor: uso.fallback,
@@ -170,21 +190,31 @@ export class CssParser {
      * es dinámico no se puede indexar y se ignora. El valor runtime es
      * desconocido: se registra como '' (no color) para que la definición
      * exista en el índice.
+     *
+     * [15A-25] Cubre ademas las claves de un `style={{...}}` de JSX, que es la
+     * otra forma de definir tokens en runtime y la dominante en KAMPLES: los
+     * `--top`, `--notaTop`, `--tecladoAncho` de las hojas se declaran asi en el
+     * TSX. Sin indexarlas, cada `var()` que las consume salia como
+     * `variableNoDefinida`. Se indexa la clave aunque el objeto mezcle
+     * propiedades reales: la custom property existe en runtime igual, y el
+     * estilo inline mixto lo reporta `cssInlineReact` por su cuenta.
      */
     public parsearDefinicionesRuntime(): CssVariable[] {
         const variables: CssVariable[] = [];
         /* [FIX-fantasma] Igual que en parsearSoloDefiniciones: un
          * `.setProperty('--x', ...)` mencionado en un comentario de bloque no
          * define nada (caso --fantasma). No se tocan comentarios de linea `//`
-         * (riesgo con `https://` en strings): limitacion documentada. */
+         * (riesgo con `https://` en strings): limitacion documentada.
+         * `eliminarComentarios` sustituye cada comentario por espacios de la
+         * misma longitud, de modo que los offsets siguen siendo validos. */
         const texto = this._textoSinComentarios;
         const runtimeDefRegex = /\.setProperty\s*\(\s*(['"`])--([\w-]+)\1/g;
         let match: RegExpExecArray | null;
 
-        while ((match = runtimeDefRegex.exec(texto)) !== null) {
-            const posicion = positionAtOffset(this._documento, match.index);
+        const registrar = (nombre: string, offset: number): void => {
+            const posicion = positionAtOffset(this._documento, offset);
             variables.push({
-                nombre: `--${match[2]}`,
+                nombre,
                 valor: '',
                 archivo: this._documento.fileName,
                 linea: posicion.line,
@@ -192,6 +222,22 @@ export class CssParser {
                 esColor: false,
                 frecuenciaUso: 0
             });
+        };
+
+        while ((match = runtimeDefRegex.exec(texto)) !== null) {
+            registrar(`--${match[2]}`, match.index);
+        }
+
+        REGEX_ATRIBUTO_ESTILO.lastIndex = 0;
+        while ((match = REGEX_ATRIBUTO_ESTILO.exec(texto)) !== null) {
+            const inicioLlave = match.index + match[0].length - 1;
+            const fin = finExpresionEstilo(texto, inicioLlave);
+            for (const clave of clavesDeExpresionEstilo(texto, inicioLlave, fin)) {
+                const nombre = nombreCustomProperty(clave);
+                if (nombre) {
+                    registrar(nombre, clave.offset);
+                }
+            }
         }
 
         return variables;

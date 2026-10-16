@@ -1,5 +1,6 @@
 import { DiagnosticType, VariableIndex } from '@/types';
 import { parsearDocumento } from '@/parsers/cssParser';
+import { REGEX_ATRIBUTO_ESTILO, clavesDeExpresionEstilo, esSoloDefinicionTokens, finExpresionEstilo } from '@/parsers/estiloInline';
 import { CoreFinding, CoreSeverity, CoreTextDocument, createCoreRange, positionAtOffset } from './types';
 
 export interface VarsenseHardcodedConfig {
@@ -34,8 +35,6 @@ export interface VarsenseDocumentAnalysisConfig {
 const REACT_LANGUAGE_IDS = new Set(['typescriptreact', 'javascriptreact']);
 const SCRIPT_LANGUAGE_IDS = new Set(['typescript', 'javascript']);
 const CSS_LANGUAGE_IDS = new Set(['css', 'scss', 'less']);
-const REGEX_STYLE_OBJ = /style\s*=\s*\{\s*\{/g;
-const REGEX_STYLE_VAR = /style\s*=\s*\{(?!\s*\{)([^}]+)\}/g;
 const REGEX_SCRIPT_INLINE_STYLE = /(?:\.style\.[a-zA-Z][\w]*\s*=|\.style\.setProperty\s*\(|\.setAttribute\s*\(\s*['"]style['"])/g;
 
 function shouldCheckProperty(config: VarsenseHardcodedConfig, property: string): boolean {
@@ -124,158 +123,6 @@ function analyzeCssDocument(
     return findings;
 }
 
-function findMatchingObjectEnd(text: string, startIndex: number): number {
-    let depth = 2;
-    let index = startIndex;
-
-    while (index < text.length && depth > 0) {
-        if (text[index] === '{') {
-            depth++;
-        } else if (text[index] === '}') {
-            depth--;
-        }
-        index++;
-    }
-
-    return index;
-}
-
-/* Salta un literal '...' "..." `...` desde su comilla de apertura y devuelve
- * el offset posterior al cierre. Los templates `...${...}...` recorren la
- * expresion interpolada con balanceo para no confundir sus llaves, comas o
- * dos puntos con la estructura del objeto que los contiene. */
-function saltarLiteralEstilo(texto: string, inicio: number): number {
-    const comilla = texto[inicio];
-    let i = inicio + 1;
-
-    while (i < texto.length) {
-        const actual = texto[i];
-        if (actual === '\\') {
-            i += 2;
-            continue;
-        }
-        if (comilla === '`' && actual === '$' && texto[i + 1] === '{') {
-            let profundidad = 1;
-            i += 2;
-            while (i < texto.length && profundidad > 0) {
-                const interno = texto[i];
-                if (interno === '\\') {
-                    i += 2;
-                    continue;
-                }
-                if (interno === "'" || interno === '"' || interno === '`') {
-                    i = saltarLiteralEstilo(texto, i);
-                    continue;
-                }
-                if (interno === '{') {
-                    profundidad++;
-                } else if (interno === '}') {
-                    profundidad--;
-                }
-                i++;
-            }
-            continue;
-        }
-        if (actual === comilla) {
-            return i + 1;
-        }
-        i++;
-    }
-
-    return i;
-}
-
-/*
- * [229A-1] Extrae las claves de nivel superior de un objeto `style={{...}}`
- * de JSX. Es el mismo patron de definicion runtime de tokens que
- * `.style.setProperty('--x', ...)` (ya eximido en analyzeScriptInlineStyles):
- * un objeto cuyas claves son TODAS custom properties (`--*`) no aplica
- * estilo inline, solo define tokens que el CSS consume via var(). Solo se
- * inspecciona el primer nivel: `style={{ color: 'red' }}`, spreads o
- * shorthands siguen marcando.
- */
-function extraerClavesObjetoEstilo(texto: string, inicioLlave: number): string[] {
-    const claves: string[] = [];
-    let profundidad = 0;
-    let segmento = '';
-    let claveExtraida = false;
-    let i = inicioLlave;
-
-    const volcarSegmento = (): void => {
-        const recortado = segmento.trim();
-        if (recortado.length > 0) {
-            claves.push(recortado);
-        }
-        segmento = '';
-    };
-
-    while (i < texto.length) {
-        const actual = texto[i];
-
-        if (actual === "'" || actual === '"' || actual === '`') {
-            const finLiteral = saltarLiteralEstilo(texto, i);
-            /* [229A-1] Clave entrecomillada ('--x', "--x"): el literal ES la
-             * clave en posicion de clave; acumular su contenido para que
-             * esSoloDefinicionTokens la vea. En posicion de valor se ignora. */
-            if (profundidad === 1 && !claveExtraida) {
-                segmento += texto.slice(i + 1, finLiteral - 1);
-            }
-            i = finLiteral;
-            continue;
-        }
-
-        if (actual === '{' || actual === '[' || actual === '(') {
-            profundidad++;
-            i++;
-            continue;
-        }
-
-        if (actual === '}' || actual === ']' || actual === ')') {
-            if (profundidad === 1 && actual === '}') {
-                if (!claveExtraida) {
-                    /* Spread/shorthand sin dos puntos: tambien es clave. */
-                    volcarSegmento();
-                }
-                return claves;
-            }
-            profundidad--;
-            i++;
-            continue;
-        }
-
-        if (profundidad === 1 && actual === ':' && !claveExtraida) {
-            volcarSegmento();
-            claveExtraida = true;
-            i++;
-            continue;
-        }
-
-        if (profundidad === 1 && actual === ',') {
-            if (!claveExtraida) {
-                volcarSegmento();
-            }
-            segmento = '';
-            claveExtraida = false;
-            i++;
-            continue;
-        }
-
-        if (profundidad === 1) {
-            segmento += actual;
-        }
-        i++;
-    }
-
-    return claves;
-}
-
-function esSoloDefinicionTokens(claves: string[]): boolean {
-    if (claves.length === 0) {
-        return false;
-    }
-    return claves.every(clave => clave.replace(/^['"]|['"]$/g, '').startsWith('--'));
-}
-
 function analyzeReactInlineStyles(
     document: CoreTextDocument,
     config: VarsenseDocumentAnalysisConfig
@@ -288,41 +135,31 @@ function analyzeReactInlineStyles(
     const findings: CoreFinding[] = [];
     let match: RegExpExecArray | null;
 
-    REGEX_STYLE_OBJ.lastIndex = 0;
-    while ((match = REGEX_STYLE_OBJ.exec(text)) !== null) {
-        const endIndex = findMatchingObjectEnd(text, match.index + match[0].length);
-        /* [229A-1] Objeto solo con custom properties = definicion runtime
-         * de tokens (mismo patron eximido que setProperty): no es inline. */
+    /* [15A-25] Un solo recorrido del atributo. Antes eran dos regexes
+     * complementarios (`style={{` y `style={algo}`), y el ternario
+     * `style={cond ? { '--top': v } : undefined}` no casaba con ninguno de los
+     * dos: caia en la rama generica y sus claves no llegaban al indice. Aqui el
+     * atributo se delimita balanceando llaves y se miran TODOS los objetos
+     * literales de la expresion. */
+    REGEX_ATRIBUTO_ESTILO.lastIndex = 0;
+    while ((match = REGEX_ATRIBUTO_ESTILO.exec(text)) !== null) {
         const inicioLlave = match.index + match[0].length - 1;
-        if (esSoloDefinicionTokens(extraerClavesObjetoEstilo(text, inicioLlave))) {
+        const fin = finExpresionEstilo(text, inicioLlave);
+
+        /* Objeto solo con custom properties = definicion runtime de tokens
+         * (mismo patron eximido que setProperty): no es inline. */
+        if (esSoloDefinicionTokens(clavesDeExpresionEstilo(text, inicioLlave, fin))) {
             continue;
         }
-        const start = positionAtOffset(document, match.index);
-        const end = positionAtOffset(document, endIndex);
 
         findings.push(finding(
             DiagnosticType.CssInlineReact,
             'CSS inline detectado - usa clases CSS con variables en vez de style={{}}',
             config.inline.severidad,
-            { start, end }
-        ));
-    }
-
-    REGEX_STYLE_VAR.lastIndex = 0;
-    while ((match = REGEX_STYLE_VAR.exec(text)) !== null) {
-        const content = match[1].trim();
-        if (content.startsWith('{')) {
-            continue;
-        }
-
-        const start = positionAtOffset(document, match.index);
-        const end = positionAtOffset(document, match.index + match[0].length);
-
-        findings.push(finding(
-            DiagnosticType.CssInlineReact,
-            `CSS inline detectado (style={${content}}) - usa clases CSS con variables`,
-            config.inline.severidad,
-            { start, end }
+            {
+                start: positionAtOffset(document, match.index),
+                end: positionAtOffset(document, fin),
+            }
         ));
     }
 
