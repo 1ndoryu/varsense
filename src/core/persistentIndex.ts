@@ -24,8 +24,10 @@ export const PERSISTENT_INDEX_SCHEMA_VERSION = 1;
  * 6: [299A-13 F3b] consumerExportedClassMaps + consumerMapReferences (mapas de
  * clases exportados y referencias a mapas importados).
  * 7: [11AA-2] escalares exportados en consumerExportedClassMaps y referencias
- * por identificador importado (`${CLASE}`) en consumerMapReferences. */
-export const PARSER_VERSION = '7';
+ * por identificador importado (`${CLASE}`) en consumerMapReferences.
+ * 8: [15A-27] consumerClassFunctions + consumerClassFunctionCalls (funciones
+ * que devuelven clases y llamadas a las definidas en otro archivo). */
+export const PARSER_VERSION = '8';
 export const PERSISTENT_INDEX_FILENAME = 'varsense-index.json';
 
 export interface PersistentIndexEntry {
@@ -52,6 +54,13 @@ export interface PersistentIndexEntry {
      * junto a consumerTokens para reusar una entrada. */
     consumerExportedClassMaps?: Record<string, string[]>;
     consumerMapReferences?: string[];
+    /* [15A-27] Funciones del archivo que devuelven literales de clase
+     * (nombre → literales) y nombres de funciones invocadas en posición de
+     * clase que NO se definen en él (se esperan de otro archivo del
+     * workspace). Mismo criterio V14/V24: cada entrada guarda solo lo suyo y
+     * la unión cross-file se computa en memoria por ejecución. */
+    consumerClassFunctions?: Record<string, string[]>;
+    consumerClassFunctionCalls?: string[];
     variables?: CssVariable[];
     /* [028A-8 tramo 4] Usos var(--x) referenciados por este archivo CSS: permite
      * resolver consumidores de una definición sin recorrer el workspace. */

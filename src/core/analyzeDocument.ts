@@ -218,8 +218,13 @@ function analyzeScriptInlineStyles(
  *                                       suprime esa linea y la siguiente
  * El orden importa: las variantes mas especificas (next-line, line) se
  * evaluan antes que la generica para evitar coincidencias parciales.
+ *
+ * [15A-27] Exportado para que la ruta de claseHuerfana (indice de clases, en
+ * el CLI) aplique los MISMOS marcadores. Ese analisis no pasa por
+ * analyzeVarsenseDocument, asi que un marcador sobre la definicion de una
+ * clase no callaba nada: el marcador existia y mentia.
  */
-function parsearLineasSuprimidas(texto: string): Set<number> {
+export function parsearLineasSuprimidas(texto: string): Set<number> {
     const lineasSuprimidas = new Set<number>();
     const lineas = texto.split('\n');
     let enBloqueDeshabilitado = false;

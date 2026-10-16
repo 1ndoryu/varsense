@@ -1626,13 +1626,23 @@ function resolverAccesoPuntoMapa(nombre: string, variables: Map<string, Set<stri
     }
 }
 
-function resolverLlamadaMapper(body: string, source: string, tokens: Set<string>, importsPropios?: Set<string>, referenciasMapa?: Set<string>): void {
+function resolverLlamadaMapper(body: string, source: string, tokens: Set<string>, importsPropios?: Set<string>, referenciasMapa?: Set<string>, llamadasClaseFuera?: Set<string>): void {
     const llamada = body.trim().match(/^([A-Za-z_$][\w$]*)\s*\(/);
     if (!llamada) {
         return;
     }
     const cuerpo = cuerpoDeFuncionEn(source, llamada[1]);
     if (!cuerpo) {
+        /* [15A-27] La funcion no esta en ESTE archivo: se anota el nombre para
+         * que la union de fase 2 lo cruce con el archivo que la define (ver
+         * extraerFuncionesQueDevuelvenClases). Sin esto una funcion que
+         * devuelve la clase por ramas (`claseEstadoSample` de estadoVisual.tsx)
+         * solo se resolvia si el consumidor vivia en el mismo archivo. Solo
+         * nombres traidos por import relativo: un homonimo local o global no
+         * aporta (fail-closed, mismo criterio que referenciasMapa). */
+        if (llamadasClaseFuera && importsPropios?.has(llamada[1])) {
+            llamadasClaseFuera.add(llamada[1]);
+        }
         return;
     }
     /* Cada `return <literal>` del mapper aporta la(s) clase(s) reales. Se
@@ -1671,6 +1681,48 @@ function resolverLlamadaMapper(body: string, source: string, tokens: Set<string>
             }
         }
     }
+}
+
+/* [15A-27] Literales de clase que devuelve cada funcion definida en ESTE
+ * archivo: `case 'error': return 'sincPanelEstadoError';` (claseEstadoSample de
+ * estadoVisual.tsx:52-63). Era la mitad que faltaba del cruce cross-file: el
+ * consumidor vive en otro archivo (`ListaHistorialSync.tsx:85` interpola la
+ * llamada en una plantilla de className) y resolverLlamadaMapper solo mira el
+ * archivo del consumidor, asi que la definicion le era invisible y la clase
+ * salia huerfana. La otra mitad la aporta llamadasClaseFuera.
+ *
+ * Solo se acepta el literal cuando el `return` EMPIEZA por comilla: el barrido
+ * del mapper toma el primer literal que encuentra, y sin ese guard un
+ * `return null;` seguido de cualquier literal posterior colaria como valor de
+ * retorno. El literal se parte por espacios porque un return puede devolver la
+ * cadena entera (`return 'a b'`). */
+function extraerFuncionesQueDevuelvenClases(source: string): Map<string, Set<string>> {
+    const resultado = new Map<string, Set<string>>();
+    for (const def of escanearDefinicionesFunciones(source)) {
+        const literales = new Set<string>();
+        const reReturn = /\breturn\b/g;
+        let match: RegExpExecArray | null;
+        while ((match = reReturn.exec(def.cuerpo)) !== null) {
+            const resto = def.cuerpo.slice(reReturn.lastIndex);
+            if (/^\s*['"`]/.test(resto)) {
+                for (const encontrado of extraerLiterales(resto)) {
+                    for (const clase of encontrado.split(/\s+/)) {
+                        if (clase.length > 1 && /^[a-zA-Z_][\w-]*$/.test(clase)) {
+                            literales.add(clase);
+                        }
+                    }
+                    break;
+                }
+            }
+            const finStatement = resto.indexOf(';');
+            if (finStatement < 0) {break;}
+            reReturn.lastIndex = reReturn.lastIndex + finStatement + 1;
+        }
+        if (literales.size > 0) {
+            resultado.set(def.nombre, literales);
+        }
+    }
+    return resultado;
 }
 
 function pareceTernarioDeLiterales(valor: string): boolean {
@@ -2096,7 +2148,7 @@ function isCodeMatch(source: string, matchIndex: number): boolean {
     return !isInsideString(source, matchIndex);
 }
 
-function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes?: Set<string>, referenciasMapa?: Set<string>): void {
+function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes?: Set<string>, referenciasMapa?: Set<string>, llamadasClaseFuera?: Set<string>): void {
     const source = removeComments(texto);
     let match: RegExpExecArray | null;
     /* [J-8] La indirección requiere conocer las declaraciones antes de
@@ -2134,7 +2186,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         /* [318A-7V20] RC-3: mapper llamado dentro del template de clase
          * (`etiqueta ${obtenerClasePrioridad(p)}` en ListaProyectos.tsx). */
         for (const exp of descomponerTemplate(valor).expresiones) {
-            resolverLlamadaMapper(exp, source, tokens, importsPropios, referenciasMapa);
+            resolverLlamadaMapper(exp, source, tokens, importsPropios, referenciasMapa, llamadasClaseFuera);
         }
     }
 
@@ -2144,7 +2196,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
     while ((match = REGEX_CLASS_JSX_EXPR.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
         resolverExpresionClase(match[1], variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
-        resolverLlamadaMapper(match[1], source, tokens, importsPropios, referenciasMapa);
+        resolverLlamadaMapper(match[1], source, tokens, importsPropios, referenciasMapa, llamadasClaseFuera);
     }
 
     /* [15A-25] Plantillas dentro de una expresion de clase. El regex de arriba
@@ -2206,7 +2258,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
     while ((match = REGEX_CREATE_ELEMENT_CLASS.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
         resolverExpresionClase(match[1], variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
-        resolverLlamadaMapper(match[1], source, tokens, importsPropios, referenciasMapa);
+        resolverLlamadaMapper(match[1], source, tokens, importsPropios, referenciasMapa, llamadasClaseFuera);
     }
 
     /* [318A-7V23] el(tag, cls) posicional (ver REGEX_EL_FACTORY): el 2º
@@ -2230,7 +2282,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
          * semántica del mismo nombre, fuera por diseño (ver regex). */
         if (!/^\s*['"][A-Za-z][\w-]*['"]\s*$/.test(args[0])) {continue;}
         resolverExpresionClase(args[1], variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
-        resolverLlamadaMapper(args[1], source, tokens, importsPropios, referenciasMapa);
+        resolverLlamadaMapper(args[1], source, tokens, importsPropios, referenciasMapa, llamadasClaseFuera);
     }
 
     /* [318A-7V23] Call-sites de carriers del mismo archivo (ver
@@ -2275,7 +2327,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
     while ((match = REGEX_CLASS_LIST.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index) || previousCodeCharacter(source, match.index) !== '.') {continue;}
         resolverExpresionClase(match[1], variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
-        resolverLlamadaMapper(match[1], source, tokens, importsPropios, referenciasMapa);
+        resolverLlamadaMapper(match[1], source, tokens, importsPropios, referenciasMapa, llamadasClaseFuera);
     }
 
     /* [318A-7V23] setAttribute('class', <expr>) directo: la vía de ATRIBUTO
@@ -2297,7 +2349,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
         const argsAttr = dividirArgumentosLlamada(source, aperturaAttr);
         if (!argsAttr || argsAttr.length < 2) {continue;}
         resolverExpresionClase(argsAttr[1], variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
-        resolverLlamadaMapper(argsAttr[1], source, tokens, importsPropios, referenciasMapa);
+        resolverLlamadaMapper(argsAttr[1], source, tokens, importsPropios, referenciasMapa, llamadasClaseFuera);
     }
 
     for (const declaracion of escanearDeclaraciones(source)) {
@@ -2430,6 +2482,8 @@ export class ClassIndexBuilder {
         llamadas: CarrierCallSite[];
         mapasExportados: Record<string, string[]>;
         referenciasMapa: Set<string>;
+        funcionesClase: Map<string, Set<string>>;
+        llamadasClase: Set<string>;
     }>();
 
     constructor(
@@ -2475,7 +2529,7 @@ export class ClassIndexBuilder {
 
         throwIfCancelled(options.token);
         onProgress?.('Extrayendo tokens de consumidores', 0, 1);
-        const { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, filesMapasExportados, filesReferenciasMapa, totalArchivos: archivosConsumo } = await this.extractConsumerTokens(
+        const { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, filesMapasExportados, filesReferenciasMapa, filesFuncionesClase, filesLlamadasClase, totalArchivos: archivosConsumo } = await this.extractConsumerTokens(
             consumerPatterns,
             options.exclude,
             options.token
@@ -2531,6 +2585,41 @@ export class ClassIndexBuilder {
                 const valores = mapasUnion.get(nombre);
                 if (!valores) {continue;}
                 for (const valor of valores) {tokensArchivo.add(valor);}
+            }
+        }
+
+        /* [15A-27] Unión global de funciones que devuelven clases: la definición
+         * vive en un módulo (`claseEstadoSample` en estadoVisual.tsx) y la
+         * llamada en otro, dentro de una plantilla de className
+         * (ListaHistorialSync.tsx:85). Se cruzan las dos mitades: el archivo
+         * que llama recibe los literales del que define. La referencia a una
+         * función que el propio archivo define se ignora (ya la cubre
+         * resolverLlamadaMapper en local). */
+        const funcionesUnion = new Map<string, Set<string>>();
+        const archivosPorFuncion = new Map<string, number>();
+        for (const funciones of filesFuncionesClase.values()) {
+            for (const [nombre, literales] of funciones) {
+                const union = funcionesUnion.get(nombre) ?? new Set<string>();
+                for (const literal of literales) {union.add(literal);}
+                funcionesUnion.set(nombre, union);
+                archivosPorFuncion.set(nombre, (archivosPorFuncion.get(nombre) ?? 0) + 1);
+            }
+        }
+        for (const [fsPath, llamadas] of filesLlamadasClase) {
+            if (llamadas.size === 0) {continue;}
+            const propios = filesFuncionesClase.get(fsPath);
+            const tokensArchivo = filesTokens.get(fsPath);
+            if (!tokensArchivo) {continue;}
+            for (const nombre of llamadas) {
+                if (propios?.has(nombre)) {continue;}
+                /* Homónimos: si el nombre lo define más de un archivo no se sabe
+                 * cuál resuelve el import, y unir los literales de todos
+                 * ocultaría huérfanas reales. Fail-closed: se ignora. Mismo
+                 * criterio que el resto de uniones cross-file. */
+                if (archivosPorFuncion.get(nombre) !== 1) {continue;}
+                const literales = funcionesUnion.get(nombre);
+                if (!literales) {continue;}
+                for (const literal of literales) {tokensArchivo.add(literal);}
             }
         }
 
@@ -2687,6 +2776,8 @@ export class ClassIndexBuilder {
         filesLlamadas: Map<string, CarrierCallSite[]>;
         filesMapasExportados: Map<string, Record<string, string[]>>;
         filesReferenciasMapa: Map<string, Set<string>>;
+        filesFuncionesClase: Map<string, Map<string, Set<string>>>;
+        filesLlamadasClase: Map<string, Set<string>>;
         totalArchivos: number;
     }> {
         const files = await this.findUniqueFiles(patterns, exclude, token);
@@ -2696,6 +2787,8 @@ export class ClassIndexBuilder {
         const filesLlamadas = new Map<string, CarrierCallSite[]>();
         const filesMapasExportados = new Map<string, Record<string, string[]>>();
         const filesReferenciasMapa = new Map<string, Set<string>>();
+        const filesFuncionesClase = new Map<string, Map<string, Set<string>>>();
+        const filesLlamadasClase = new Map<string, Set<string>>();
         let totalTokens = 0;
         for (const fsPath of this.consumerFileCache.keys()) {
             if (!files.has(fsPath)) {
@@ -2723,6 +2816,8 @@ export class ClassIndexBuilder {
                 filesLlamadas.set(file.fsPath, cached.llamadas);
                 filesMapasExportados.set(file.fsPath, cached.mapasExportados);
                 filesReferenciasMapa.set(file.fsPath, cached.referenciasMapa);
+                filesFuncionesClase.set(file.fsPath, cached.funcionesClase);
+                filesLlamadasClase.set(file.fsPath, cached.llamadasClase);
                 totalTokens += cached.tokens.size;
             } catch (error) {
                 if (error instanceof CancellationError) {
@@ -2732,7 +2827,7 @@ export class ClassIndexBuilder {
             }
         }
 
-        return { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, filesMapasExportados, filesReferenciasMapa, totalArchivos: files.size };
+        return { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, filesMapasExportados, filesReferenciasMapa, filesFuncionesClase, filesLlamadasClase, totalArchivos: files.size };
     }
 
     /* [028A-8] Carga las definiciones CSS de un archivo reutilizando el índice
@@ -2781,6 +2876,8 @@ export class ClassIndexBuilder {
         llamadas: CarrierCallSite[];
         mapasExportados: Record<string, string[]>;
         referenciasMapa: Set<string>;
+        funcionesClase: Map<string, Set<string>>;
+        llamadasClase: Set<string>;
     }> {
         const hash = this.persistentStore ? await sha256File(file.fsPath) : null;
         const store = this.persistentStore;
@@ -2788,10 +2885,12 @@ export class ClassIndexBuilder {
         /* [318A-7V14] La familia se exige persistida: una entrada vieja (sin
          * consumerFamilyPrefixes) se re-parsea aunque el hash coincida.
          * [299A-13 F3b] Ídem para mapas exportados + referencias (entradas de
-         * PARSER_VERSION 5 se re-parsean aunque el schema no haya cambiado). */
+         * PARSER_VERSION 5 se re-parsean aunque el schema no haya cambiado).
+         * [15A-27] Ídem para funciones que devuelven clases + llamadas. */
         if (stored?.hash === hash && stored.consumerTokens && stored.consumerFamilyPrefixes
             && stored.consumerCarriers && stored.consumerCarrierCalls
-            && stored.consumerExportedClassMaps && stored.consumerMapReferences) {
+            && stored.consumerExportedClassMaps && stored.consumerMapReferences
+            && stored.consumerClassFunctions && stored.consumerClassFunctionCalls) {
             if (store) {store.stats.reused++;}
             const cached = {
                 tokens: new Set<string>(stored.consumerTokens),
@@ -2802,6 +2901,10 @@ export class ClassIndexBuilder {
                 llamadas: stored.consumerCarrierCalls.map(llamada => ({ ...llamada })),
                 mapasExportados: stored.consumerExportedClassMaps,
                 referenciasMapa: new Set<string>(stored.consumerMapReferences),
+                funcionesClase: new Map<string, Set<string>>(
+                    Object.entries(stored.consumerClassFunctions).map(([fn, literales]) => [fn, new Set<string>(literales)])
+                ),
+                llamadasClase: new Set<string>(stored.consumerClassFunctionCalls),
             };
             this.consumerFileCache.set(file.fsPath, cached);
             return cached;
@@ -2812,7 +2915,8 @@ export class ClassIndexBuilder {
         const fileTokens = new Set<string>();
         const fileFamilyPrefixes = new Set<string>();
         const fileReferenciasMapa = new Set<string>();
-        extraerTokensDeTexto(texto, fileTokens, fileFamilyPrefixes, fileReferenciasMapa);
+        const fileLlamadasClase = new Set<string>();
+        extraerTokensDeTexto(texto, fileTokens, fileFamilyPrefixes, fileReferenciasMapa, fileLlamadasClase);
         /* [299A-13 F3b] Mapas de clases exportados (`export const
          * PAYMENT_STATUS_CLASS: Record<...> = {...}`). Solo scripts: el
          * `export const` es un idioma JS/TS (mismo gate que carriers). */
@@ -2829,7 +2933,13 @@ export class ClassIndexBuilder {
             );
             llamadas = extraccion.llamadas;
         }
-        const cached = { tokens: fileTokens, familyPrefixes: fileFamilyPrefixes, carriers, llamadas, mapasExportados, referenciasMapa: fileReferenciasMapa };
+        /* [15A-27] Funciones que devuelven clases: solo scripts (mismo gate que
+         * carriers y mapas exportados). */
+        let funcionesClase = new Map<string, Set<string>>();
+        if (/\.(ts|tsx|jsx|js|mjs|cjs)$/.test(file.fsPath)) {
+            funcionesClase = extraerFuncionesQueDevuelvenClases(texto);
+        }
+        const cached = { tokens: fileTokens, familyPrefixes: fileFamilyPrefixes, carriers, llamadas, mapasExportados, referenciasMapa: fileReferenciasMapa, funcionesClase, llamadasClase: fileLlamadasClase };
         this.consumerFileCache.set(file.fsPath, cached);
         if (hash) {
             const previa = store?.getEntry(file.fsPath) ?? {};
@@ -2842,6 +2952,8 @@ export class ClassIndexBuilder {
                 consumerCarrierCalls: llamadas,
                 consumerExportedClassMaps: mapasExportados,
                 consumerMapReferences: [...fileReferenciasMapa],
+                consumerClassFunctions: Object.fromEntries([...funcionesClase].map(([fn, literales]) => [fn, [...literales]])),
+                consumerClassFunctionCalls: [...fileLlamadasClase],
             });
             if (store) {store.stats.reparsed++;}
         }

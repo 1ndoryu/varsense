@@ -7,7 +7,7 @@ import { CachedNodeDocumentProvider, NodeDocumentProvider, NodeWorkspaceFileProv
 import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
 import { FilePersistentIndexStore, PARSER_VERSION, PERSISTENT_INDEX_FILENAME, buildVariableReverseIndex, configHashFor, indexIdentity } from '@/core/persistentIndex';
 import { ClassIndexBuilder } from '@/core/classIndexBuilder';
-import { analyzeVarsenseDocument, orphanClassToFinding } from '@/core/analyzeDocument';
+import { analyzeVarsenseDocument, orphanClassToFinding, parsearLineasSuprimidas } from '@/core/analyzeDocument';
 import { analyzeCrossFileDuplicates, analyzeTokenRules } from '@/core/tokenRules';
 import { VarsenseReportEntry, generarReporteMarkdown } from '@/core/report';
 import {
@@ -377,6 +377,31 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
     return result;
 }
 
+/* [15A-27] El analisis de claseHuerfana sale del indice de clases, que no mira
+ * los marcadores de supresion; el resto de reglas si, porque pasan por
+ * analyzeVarsenseDocument. Se filtran aqui, con el MISMO parser y leyendo cada
+ * hoja una sola vez, para que un marcador sobre la linea de definicion de una
+ * clase calle el hallazgo igual que en cualquier otra regla. Sin esto el
+ * marcador existia y no hacia nada (KAMPLES: `.prose` y compania).
+ * `clase.linea` y el set del parser son ambos 0-based: se comparan tal cual
+ * (restar 1 hacia que el marcador callara tambien la linea siguiente). */
+async function filtrarClasesSuprimidas<T extends { archivo: string; linea: number }>(clases: T[]): Promise<T[]> {
+    const suprimidas = new Map<string, Set<number> | null>();
+    const conservadas: T[] = [];
+    for (const clase of clases) {
+        if (!suprimidas.has(clase.archivo)) {
+            const texto = await fs.readFile(clase.archivo, 'utf8').catch(() => null);
+            suprimidas.set(clase.archivo, texto === null ? null : parsearLineasSuprimidas(texto));
+        }
+        const lineas = suprimidas.get(clase.archivo);
+        if (lineas && lineas.has(clase.linea)) {
+            continue;
+        }
+        conservadas.push(clase);
+    }
+    return conservadas;
+}
+
 export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
     const startedAt = Date.now();
     const configFile = await readConfig(args.configPath, args.workspacePath);
@@ -392,7 +417,8 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
         excludedClassPatterns: configFile.orphanClassDetection?.excludeClassPatterns ?? [],
     });
 
-    const entries = groupFindingsByFile(result.clasesHuerfanas.filter(clase => isScopedFile(clase.archivo, scopedFiles)).map(clase => ({
+    const clasesHuerfanas = await filtrarClasesSuprimidas(result.clasesHuerfanas);
+    const entries = groupFindingsByFile(clasesHuerfanas.filter(clase => isScopedFile(clase.archivo, scopedFiles)).map(clase => ({
         ruta: clase.archivo,
         finding: orphanClassToFinding(clase, configFile.orphanClassDetection?.severity ?? 'warning'),
     })));
@@ -490,7 +516,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
         }
     }
     timer.mark('tokenRulesMs');
-    findings.push(...classResult.clasesHuerfanas.filter(clase => isScopedFile(clase.archivo, scopedFiles)).map(clase => ({
+    findings.push(...(await filtrarClasesSuprimidas(classResult.clasesHuerfanas)).filter(clase => isScopedFile(clase.archivo, scopedFiles)).map(clase => ({
         ruta: clase.archivo,
         finding: orphanClassToFinding(clase, configFile.orphanClassDetection?.severity ?? 'warning'),
     })));

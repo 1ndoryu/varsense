@@ -67,6 +67,89 @@ suite('VarSense CLI editor-agnostic', () => {
         }
     });
 
+    /* [15A-27] La ruta de claseHuerfana sale del indice de clases, que no pasa
+     * por analyzeVarsenseDocument: los marcadores de supresion no la tocaban. */
+    test('orphan-classes calla la clase con marcador en su linea de definicion', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-marcador-');
+        escribir(root, 'src/styles.css', [
+            '/* sentinel-disable-next-line claseHuerfana — la pone el HTML inyectado. */',
+            '.inyectada { color: red; }',
+            '.sinMarcador { color: blue; }',
+        ].join('\n'));
+
+        try {
+            const result = await analyzeCliTarget(parseCliArgs(['orphan-classes', '--workspace', root, '--format', 'json']));
+            const findings = result.entries.flatMap(entry => entry.findings);
+
+            assert.strictEqual(findings.some(finding => finding.message.includes('inyectada')), false);
+            assert.ok(findings.some(finding => finding.message.includes('sinMarcador')));
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    /* [15A-27] La funcion que devuelve la clase puede vivir en otro archivo
+     * (`claseEstadoSample` en estadoVisual.tsx). Antes solo se resolvia si el
+     * consumidor estaba en el mismo archivo. */
+    test('orphan-classes resuelve la clase devuelta por una funcion de otro archivo', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-funcion-cross-file-');
+        escribir(root, 'src/styles.css', [
+            '.etiquetaEstado { font-weight: 500; }',
+            '.estadoError { color: red; }',
+            '.estadoOk { color: green; }',
+            '.nadieLaUsa { color: black; }',
+        ].join('\n'));
+        escribir(root, 'src/estadoVisual.ts', [
+            'export function claseEstado(estado: string): string {',
+            "    if (estado === 'error') { return 'estadoError'; }",
+            "    return 'estadoOk';",
+            '}',
+        ].join('\n'));
+        escribir(root, 'src/Lista.tsx', [
+            "import { claseEstado } from './estadoVisual';",
+            'export function Lista({ estado }: { estado: string }) {',
+            '    return <span className={`etiquetaEstado ${claseEstado(estado)}`} />;',
+            '}',
+        ].join('\n'));
+
+        try {
+            const result = await analyzeCliTarget(parseCliArgs(['orphan-classes', '--workspace', root, '--format', 'json']));
+            const huerfanas = result.entries.flatMap(entry => entry.findings)
+                .filter(finding => finding.ruleId === 'claseHuerfana')
+                .map(finding => finding.message);
+
+            assert.strictEqual(huerfanas.some(mensaje => mensaje.includes('estadoError')), false);
+            assert.strictEqual(huerfanas.some(mensaje => mensaje.includes('estadoOk')), false);
+            assert.ok(huerfanas.some(mensaje => mensaje.includes('nadieLaUsa')));
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    /* Control negativo del cruce: con dos funciones homonimas no se sabe cual
+     * resuelve el import, y unir sus literales ocultaria huerfanas reales. */
+    test('orphan-classes no cruza funciones homonimas de archivos distintos', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-homonimas-');
+        escribir(root, 'src/styles.css', '.soloEnUno { color: red; }');
+        escribir(root, 'src/uno.ts', 'export function claseEstado(): string {\n    return \'soloEnUno\';\n}');
+        escribir(root, 'src/dos.ts', 'export function claseEstado(): string {\n    return \'otraCosa\';\n}');
+        escribir(root, 'src/Lista.tsx', [
+            "import { claseEstado } from './dos';",
+            'export function Lista() {',
+            '    return <span className={`etiqueta ${claseEstado()}`} />;',
+            '}',
+        ].join('\n'));
+
+        try {
+            const result = await analyzeCliTarget(parseCliArgs(['orphan-classes', '--workspace', root, '--format', 'json']));
+            const findings = result.entries.flatMap(entry => entry.findings);
+
+            assert.ok(findings.some(finding => finding.ruleId === 'claseHuerfana' && finding.message.includes('soloEnUno')));
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
     test('all combina variables, CSS inline y clases huerfanas en una ejecución', async () => {
         const root = crearWorkspaceTemporal('varsense-cli-all-');
         escribir(root, 'src/variables.css', ':root { --colorPrimary: #fff; }\n.huerfana { color: red; }');
