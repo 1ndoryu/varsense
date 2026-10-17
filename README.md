@@ -50,6 +50,13 @@ npm run smoke:lsp    # levanta el server stdio y verifica publishDiagnostics
 
 `varsense.config.json` valida estrictamente sus claves; las desconocidas fallan. Permite severidades, allowedValues para hardcoded detection, exclusiones y la convencion de tokens del proyecto.
 
+`tokenDetection.duplicate.excludeTokens` y `tokenDetection.unused.excludeTokens`
+aceptan una lista de nombres de token (con o sin el prefijo `--`) que la regla
+correspondiente ignora. Sirve para lo que la regla no puede deducir sola: en
+`duplicate`, los roles de un tema que comparten valor a proposito (`--card` y
+`--popover` valen lo mismo que `--background` para poder re-tematizarse por
+separado); en `unused`, los tokens consumidos fuera del alcance analizado.
+
 ## Arquitectura
 
 - `src/core/`: indexadores y reglas agnosticos (VariableIndex, ClassIndex, tokenRules) sin imports de VS Code.

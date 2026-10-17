@@ -36,7 +36,7 @@ export interface VarsenseConfigFile {
         severity?: CoreSeverity;
     };
     tokenDetection?: {
-        duplicate?: { enabled?: boolean; severity?: CoreSeverity };
+        duplicate?: { enabled?: boolean; severity?: CoreSeverity; excludeTokens?: string[] };
         unused?: { enabled?: boolean; severity?: CoreSeverity; excludeTokens?: string[] };
         crossFile?: { enabled?: boolean; severity?: CoreSeverity };
     };
@@ -176,9 +176,13 @@ export function validateVarsenseConfig(value: unknown): asserts value is Varsens
             assertSeverity(section.severity, `tokenDetection.${key}.severity`);
         }
     }
-    const unusedSection = tokens?.unused as Record<string, unknown> | undefined;
-    if (unusedSection?.excludeTokens !== undefined) {
-        assertStringArray(unusedSection.excludeTokens, 'tokenDetection.unused.excludeTokens');
+    /* `excludeTokens` lo tienen las dos reglas de tokens: en `unused` exime del
+     * aviso de "sin uso" y en `duplicate` declara alias deliberados. */
+    for (const key of ['duplicate', 'unused'] as const) {
+        const section = tokens?.[key] as Record<string, unknown> | undefined;
+        if (section?.excludeTokens !== undefined) {
+            assertStringArray(section.excludeTokens, `tokenDetection.${key}.excludeTokens`);
+        }
     }
 }
 
@@ -210,6 +214,7 @@ export function buildAnalysisConfig(config: VarsenseConfigFile): VarsenseDocumen
             duplicate: {
                 habilitado: config.tokenDetection?.duplicate?.enabled ?? true,
                 severidad: severityOrDefault(config.tokenDetection?.duplicate?.severity, 'warning'),
+                excluirTokens: config.tokenDetection?.duplicate?.excludeTokens ?? [],
             },
             unused: {
                 habilitado: config.tokenDetection?.unused?.enabled ?? true,

@@ -197,8 +197,19 @@ export function analyzeTokenRules(
          * --arbol-color/--pixel-editor-iconoActivo,
          * --panelHeaderBorde/--pixel-editor-iconoBorde,
          * --radioMinimo/--ptr-translateY), 0 pares reales perdidos. */
+        /* [321A-1] Alias deliberados del design system. Un tema tipo shadcn
+         * declara varios roles sobre el mismo valor a proposito (--card y
+         * --popover valen lo mismo que --background) para poder re-tematizar
+         * cada rol por separado: repetir el valor ES la estructura, no un
+         * descuido. La regla no puede adivinarlo, asi que lo declara el
+         * proyecto. El token excluido no participa en la agrupacion ni como
+         * canonico ni como duplicado. */
+        const excluidos = new Set((config.tokens.duplicate.excluirTokens ?? []).map(nombreToken));
         const byFileValue = new Map<string, IndexedVariable[]>();
         for (const entry of variables) {
+            if (excluidos.has(entry.variable.nombre)) {
+                continue;
+            }
             const key = normalizedValue(entry.variable.valor);
             if (!key) {
                 continue;
