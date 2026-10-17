@@ -2,6 +2,7 @@ import { DiagnosticType, VariableIndex } from '@/types';
 import { parsearDocumento } from '@/parsers/cssParser';
 import { REGEX_ATRIBUTO_ESTILO, clavesDeExpresionEstilo, esSoloDefinicionTokens, finExpresionEstilo } from '@/parsers/estiloInline';
 import { CoreFinding, CoreSeverity, CoreTextDocument, createCoreRange, positionAtOffset } from './types';
+import { enmascararComentarios } from './enmascararComentarios';
 
 export interface VarsenseHardcodedConfig {
     habilitado: boolean;
@@ -131,7 +132,10 @@ function analyzeReactInlineStyles(
         return [];
     }
 
-    const text = document.getText();
+    /* [17AA-3] Se busca sobre el texto con los comentarios enmascarados: un
+     * `style={}` escrito en un comentario no es CSS inline. Misma longitud, asi
+     * que los offsets y las lineas siguen valiendo sobre el original. */
+    const text = enmascararComentarios(document.getText());
     const findings: CoreFinding[] = [];
     let match: RegExpExecArray | null;
 
@@ -174,7 +178,9 @@ function analyzeScriptInlineStyles(
         return [];
     }
 
-    const text = document.getText();
+    /* [17AA-3] Mismo enmascarado que la ruta React: `.style.x =` dentro de un
+     * comentario tampoco es CSS inline. */
+    const text = enmascararComentarios(document.getText());
     const findings: CoreFinding[] = [];
     let match: RegExpExecArray | null;
     REGEX_SCRIPT_INLINE_STYLE.lastIndex = 0;
