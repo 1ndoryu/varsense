@@ -32,8 +32,8 @@ function cierraEnLinea(texto: string, inicio: number): number {
     for (let i = inicio + 1; i < texto.length; i++) {
         const c = texto[i];
         if (c === '\\') { i++; continue; }
-        if (c === '\n' || c === '\r') return -1;
-        if (c === texto[inicio]) return i;
+        if (c === '\n' || c === '\r') { return -1; }
+        if (c === texto[inicio]) { return i; }
     }
     return -1;
 }
@@ -44,7 +44,7 @@ function cierraTemplate(texto: string, inicio: number): number {
     for (let i = inicio + 1; i < texto.length; i++) {
         const c = texto[i];
         if (c === '\\') { i++; continue; }
-        if (c === '`') return i;
+        if (c === '`') { return i; }
     }
     return texto.length - 1;
 }
@@ -54,7 +54,7 @@ export function enmascararComentarios(texto: string): string {
     const salida = texto.split('');
     const borrar = (desde: number, hasta: number): void => {
         for (let k = desde; k < hasta; k++) {
-            if (salida[k] !== '\n' && salida[k] !== '\r') salida[k] = ' ';
+            if (salida[k] !== '\n' && salida[k] !== '\r') { salida[k] = ' '; }
         }
     };
 
