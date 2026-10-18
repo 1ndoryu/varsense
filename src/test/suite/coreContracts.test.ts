@@ -1399,6 +1399,27 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.ok(hallazgos.every(hallazgo => hallazgo.ruleId === 'cssInlineReact'));
   });
 
+  /* Reenvio de prop: `style={style}` pasa al hijo lo que recibio el componente,
+   * no es CSS inline escrito aqui. Un objeto local sigue marcandose (149A-1). */
+  test('[reenvio-style] style={style} reenviado como prop no se marca', async () => {
+    const documento = createCoreDocument({
+      uri: 'file:///workspace/src/Envoltorio.tsx',
+      fileName: '/workspace/src/Envoltorio.tsx',
+      languageId: 'typescriptreact',
+      content: [
+        'const Envoltorio = ({ style }: { style?: React.CSSProperties }) => <div style={style} />;',
+        'const Otro = ({ estilo }: { estilo: React.CSSProperties }) => <div style={ { color: estilo.color } } />;',
+      ].join('\n'),
+    });
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
+
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+
+    assert.strictEqual(hallazgos.length, 1);
+    assert.strictEqual(hallazgos[0].range.start.line, 1);
+  });
+
   /* [289A-1] todo-prosa-sin-marcador RETIRADA a Sentinel Core (0.7.15):
    * VarSense ya no la reporta; `todoProseDetection` se acepta pero se ignora
    * (compat con `varsense.config.json` existentes). Casos que antes marcaban

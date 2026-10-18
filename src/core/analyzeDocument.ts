@@ -124,6 +124,11 @@ function analyzeCssDocument(
     return findings;
 }
 
+/* Expresion que es solo el identificador `style` (reenvio de prop). */
+function esReenvioDePropStyle(expresion: string): boolean {
+    return /^\s*style\s*$/.test(expresion);
+}
+
 function analyzeReactInlineStyles(
     document: CoreTextDocument,
     config: VarsenseDocumentAnalysisConfig
@@ -153,6 +158,12 @@ function analyzeReactInlineStyles(
         /* Objeto solo con custom properties = definicion runtime de tokens
          * (mismo patron eximido que setProperty): no es inline. */
         if (esSoloDefinicionTokens(clavesDeExpresionEstilo(text, inicioLlave, fin))) {
+            continue;
+        }
+
+        /* `style={style}` reenvia al hijo la prop `style` que recibio el componente:
+         * no es CSS inline escrito aqui, asi que no se marca. */
+        if (esReenvioDePropStyle(text.slice(inicioLlave + 1, fin - 1))) {
             continue;
         }
 
