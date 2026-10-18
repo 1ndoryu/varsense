@@ -50,6 +50,11 @@ suite('VarSense token-unused con @theme de Tailwind v4', () => {
     assert.deepStrictEqual(tokensSinUso(['--color-sobra'], css), ['--color-sobra']);
   });
 
+  test('el shorthand bg-(--x) de Tailwind v4 en TSX cuenta como uso', () => {
+    const tsx = '<div className="bg-(--color-bg) p-2"></div>';
+    assert.deepStrictEqual(tokensSinUso(['--color-bg'], tsx), []);
+  });
+
   test('excludeTokens exime el token, con o sin prefijo "--"', () => {
     const css = '@theme inline {\n  --color-puente: red;\n  --radius-puente: 1px;\n}';
     assert.deepStrictEqual(tokensSinUso(['--color-puente', '--radius-puente'], css, ['color-puente', '--radius-puente']), []);

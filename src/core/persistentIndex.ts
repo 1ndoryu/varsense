@@ -27,7 +27,7 @@ export const PERSISTENT_INDEX_SCHEMA_VERSION = 1;
  * por identificador importado (`${CLASE}`) en consumerMapReferences.
  * 8: [15A-27] consumerClassFunctions + consumerClassFunctionCalls (funciones
  * que devuelven clases y llamadas a las definidas en otro archivo). */
-export const PARSER_VERSION = '8';
+export const PARSER_VERSION = '9';
 export const PERSISTENT_INDEX_FILENAME = 'varsense-index.json';
 
 export interface PersistentIndexEntry {

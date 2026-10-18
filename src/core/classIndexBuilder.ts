@@ -1,5 +1,6 @@
 import { CancellationError, CancellationToken, DocumentCacheProvider, DocumentProvider, throwIfCancelled, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
 import { PersistentIndexStore, sha256File } from './persistentIndex';
+import { extraerUsoVariablesDeTexto } from './usoVariables';
 
 export interface ClaseCssDefinida {
     nombre: string;
@@ -521,15 +522,7 @@ const MAX_TOKENS = 50000;
 
 /* [028A-8 tramo 4] Nombres de variables referenciadas con var(--x) en un
  * texto CSS. Permite al índice inverso de variables seleccionar consumidores. */
-export function extraerUsoVariablesDeTexto(texto: string): string[] {
-    const usos = new Set<string>();
-    const regexVar = /var\(\s*(--[\w-]+)/g;
-    let match: RegExpExecArray | null;
-    while ((match = regexVar.exec(texto)) !== null) {
-        usos.add(match[1]);
-    }
-    return [...usos].sort();
-}
+export { extraerUsoVariablesDeTexto } from './usoVariables';
 
 export function extraerClasesDeTexto(texto: string, rutaArchivo: string): ClaseCssDefinida[] {
     const clases: ClaseCssDefinida[] = [];
@@ -2947,6 +2940,8 @@ export class ClassIndexBuilder {
                 ...previa,
                 hash,
                 consumerTokens: [...fileTokens],
+                /* [usos] Tailwind (`bg-(--x)`) y `var(--x)` en TSX/JS también cuentan para token-unused. */
+                variableUsages: extraerUsoVariablesDeTexto(texto),
                 consumerFamilyPrefixes: [...fileFamilyPrefixes],
                 consumerCarriers: Object.fromEntries([...carriers].map(([fn, poss]) => [fn, [...poss]])),
                 consumerCarrierCalls: llamadas,

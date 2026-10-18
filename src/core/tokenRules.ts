@@ -3,6 +3,7 @@
 
 import { CssVariable } from '@/types';
 import { VarsenseDocumentAnalysisConfig } from './analyzeDocument';
+import { extraerUsoVariablesDeTexto } from './usoVariables';
 import { CoreFinding, CoreTextDocument, createCoreRange } from './types';
 
 interface IndexedVariable { variable: CssVariable; file: string }
@@ -292,10 +293,8 @@ export function analyzeTokenRules(
                  * variable; evita regex dinámica (escapado frágil). */
                 if (!usedNames) {
                     usedNames = new Set<string>();
-                    const regexVar = /var\(\s*(--[\w-]+)/g;
-                    let match: RegExpExecArray | null;
-                    while ((match = regexVar.exec(allText!)) !== null) {
-                        usedNames.add(match[1]);
+                    for (const nombre of extraerUsoVariablesDeTexto(allText!)) {
+                        usedNames.add(nombre);
                     }
                 }
                 used = usedNames.has(entry.variable.nombre);
