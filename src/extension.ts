@@ -15,6 +15,7 @@ import { escanearVariablesInicial, comandoRefrescarVariables, comandoMostrarVari
 import { comandoEscanearTodoProyecto, comandoExportarReporte } from './comandos/proyecto';
 import { comandoAutoFixTodosLosCss } from './comandos/autoFix';
 import { comandoDetectarClasesHuerfanas } from './comandos/clasesHuerfanas';
+import { logger } from '@/utils/logger';
 
 /*
  * Colección de disposables para limpieza
@@ -26,11 +27,11 @@ let disposables: vscode.Disposable[] = [];
  * Se ejecuta cuando VS Code activa la extensión
  */
 export async function activate(contexto: vscode.ExtensionContext): Promise<void> {
-    console.log('[CSS Vars Validator] Activando extensión...');
+    logger.info('Activando extensión...');
     
     /* Verificar si la extensión está habilitada */
     if (!estaExtensionHabilitada()) {
-        console.log('[CSS Vars Validator] Extensión deshabilitada por configuración');
+        logger.info('Extensión deshabilitada por configuración');
         return;
     }
     
@@ -58,10 +59,10 @@ export async function activate(contexto: vscode.ExtensionContext): Promise<void>
             await estado.diagnosticProvider.actualizarTodosDocumentos();
         }
         
-        console.log('[CSS Vars Validator] Extensión activada correctamente');
+        logger.info('Extensión activada correctamente');
         
     } catch (error) {
-        console.error('[CSS Vars Validator] Error durante activación:', error);
+        logger.error('Error durante activación:', error);
         vscode.window.showErrorMessage(
             `CSS Vars Validator: Error durante activación - ${error instanceof Error ? error.message : 'Error desconocido'}`
         );
@@ -72,7 +73,7 @@ export async function activate(contexto: vscode.ExtensionContext): Promise<void>
  * Función de desactivación de la extensión
  */
 export function deactivate(): void {
-    console.log('[CSS Vars Validator] Desactivando extensión...');
+    logger.info('Desactivando extensión...');
     
     /* Limpiar todos los disposables */
     disposables.forEach(d => d.dispose());
@@ -94,7 +95,7 @@ export function deactivate(): void {
     VariableScanner.obtenerInstancia().dispose();
     obtenerConfigService().dispose();
     
-    console.log('[CSS Vars Validator] Extensión desactivada');
+    logger.info('Extensión desactivada');
 }
 
 /*

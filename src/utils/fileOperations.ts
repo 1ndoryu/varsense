@@ -4,6 +4,7 @@
  */
 
 import * as vscode from 'vscode';
+import { logger } from '@/utils/logger';
 
 /*
  * Busca archivos en el workspace según patrones glob
@@ -25,7 +26,7 @@ export async function buscarArchivos(
             const archivos = await vscode.workspace.findFiles(patron, patronExclusion);
             archivosEncontrados.push(...archivos);
         } catch (error) {
-            console.error(`Error buscando archivos con patrón ${patron}:`, error);
+            logger.error(`Error buscando archivos con patrón ${patron}:`, error);
         }
     }
     
@@ -49,7 +50,7 @@ export async function leerArchivo(uri: vscode.Uri): Promise<string> {
         const contenidoBytes = await vscode.workspace.fs.readFile(uri);
         return Buffer.from(contenidoBytes).toString('utf8');
     } catch (error) {
-        console.error(`Error leyendo archivo ${uri.fsPath}:`, error);
+        logger.error(`Error leyendo archivo ${uri.fsPath}:`, error);
         throw error;
     }
 }

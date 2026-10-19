@@ -10,6 +10,7 @@ import { debounce } from '@/utils/fileUtils';
 import { obtenerConfigService } from '@/services/configService';
 import { VscodeDocumentProvider, VscodeFileWatcherProvider, VscodeWorkspaceFileProvider } from '@/vscode/vscodeAdapter';
 import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
+import { logger } from '@/utils/logger';
 import { FileWatcher, FileWatcherProvider, WorkspaceFile } from '@/core/workspaceProviders';
 import { parserCssVarsense } from '@/parsers';
 
@@ -112,9 +113,9 @@ export class VariableScanner {
             /* Notificar cambios */
             this._onVariablesChange.fire();
 
-            console.log(`[CSS Vars Validator] Escaneadas ${resultado.indice.variables.size} variables de ${resultado.indice.archivosEscaneados.length} archivos`);
+            logger.info(`Escaneadas ${resultado.indice.variables.size} variables de ${resultado.indice.archivosEscaneados.length} archivos`);
         } catch (error) {
-            console.error('[CSS Vars Validator] Error escaneando variables:', error);
+            logger.error('Error escaneando variables:', error);
         } finally {
             this._escaneando = false;
         }
@@ -134,7 +135,7 @@ export class VariableScanner {
         try {
             await this._indexBuilder.addFileToIndex(file, indice, porArchivo);
         } catch (error) {
-            console.error(`[CSS Vars Validator] Error procesando ${file.fsPath}:`, error);
+            logger.error(`Error procesando ${file.fsPath}:`, error);
         }
     }
 
@@ -220,7 +221,7 @@ export class VariableScanner {
         /* Configurar watcher para Git change (Branch switching) */
         const gitWatchers = this._fileWatcherProvider.createWatchers(['**/.git/HEAD'], {
             onChange: () => {
-                console.log('[CSS Vars Validator] Cambio en Git detectado. Limpiando caché...');
+                logger.info('Cambio en Git detectado. Limpiando caché...');
                 this.limpiarCache();
                 void this.escanear(true);
             }

@@ -7,6 +7,7 @@ import { CssVariable, ResolvedVariable } from '@/types';
 import { VariableScanner } from '@/services/variableScanner';
 import { extraerVariablesDeValor } from '@/parsers/valueParser';
 import { esColor, parsearColor } from '@/utils/colorUtils';
+import { logger } from '@/utils/logger';
 
 /*
  * Límite máximo de resolución recursiva para evitar bucles infinitos
@@ -87,7 +88,7 @@ export class VariableResolver {
         
         /* Verificar referencias circulares */
         if (cadena.includes(nombreVariable)) {
-            console.warn(`[CSS Vars Validator] Referencia circular detectada: ${cadena.join(' -> ')} -> ${nombreVariable}`);
+            logger.warn(`Referencia circular detectada: ${cadena.join(' -> ')} -> ${nombreVariable}`);
             return {
                 encontrada: false,
                 cadenaResolucion: cadena
