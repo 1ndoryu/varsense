@@ -5,12 +5,14 @@ Orden de ejecución: de arriba abajo. Cada bloque: probar en la 89, documentar, 
 
 ## Pendiente
 
+- [ ] **R2 Anotados de la revisión de terceros (2026-10-19).** Lista en `Agente/planes/plan-revision-tercero-2026-10-19.md`, sección «Anotado para después». Agnosticismo (React/Tailwind/botón fijo/prefijo `clase` en el core; requiere decisión de la usuaria si cambia el comportamiento por defecto), SOLID (`vscodeAdapter` dentro de core; tamaños de `extension.ts`, `cli/index.ts`, `cssParser.ts`, `providers/diagnosticProvider.ts`), repo (`sentinel.config.json` sin consumidor; `roadmap.md` y `Agente/completados` versionados), core importa parsers, configuración extensión vs CLI, optimización de `scan` (`classIndexMs` 1163 de 1224 ms) y persistencia (`docs/artifact-contract.md` vs `persistentIndex.ts:97-101`).
 
 ## Bloqueos
 - Verificación en la 89: clon de `HEAD` en `/var/tmp/varsense-verify` (no toca `~/taller`). `npm test` necesita VS Code + xvfb: se verifica el pretest (compile, lint, check:core, smoke:lsp) y el smoke del artefacto.
 - `vsce package` y publicación: reservado a la usuaria (AGENTS §3).
 
 ## Hecho
+- R1 Hallazgos de la revisión de terceros (2026-10-19): LSP con caché de índice (TTL 30 s, invalidación al guardar), debounce de 150 ms y la misma config que la CLI (`varsense.config.json`); CLI `--config` inexistente rc 2 y `scan --help` rc 0; README corregido (códigos de salida, opciones, orden de búsqueda Zed, `.vsix`, `npm link`, scripts, claim de core); skill varsense actualizada. Verificado en la 89: 66 passing, lint 0, check:core, smoke:lsp, gate 0 nuevos. No verificado: Node 18 (sin npm en el PATH de la 89) y LSP con servidor real en VS Code.
 - V7 Límites (2026-10-19): CLI con `--timeout <segundos>` (600 por defecto, 0 desactiva; agotado → rc 2) y aviso de archivos omitidos; LSP con límite de 10 s por análisis, máximo 500 diagnósticos y descarte de resultados obsoletos; archivos de más de 2 MiB fuera del análisis en CLI y LSP. Verificado en la 89; diferencial de  idéntico.
 - V6 Arquitectura (2026-10-19): `core/classIndexBuilder.ts` pasa de 2989 líneas a un barrel de re-exports; la clase queda en `core/classIndex/builder.ts` (380 líneas) y los auxiliares en `core/classIndex/` (15 módulos por responsabilidad, incluido `carga.ts` con las cachés explícitas). Sin cambio de comportamiento: diferencial `orphan-classes` idéntico salvo `durationMs` y el número de archivos del árbol. Color: no había duplicación; `utils/colorUtils.ts` es barrel de `colorConversion`/`colorParsing` con 6+ importadores y se mantiene.
 - V5 Agnosticismo (2026-10-19): prefijos portadores configurables (`prefijosPortadores` en CLI, `cssVarsValidator.carrierPrefixes` en la extensión); el core no asume `clase`; sugerencias contextuales sin palabras en español en el código. Verificado en la 89; gate Sentinel `--cierre` 0 nuevos. Test `coreContracts` actualizado, no ejecutado (requiere VS Code).

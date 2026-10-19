@@ -8,12 +8,12 @@ Origen: prueba de instalación como tercero (VarSense PASA) y revisión de diez 
 - [x] **LSP config.** `src/lsp/server.ts`: el LSP ignora `varsense.config.json` (`buildAnalysisConfig({})`). Leer el mismo archivo que la CLI (prefijos portadores, exclusiones, severidades). Criterio: un `varsense.config.json` con `prefijosPortadores` cambia el diagnóstico en LSP igual que en CLI.
 - [x] **CLI `--config` inexistente.** `src/cli/index.ts:90-92` ignora la ruta en silencio. Debe salir con rc 2 y un mensaje claro en stderr.
 - [x] **CLI `scan --help`.** `src/cli/args.ts:105-107` sale con rc 2. Debe salir con rc 0 y la ayuda en stdout.
-- [ ] **README: opciones CLI.** `README.md:26`: documentar exit 1, `--config`, `--files-from`, `--index-dir` y la regla `token-duplicado-cross-archivo` (`src/core/tokenRules.ts:118`).
-- [ ] **README: claim core.** `README.md:70` dice «sin imports de VS Code»; el código tiene la excepción `src/core/vscodeAdapter.ts`. Corregir la frase con esa excepción nombrada.
-- [ ] **README: orden de búsqueda Zed.** `README.md:40`: el código busca primero `VARSENSE_LSP_PATH` (`integrations/zed/src/lib.rs:56-69`). Documentarlo.
-- [ ] **README: instalar el .vsix.** Añadir cómo instalar una extensión ya empaquetada (sin `vsce package`, reservado a la usuaria). Anotar que `npm link` es necesario para el comando `varsense` (`README.md:55`), y los avisos `npm warn install-scripts` (`README.md:49-51`).
-- [ ] **README: Node.** `README.md:46` dice >= 18; probado solo con Node 24. Anotarlo como no verificado en 18 o probarlo en la 89 con node 18.
-- [ ] **Scripts sin README.** `check:zed`, `smoke:persistent-index`, `smoke:tramo4`, `compile:tests`, `lint` no aparecen en el README: añadirlos a la sección de instalación.
+- [x] **README: opciones CLI.** `README.md:26`: documentar exit 1, `--config`, `--files-from`, `--index-dir` y la regla `token-duplicado-cross-archivo` (`src/core/tokenRules.ts:118`).
+- [x] **README: claim core.** `README.md:70` dice «sin imports de VS Code»; el código tiene la excepción `src/core/vscodeAdapter.ts`. Corregir la frase con esa excepción nombrada.
+- [x] **README: orden de búsqueda Zed.** `README.md:40`: el código busca primero `VARSENSE_LSP_PATH` (`integrations/zed/src/lib.rs:56-69`). Documentarlo.
+- [x] **README: instalar el .vsix.** Añadir cómo instalar una extensión ya empaquetada (sin `vsce package`, reservado a la usuaria). Anotar que `npm link` es necesario para el comando `varsense` (`README.md:55`), y los avisos `npm warn install-scripts` (`README.md:49-51`).
+- [x] **README: Node.** (Node 18 no verificado en la 89: el PATH de ssh no tiene npm para node 18; anotado en el README.) `README.md:46` dice >= 18; probado solo con Node 24. Anotarlo como no verificado en 18 o probarlo en la 89 con node 18.
+- [x] **Scripts sin README.** `check:zed`, `smoke:persistent-index`, `smoke:tramo4`, `compile:tests`, `lint` no aparecen en el README: añadirlos a la sección de instalación.
 - [ ] **Skill varsense.** `~/.agents/skills/varsense/SKILL.md` (fuera del repo): refs de línea antiguas, `PARSER_VERSION 5` (código: 9), claves de config, `--timeout`, aviso de 2 MiB, `estiloBotonEspecifico`, `token-duplicado-cross-archivo`.
 
 ## Anotado para después (no se toca en este bloque)
