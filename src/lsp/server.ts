@@ -6,6 +6,7 @@ import {
     createConnection,
     Diagnostic,
     DiagnosticSeverity,
+    MessageType,
     InitializeParams,
     InitializeResult,
     ProposedFeatures,
@@ -22,7 +23,11 @@ import {
     DEFAULT_EXCLUDE_PATTERNS,
     DEFAULT_VARIABLE_PATTERNS,
 } from '@/core/config';
+import { conTiempoLimite, TAMANO_MAXIMO_ARCHIVO_BYTES, TIMEOUT_LSP_MS } from '@/core/limites';
 import { findingToLspDiagnostic } from './diagnostics';
+
+/* Un editor con miles de avisos se vuelve lento de pintar: se muestran los primeros. */
+const MAX_DIAGNOSTICOS = 500;
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -67,6 +72,20 @@ function analysisErrorDiagnostic(message: string): Diagnostic {
     };
 }
 
+/* Informativo, no error: el archivo es válido, solo queda fuera del análisis por tamaño. */
+function archivoGrandeDiagnostic(): Diagnostic {
+    return {
+        range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 0 },
+        },
+        severity: DiagnosticSeverity.Information,
+        code: 'lsp-archivo-grande',
+        source: 'VarSense',
+        message: `Archivo omitido del análisis: supera ${TAMANO_MAXIMO_ARCHIVO_BYTES / (1024 * 1024)} MiB`,
+    };
+}
+
 async function buildVariableIndex(rootPath: string) {
     const fileProvider = new NodeWorkspaceFileProvider(rootPath);
     const documentProvider = new NodeDocumentProvider();
@@ -78,25 +97,47 @@ async function buildVariableIndex(rootPath: string) {
     });
 }
 
+async function diagnosticosDelDocumento(document: TextDocument, rootPath: string): Promise<Diagnostic[]> {
+    // Medir en bytes UTF-8: el mismo criterio que el límite de la CLI sobre el archivo en disco.
+    if (Buffer.byteLength(document.getText(), 'utf8') > TAMANO_MAXIMO_ARCHIVO_BYTES) {
+        return [archivoGrandeDiagnostic()];
+    }
+
+    const variableResult = await buildVariableIndex(rootPath);
+    const findings = analyzeVarsenseDocument(
+        coreDocumentFromLsp(document),
+        variableResult.indice,
+        buildAnalysisConfig({})
+    );
+
+    if (findings.length > MAX_DIAGNOSTICOS) {
+        connection.sendNotification('window/logMessage', { type: MessageType.Warning, message: `[VarSense LSP] ${document.uri}: ${findings.length} hallazgos; se muestran ${MAX_DIAGNOSTICOS}` });
+    }
+
+    return findings.slice(0, MAX_DIAGNOSTICOS).map(findingToLspDiagnostic);
+}
+
 async function validateTextDocument(document: TextDocument): Promise<void> {
+    const version = document.version;
     const fileName = fsPathFromUri(document.uri);
     const rootPath = workspaceRoot ?? path.dirname(fileName);
+    // Un análisis lento puede acabar después de una edición más reciente: su resultado ya no describe el texto.
+    const esObsoleto = () => documents.get(document.uri)?.version !== version;
 
     try {
-        const variableResult = await buildVariableIndex(rootPath);
-        const findings = analyzeVarsenseDocument(
-            coreDocumentFromLsp(document),
-            variableResult.indice,
-            buildAnalysisConfig({})
-        );
+        const diagnostics = await conTiempoLimite(diagnosticosDelDocumento(document, rootPath), TIMEOUT_LSP_MS);
+        if (esObsoleto()) {
+            return;
+        }
 
-        connection.sendDiagnostics({
-            uri: document.uri,
-            diagnostics: findings.map(findingToLspDiagnostic),
-        });
+        connection.sendDiagnostics({ uri: document.uri, diagnostics });
     } catch (error) {
+        if (esObsoleto()) {
+            return;
+        }
+
         const message = error instanceof Error ? error.message : String(error);
-        connection.console.error(`[VarSense LSP] ${message}`);
+        connection.sendNotification('window/logMessage', { type: MessageType.Error, message: `[VarSense LSP] ${message}` });
         connection.sendDiagnostics({
             uri: document.uri,
             diagnostics: [analysisErrorDiagnostic(message)],

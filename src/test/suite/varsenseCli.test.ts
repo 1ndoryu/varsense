@@ -2,7 +2,8 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { analyzeCliTarget, parseCliArgs } from '../../cli';
+import { analyzeCliTarget } from '../../cli';
+import { parseCliArgs } from '../../cli/args';
 import { validateVarsenseConfig } from '../../core/config';
 
 function crearWorkspaceTemporal(prefix: string): string {

@@ -3,6 +3,7 @@ import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { createCoreDocument, CoreTextDocument } from './types';
 import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
+import { TAMANO_MAXIMO_ARCHIVO_BYTES } from './limites';
 
 function normalizarRuta(ruta: string): string {
     return ruta.replace(/\\/g, '/');
@@ -97,6 +98,10 @@ export class NodeWorkspaceFileProvider implements WorkspaceFileProvider {
      * análisis. Cada combinación de exclusiones conserva su propio snapshot
      * para no mezclar contratos de llamadas distintas. */
     private readonly snapshots = new Map<string, WorkspaceFile[]>();
+    /* [V7] Medida de tamaño por archivo, cacheada: un archivo se mide una sola vez aunque se pida con varios patrones. */
+    private readonly tamanoValido = new Map<string, Promise<boolean>>();
+    /* [V7] Rutas omitidas por superar TAMANO_MAXIMO_ARCHIVO_BYTES; el CLI las informa en stderr. */
+    public readonly omitidosPorTamano: string[] = [];
 
     constructor(private readonly rootPath: string) {}
 
@@ -109,10 +114,37 @@ export class NodeWorkspaceFileProvider implements WorkspaceFileProvider {
             this.snapshots.set(snapshotKey, snapshot);
         }
 
-        return snapshot.filter(file => {
+        const coincidentes = snapshot.filter(file => {
             const relativePath = normalizarRuta(path.relative(this.rootPath, file.fsPath));
             return matchesAnyGlob(relativePath, patterns);
         });
+        const aceptados = await Promise.all(coincidentes.map(file => this.cabeEnLimite(file)));
+        return coincidentes.filter((_, indice) => aceptados[indice]);
+    }
+
+    /* [V7] Un archivo demasiado grande no entra en el análisis; se cuenta en omitidosPorTamano. */
+    private cabeEnLimite(file: WorkspaceFile): Promise<boolean> {
+        let valido = this.tamanoValido.get(file.fsPath);
+        if (!valido) {
+            valido = this.medirTamano(file.fsPath);
+            this.tamanoValido.set(file.fsPath, valido);
+        }
+        return valido;
+    }
+
+    private async medirTamano(fsPath: string): Promise<boolean> {
+        let size: number;
+        try {
+            ({ size } = await fs.stat(fsPath));
+        } catch {
+            /* Si el archivo desapareció tras el recorrido, la lectura posterior reporta el error real. */
+            return true;
+        }
+        if (size <= TAMANO_MAXIMO_ARCHIVO_BYTES) {
+            return true;
+        }
+        this.omitidosPorTamano.push(fsPath);
+        return false;
     }
 
     private async walk(

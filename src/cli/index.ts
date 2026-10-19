@@ -4,6 +4,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { CoreFinding, CoreTextDocument } from '@/core/types';
 import { CachedNodeDocumentProvider, NodeDocumentProvider, NodeWorkspaceFileProvider, matchesAnyGlob } from '@/core/nodeProviders';
+import { TAMANO_MAXIMO_ARCHIVO_BYTES, TiempoAgotadoError, conTiempoLimite } from '@/core/limites';
 import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
 import { FilePersistentIndexStore, PARSER_VERSION, PERSISTENT_INDEX_FILENAME, buildVariableReverseIndex, configHashFor, indexIdentity } from '@/core/persistentIndex';
 import { ClassIndexBuilder } from '@/core/classIndexBuilder';
@@ -34,18 +35,8 @@ export {
     validateVarsenseConfig,
 } from '@/core/config';
 
-export type VarsenseCliCommand = 'scan' | 'orphan-classes' | 'all';
-export type VarsenseCliFormat = 'markdown' | 'json';
-
-export interface ParsedCliArgs {
-    command: VarsenseCliCommand;
-    workspacePath: string;
-    format: VarsenseCliFormat;
-    outputPath?: string;
-    configPath?: string;
-    filesFromPath?: string;
-    indexDir?: string;
-}
+import type { ParsedCliArgs, VarsenseCliCommand, VarsenseCliFormat } from './args';
+import { parseCliArgs, usage } from './args';
 
 export type VarsenseCliConfigFile = VarsenseConfigFile;
 
@@ -53,6 +44,8 @@ export interface CliAnalysisResult {
     entries: VarsenseReportEntry[];
     totalArchivos: number;
     hasErrors: boolean;
+    /* [V7] Archivos que superaron el tamaño máximo; se informan en stderr y no cambian la salida. */
+    omitidosPorTamano?: string[];
     durationMs: number;
     cache?: {
         enabled: boolean;
@@ -79,92 +72,6 @@ export interface CliAnalysisResult {
 }
 
 export const VARSENSE_JSON_SCHEMA_VERSION = '1';
-
-function usage(): string {
-    return [
-        'Uso:',
-        '  varsense scan --workspace . --format markdown --output .varsense-report.md',
-        '  varsense orphan-classes --workspace . --format json',
-        '  varsense all --workspace . --format json',
-        '  varsense --version',
-        '',
-        'Opciones:',
-        '  --workspace <path>  Analiza un workspace. Por defecto: cwd',
-        '  --format <type>     markdown | json. Por defecto: markdown',
-        '  --output <path>     Escribe salida en archivo; si falta, imprime en stdout',
-        '  --config <path>     Carga varsense.config.json',
-        '  --files-from <path> Limita los archivos reportados a un manifiesto relativo',
-        '  --index-dir <path>   Persiste el índice entre ejecuciones (cache por rama)',
-        '  --help              Muestra esta ayuda',
-        '  --version           Muestra la version instalada',
-    ].join('\n');
-}
-
-function takeValue(args: string[], index: number, option: string): string {
-    const value = args[index + 1];
-    if (!value || value.startsWith('--')) {
-        throw new Error(`Falta valor para ${option}`);
-    }
-    return value;
-}
-
-export function parseCliArgs(args: string[]): ParsedCliArgs {
-    const command = args[0];
-    if (command !== 'scan' && command !== 'orphan-classes' && command !== 'all') {
-        // Un comando desconocido no imprime toda la ayuda: basta con indicar cómo verla.
-        throw new Error(`Comando no reconocido: ${command ?? '(ninguno)'}. Ejecuta con --help para ver el uso.`);
-    }
-
-    const parsed: ParsedCliArgs = {
-        command,
-        workspacePath: process.cwd(),
-        format: 'markdown',
-    };
-
-    for (let index = 1; index < args.length; index++) {
-        const arg = args[index];
-
-        switch (arg) {
-            case '--workspace':
-                parsed.workspacePath = takeValue(args, index, arg);
-                index++;
-                break;
-            case '--format': {
-                const value = takeValue(args, index, arg);
-                if (value !== 'markdown' && value !== 'json') {
-                    throw new Error('--format debe ser markdown o json');
-                }
-                parsed.format = value;
-                index++;
-                break;
-            }
-            case '--output':
-                parsed.outputPath = takeValue(args, index, arg);
-                index++;
-                break;
-            case '--config':
-                parsed.configPath = takeValue(args, index, arg);
-                index++;
-                break;
-            case '--files-from':
-                parsed.filesFromPath = takeValue(args, index, arg);
-                index++;
-                break;
-            case '--index-dir':
-                parsed.indexDir = takeValue(args, index, arg);
-                index++;
-                break;
-            case '--help':
-            case '-h':
-                throw new Error(usage());
-            default:
-                throw new Error(`Opcion no reconocida: ${arg}\n${usage()}`);
-        }
-    }
-
-    parsed.workspacePath = path.resolve(parsed.workspacePath);
-    return parsed;
-}
 
 async function fileExists(filePath: string): Promise<boolean> {
     try {
@@ -362,6 +269,7 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
     const result: CliAnalysisResult = {
         entries,
         totalArchivos: includedCandidates.length,
+        omitidosPorTamano: fileProvider.omitidosPorTamano,
         hasErrors: entries.some(entry => entry.findings.some(finding => finding.severity === 'error')),
         durationMs: Date.now() - startedAt,
         ...(persistentStore ? { cache: cacheStats(persistentStore) } : {}),
@@ -429,6 +337,7 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
     const output: CliAnalysisResult = {
         entries,
         totalArchivos: result.archivosAnalizadosCss + result.archivosAnalizadosConsumo,
+        omitidosPorTamano: fileProvider.omitidosPorTamano,
         hasErrors: entries.some(entry => entry.findings.some(finding => finding.severity === 'error')),
         durationMs: Date.now() - startedAt,
         ...(persistentStore ? { cache: cacheStats(persistentStore) } : {}),
@@ -530,6 +439,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     const result: CliAnalysisResult = {
         entries,
         totalArchivos: includedCandidates.length + classResult.archivosAnalizadosCss + classResult.archivosAnalizadosConsumo,
+        omitidosPorTamano: fileProvider.omitidosPorTamano,
         hasErrors: entries.some(entry => entry.findings.some(finding => finding.severity === 'error')),
         durationMs: Date.now() - startedAt,
         ...(persistentStore ? { cache: cacheStats(persistentStore) } : {}),
@@ -650,6 +560,17 @@ async function writeOrPrint(output: string, outputPath?: string): Promise<void> 
     await fs.writeFile(resolved, output, 'utf8');
 }
 
+/* [V7] Informa en stderr los archivos omitidos por tamaño; stdout queda intacto para JSON y markdown. */
+function avisarOmitidos(omitidos: string[] | undefined, rutaBase: string): void {
+    if (!omitidos || omitidos.length === 0) {
+        return;
+    }
+    const relativos = omitidos.map(ruta => path.relative(rutaBase, ruta).replace(/\\/g, '/')).sort();
+    const resto = relativos.length > 5 ? ` y ${relativos.length - 5} más` : '';
+    const limiteMb = TAMANO_MAXIMO_ARCHIVO_BYTES / (1024 * 1024);
+    process.stderr.write(`varsense: ${relativos.length} archivo(s) omitido(s) por superar ${limiteMb} MiB: ${relativos.slice(0, 5).join(', ')}${resto}\n`);
+}
+
 export async function runCli(rawArgs: string[]): Promise<number> {
     if (rawArgs.length === 1 && (rawArgs[0] === '--help' || rawArgs[0] === '-h')) {
         process.stdout.write(`${usage()}\n`);
@@ -660,7 +581,9 @@ export async function runCli(rawArgs: string[]): Promise<number> {
         return 0;
     }
     const args = parseCliArgs(rawArgs);
-    const result = await analyzeCliTarget(args);
+    /* [V7] El límite de tiempo acota la espera; el análisis que lo excede se cierra en el punto de entrada. */
+    const result = await conTiempoLimite(analyzeCliTarget(args), args.timeoutMs);
+    avisarOmitidos(result.omitidosPorTamano, args.workspacePath);
     await writeOrPrint(renderOutput(result, args, await readPackageVersion()), args.outputPath);
     return result.hasErrors ? 1 : 0;
 }
@@ -669,7 +592,14 @@ if (require.main === module) {
     runCli(process.argv.slice(2))
         .then(code => { process.exitCode = code; })
         .catch(error => {
-            process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+            const mensaje = `${error instanceof Error ? error.message : String(error)}
+`;
             process.exitCode = 2;
+            if (error instanceof TiempoAgotadoError) {
+                /* El análisis que excedió el tiempo sigue en curso y mantendría vivo el proceso. */
+                process.stderr.write(mensaje, () => process.exit(2));
+                return;
+            }
+            process.stderr.write(mensaje);
         });
 }

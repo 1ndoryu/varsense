@@ -13,8 +13,8 @@ import {
     DEFAULT_EXCLUDE_PATTERNS,
     DEFAULT_REACT_PATTERNS,
     DEFAULT_VARIABLE_PATTERNS,
-    parseCliArgs,
 } from '../../cli';
+import { parseCliArgs } from '../../cli/args';
 
 interface ExpectedFinding {
     file: string;

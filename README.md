@@ -23,6 +23,8 @@ varsense --version
 - `orphan-classes`: detecta clases CSS sin uso en el workspace con un indice compartido.
 - `all`: ejecuta scan + orphan-classes en una sola pasada, compartiendo el snapshot de documentos y los indices de variables y clases.
 - Salida JSON versionada (`schemaVersion: 1`) con conteos por severidad, apta para automatizacion y gates.
+- `--timeout <segundos>`: límite del análisis (por defecto 600; `0` lo desactiva). Al agotarse, sale con código 2 y un mensaje en stderr.
+- Archivos de más de 2 MiB se omiten del análisis; el CLI avisa en stderr con sus rutas (hasta 5). La salida no cambia para el resto.
 
 ## Token detection
 
@@ -36,6 +38,8 @@ La severidad es independiente y configurable; los tokens se resuelven sobre la c
 ## LSP stdio
 
 El binario `varsense-lsp` publica diagnostics desde el mismo core que la extension y el CLI. Para integracion en Zed, usa `zed: install dev extension` y selecciona `integrations/zed`; el adaptador busca el LSP en orden (dist, checkout, PATH).
+
+Límites: un archivo de más de 2 MiB no se analiza y recibe un aviso informativo; el análisis de un documento dura como máximo 10 s (si no, se publica un error en el documento) y se muestran como máximo 500 diagnósticos por documento. Si el documento cambia durante el análisis, su resultado se descarta.
 
 ## Instalacion
 

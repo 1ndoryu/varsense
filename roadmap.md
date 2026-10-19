@@ -5,13 +5,13 @@ Orden de ejecución: de arriba abajo. Cada bloque: probar en la 89, documentar, 
 
 ## Pendiente
 
-- [ ] **V7 Límites.** No hay timeout ni tamaño máximo de archivo en CLI ni LSP. Añadirlos y acotar la salida.
 
 ## Bloqueos
 - Verificación en la 89: clon de `HEAD` en `/var/tmp/varsense-verify` (no toca `~/taller`). `npm test` necesita VS Code + xvfb: se verifica el pretest (compile, lint, check:core, smoke:lsp) y el smoke del artefacto.
 - `vsce package` y publicación: reservado a la usuaria (AGENTS §3).
 
 ## Hecho
+- V7 Límites (2026-10-19): CLI con `--timeout <segundos>` (600 por defecto, 0 desactiva; agotado → rc 2) y aviso de archivos omitidos; LSP con límite de 10 s por análisis, máximo 500 diagnósticos y descarte de resultados obsoletos; archivos de más de 2 MiB fuera del análisis en CLI y LSP. Verificado en la 89; diferencial de  idéntico.
 - V6 Arquitectura (2026-10-19): `core/classIndexBuilder.ts` pasa de 2989 líneas a un barrel de re-exports; la clase queda en `core/classIndex/builder.ts` (380 líneas) y los auxiliares en `core/classIndex/` (15 módulos por responsabilidad, incluido `carga.ts` con las cachés explícitas). Sin cambio de comportamiento: diferencial `orphan-classes` idéntico salvo `durationMs` y el número de archivos del árbol. Color: no había duplicación; `utils/colorUtils.ts` es barrel de `colorConversion`/`colorParsing` con 6+ importadores y se mantiene.
 - V5 Agnosticismo (2026-10-19): prefijos portadores configurables (`prefijosPortadores` en CLI, `cssVarsValidator.carrierPrefixes` en la extensión); el core no asume `clase`; sugerencias contextuales sin palabras en español en el código. Verificado en la 89; gate Sentinel `--cierre` 0 nuevos. Test `coreContracts` actualizado, no ejecutado (requiere VS Code).
 - V9 Autogate (2026-10-19): `varsense.config.json` excluye `fixtures/` y `src/test/` (código de prueba con CSS inline intencionado). Autogate `all` en la 89: 0 errores, 0 warnings, 80 archivos (antes 11 errores, 5 warnings). Gate Sentinel: base 53, cierre 0 nuevos.
