@@ -47,7 +47,7 @@ const extensionOptions = {
 };
 
 const cliOptions = {
-    entryPoints: ['./src/cli/index.ts'],
+    entryPoints: ['./src/cli/main.ts'],
     bundle: true,
     outfile: 'dist/cli/index.js',
     format: 'cjs',
