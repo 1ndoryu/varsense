@@ -37,3 +37,8 @@ build/
 # Trabajo interno (no se publica)
 roadmap.md
 Agente/completados/
+
+# Herramientas de calidad y runtime local (alta en el taller)
+target/
+.quality-reports/
+.runtime/

@@ -354,6 +354,7 @@
         "lint": "eslint src --ext ts",
         "lint:fix": "eslint src --ext ts --fix",
         "test:unit": "node scripts/test-unit.mjs",
+    "quality:check": "npm run compile:tests && npm run lint && npm run check:core && npm run smoke:lsp && npm run test:unit",
         "test": "node ./dist/test/runTest.js",
         "package": "vsce package"
     },
