@@ -1,9 +1,19 @@
 {
+  "schemaVersion": 2,
+  "mode": "advisory",
+  "project": {
+    "primaryBranch": "main"
+  },
+  "includePatterns": [
+    "**/*"
+  ],
   "excludePatterns": [
     "**/node_modules/**",
     "**/dist/**",
     "**/out/**",
     "**/.vscode-test/**",
     "**/fixtures/**"
-  ]
+  ],
+  "directoryExceptions": [],
+  "rules": {}
 }

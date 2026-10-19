@@ -1,4 +1,13 @@
 {
+  "variableFiles": [
+    "**/variables.css",
+    "**/vars.css",
+    "**/_variables.scss",
+    "**/tokens.css"
+  ],
+  "includePatterns": [
+    "**/*"
+  ],
   "excludePatterns": [
     "**/node_modules/**",
     "**/vendor/**",
@@ -7,5 +16,64 @@
     "**/build/**",
     "**/fixtures/**",
     "**/src/test/**"
-  ]
+  ],
+  "scanAllFiles": false,
+  "hardcodedDetection": {
+    "enabled": true,
+    "severity": "warning",
+    "properties": {
+      "font-size": true,
+      "color": true,
+      "background-color": true,
+      "background": true,
+      "border-color": true,
+      "margin": false,
+      "padding": false,
+      "gap": false,
+      "border-radius": false
+    },
+    "allowedValues": [
+      "0",
+      "auto",
+      "inherit",
+      "initial",
+      "unset",
+      "none",
+      "100%",
+      "50%",
+      "transparent",
+      "currentColor"
+    ]
+  },
+  "inlineDetection": {
+    "enabled": true,
+    "severity": "error"
+  },
+  "tokenDetection": {
+    "duplicate": {
+      "enabled": true,
+      "severity": "warning",
+      "excludeTokens": []
+    },
+    "unused": {
+      "enabled": true,
+      "severity": "hint",
+      "excludeTokens": []
+    },
+    "crossFile": {
+      "enabled": true,
+      "severity": "information"
+    }
+  },
+  "bannedProperties": {
+    "enabled": true,
+    "severity": "warning",
+    "properties": [
+      "box-shadow"
+    ]
+  },
+  "orphanClassDetection": {
+    "minClassLength": 3,
+    "excludeClassPatterns": []
+  }
 }
