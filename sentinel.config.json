@@ -35,7 +35,8 @@
         "directoryExceptions": [],
         "portableBoundaries": {
           "dom": ["/platform/", "/plataforma/", "/adapters/", "/dom."],
-          "window": ["/platform/", "/plataforma/", "/adapters/", "/navigation/"]
+          "window": ["/platform/", "/plataforma/", "/adapters/", "/navigation/"],
+          "tooling": ["/esbuild.config.mjs"]
         },
         "rules": {}
       }
