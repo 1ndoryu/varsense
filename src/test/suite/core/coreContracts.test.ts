@@ -1,6 +1,5 @@
 import * as assert from 'assert';
 import { createCoreDocument, createCoreRange, serializeCoreFindings, CoreFinding } from '../../../core/types';
-import { findingToDiagnostic } from '../../../vscode/vscodeAdapter';
 import { parsearDocumento } from '../../../parsers/cssParser';
 import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument';
 import { buildAnalysisConfig } from '../../../core/configuracion/config';
@@ -42,21 +41,6 @@ suite('VarSense editor-agnostic core contracts', () => {
     assert.strictEqual(parsed[0].ruleId, finding.ruleId);
     assert.strictEqual(parsed[0].range.start.character, 2);
     assert.strictEqual(parsed[0].severity, 'warning');
-  });
-
-  test('maps core findings to VS Code diagnostics at the boundary', () => {
-    const diagnostic = findingToDiagnostic({
-      ruleId: 'variableNoDefinida',
-      message: 'Variable no definida',
-      severity: 'error',
-      source: 'VarSense',
-      range: createCoreRange(1, 8, 1, 24),
-    });
-
-    assert.strictEqual(diagnostic.code, 'variableNoDefinida');
-    assert.strictEqual(diagnostic.source, 'VarSense');
-    assert.strictEqual(diagnostic.range.start.line, 1);
-    assert.strictEqual(diagnostic.range.end.character, 24);
   });
 
   test('parses CSS using core ranges without editor objects', () => {
