@@ -91,4 +91,60 @@ suite('VarSense estiloBotonEspecifico (core)', () => {
             /no es una expresión regular válida/
         );
     });
+
+    /* [AG-1] Los defaults nuevos reproducen el mensaje y el umbral de antes: el comportamiento no cambia. */
+    test('defaults: mensaje <Button variante=... tamano=...> y umbral de 2 propiedades', () => {
+        const hallazgos = analizar('src/components/Tarjeta.css', CSS_BOTON);
+        assert.strictEqual(hallazgos.length, 1);
+        assert.ok(hallazgos[0].message.includes('Usar <Button variante=... tamano=...> en vez de clase local.'));
+    });
+
+    test('componentName, componentProps y styleProperties cambian mensaje y propiedades', () => {
+        const config = buildAnalysisConfig({
+            buttonStyleDetection: {
+                componentName: 'Boton',
+                componentProps: ['kind'],
+                styleProperties: ['color', 'outline'],
+                minStyleProperties: 2,
+            },
+        });
+        const documento = createCoreDocument({
+            uri: 'file:///workspace/src/components/Tarjeta.css',
+            fileName: '/workspace/src/components/Tarjeta.css',
+            languageId: 'css',
+            content: '.btnX {\n  color: red;\n  outline: none;\n  padding: 4px;\n}\n',
+        });
+        const hallazgos = analyzeVarsenseDocument(documento, indiceVacio() as never, config, parserCssVarsense)
+            .filter(hallazgo => hallazgo.ruleId === DiagnosticType.EstiloBotonEspecifico);
+        assert.strictEqual(hallazgos.length, 1);
+        assert.ok(hallazgos[0].message.includes('Usar <Boton kind=...> en vez de clase local.'));
+    });
+
+    test('minStyleProperties sube el umbral y deja pasar la clase de antes', () => {
+        const config = buildAnalysisConfig({ buttonStyleDetection: { minStyleProperties: 3 } });
+        const documento = createCoreDocument({
+            uri: 'file:///workspace/src/components/Tarjeta.css',
+            fileName: '/workspace/src/components/Tarjeta.css',
+            languageId: 'css',
+            content: CSS_BOTON,
+        });
+        const hallazgos = analyzeVarsenseDocument(documento, indiceVacio() as never, config, parserCssVarsense)
+            .filter(hallazgo => hallazgo.ruleId === DiagnosticType.EstiloBotonEspecifico);
+        assert.strictEqual(hallazgos.length, 0);
+    });
+
+    test('rechaza listas de props o nombres CSS invalidos', () => {
+        assert.throws(
+            () => validateVarsenseConfig({ buttonStyleDetection: { styleProperties: ['padding|x'] } }),
+            /styleProperties' debe ser una lista no vacía/
+        );
+        assert.throws(
+            () => validateVarsenseConfig({ buttonStyleDetection: { componentName: 'a b' } }),
+            /componentName' debe ser un identificador JSX/
+        );
+        assert.throws(
+            () => validateVarsenseConfig({ buttonStyleDetection: { minStyleProperties: 0 } }),
+            /minStyleProperties' debe ser un entero positivo/
+        );
+    });
 });

@@ -2,7 +2,7 @@
  * el snapshot ya construido y no vuelve a leer el workspace. */
 
 import { CssVariable } from '@/types';
-import { VarsenseDocumentAnalysisConfig } from './analyzeDocument';
+import { VarsenseDocumentAnalysisConfig, VarsenseTemaNamespace } from './analyzeDocument';
 import { extraerUsoVariablesDeTexto } from './usoVariables';
 import { CoreFinding, CoreTextDocument, createCoreRange } from '../types';
 
@@ -140,21 +140,29 @@ export function analyzeCrossFileDuplicates(
  * consume como `bg-primary`, nunca como `var(--color-primary)`. Sin esto cada
  * puente de tema sale como token sin uso. Solo aplica si hay `@theme` en el
  * alcance analizado. */
-const NAMESPACES_TEMA: Array<{ namespace: string; prefijos: string[] }> = [
+/* [AG-1] Namespaces y utilidades son configurables (`tokenDetection.themeNamespaces`);
+ * estos son los de Tailwind v4 y el default del core. */
+export const NAMESPACES_TEMA_POR_DEFECTO: VarsenseTemaNamespace[] = [
     { namespace: '--color-', prefijos: ['bg', 'text', 'border', 'ring', 'outline', 'fill', 'stroke', 'from', 'to', 'via', 'shadow', 'accent', 'caret', 'decoration', 'placeholder', 'divide', 'ring-offset'] },
     { namespace: '--radius-', prefijos: ['rounded'] },
     { namespace: '--font-', prefijos: ['font'] },
 ];
-const REGEX_UTILIDAD_TEMA = /(?<![\w-])((?:bg|text|border|ring|outline|fill|stroke|from|to|via|shadow|accent|caret|decoration|placeholder|divide|rounded|font)-[\w-]+)/g;
 
 function nombreToken(valor: string): string {
     return valor.startsWith('--') ? valor : `--${valor}`;
 }
 
-function extraerUtilidadesTema(textos: string[]): Set<string> {
+/* [por que] El regex se arma con las utilidades configuradas (no con una lista fija):
+ * sin ella, cambiar `themeNamespaces` no cambiaría qué utilidades se reconocen. */
+function extraerUtilidadesTema(textos: string[], namespaces: VarsenseTemaNamespace[]): Set<string> {
     const utilidades = new Set<string>();
+    const prefijos = [...new Set(namespaces.flatMap(item => item.prefijos))];
+    if (prefijos.length === 0) {
+        return utilidades;
+    }
+    const regexUtilidad = new RegExp(`(?<![\\w-])((?:${prefijos.join('|')})-[\\w-]+)`, 'g');
     for (const texto of textos) {
-        const regex = new RegExp(REGEX_UTILIDAD_TEMA.source, 'g');
+        const regex = new RegExp(regexUtilidad.source, 'g');
         let match: RegExpExecArray | null;
         while ((match = regex.exec(texto)) !== null) {
             utilidades.add(match[1]);
@@ -265,15 +273,16 @@ export function analyzeTokenRules(
         /* [MN-token] Con índice scoped, `documents` solo cubre el alcance: una
          * utilidad usada fuera de él no se ve (puede salir como hint). */
         let utilidadesTema: Set<string> | undefined;
+        const namespaces = config.tokens.temaNamespaces;
         const usadoComoUtilidadTema = (nombre: string): boolean => {
-            const entrada = NAMESPACES_TEMA.find(item => nombre.startsWith(item.namespace));
+            const entrada = namespaces.find(item => nombre.startsWith(item.namespace));
             if (!entrada) {
                 return false;
             }
             if (!utilidadesTema) {
                 const textos = documents.map(item => item.document.getText());
                 utilidadesTema = textos.some(texto => /@theme\b/.test(texto))
-                    ? extraerUtilidadesTema(textos)
+                    ? extraerUtilidadesTema(textos, namespaces)
                     : new Set<string>();
             }
             const sufijo = nombre.slice(entrada.namespace.length);

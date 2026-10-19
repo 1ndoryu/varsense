@@ -1,6 +1,7 @@
 import { CoreSeverity } from '../types';
 import { LENGUAJES_POR_DEFECTO, VarsenseDocumentAnalysisConfig } from '../analisis/analyzeDocument';
 import { ESTILO_BOTON_POR_DEFECTO } from '../analisis/reglasBotonCss';
+import { NAMESPACES_TEMA_POR_DEFECTO } from '../analisis/tokenRules';
 
 /* [095A-4] La configuracion compartida vive en core para que CLI y LSP usen los mismos
  * defaults sin que el servidor stdio importe ni ejecute el entrypoint de la CLI. */
@@ -41,6 +42,8 @@ export interface VarsenseConfigFile {
         duplicate?: { enabled?: boolean; severity?: CoreSeverity; excludeTokens?: string[] };
         unused?: { enabled?: boolean; severity?: CoreSeverity; excludeTokens?: string[] };
         crossFile?: { enabled?: boolean; severity?: CoreSeverity };
+        /* [AG-1] Reemplaza (no mezcla) los namespaces de tema por defecto de Tailwind v4. */
+        themeNamespaces?: Array<{ namespace: string; utilities: string[] }>;
     };
     /* [VQ5] Identificadores de lenguaje por familia y extensiones CSS del índice de variables (defaults del core). */
     languages?: {
@@ -56,6 +59,10 @@ export interface VarsenseConfigFile {
         componentFolder?: string;
         selectorPattern?: string;
         excludeFilePattern?: string;
+        componentName?: string;
+        componentProps?: string[];
+        styleProperties?: string[];
+        minStyleProperties?: number;
     };
 }
 
@@ -109,8 +116,11 @@ const NESTED_KEYS: Record<string, Set<string>> = {
     todoProseDetection: new Set(['enabled', 'severity']),
     /* [MN-token] 'crossFile' estaba tipada y mapeada pero ausente aquí: un
      * varsense.config.json con esa sección era rechazado por clave desconocida. */
-    tokenDetection: new Set(['duplicate', 'unused', 'crossFile']),
-    buttonStyleDetection: new Set(['enabled', 'severity', 'componentFolder', 'selectorPattern', 'excludeFilePattern']),
+    tokenDetection: new Set(['duplicate', 'unused', 'crossFile', 'themeNamespaces']),
+    buttonStyleDetection: new Set([
+        'enabled', 'severity', 'componentFolder', 'selectorPattern', 'excludeFilePattern',
+        'componentName', 'componentProps', 'styleProperties', 'minStyleProperties',
+    ]),
     languages: new Set(['css', 'react', 'script', 'cssExtensions']),
 };
 
@@ -220,6 +230,9 @@ export function validateVarsenseConfig(value: unknown): asserts value is Varsens
             assertStringArray(section.excludeTokens, `tokenDetection.${key}.excludeTokens`);
         }
     }
+    if (tokens?.themeNamespaces !== undefined) {
+        validarThemeNamespaces(tokens.themeNamespaces);
+    }
 
     const lenguajes = config.languages as Record<string, unknown> | undefined;
     for (const key of ['css', 'react', 'script', 'cssExtensions'] as const) {
@@ -238,6 +251,47 @@ export function validateVarsenseConfig(value: unknown): asserts value is Varsens
     }
     if (boton?.excludeFilePattern !== undefined) {
         assertRegexSource(boton.excludeFilePattern, 'buttonStyleDetection.excludeFilePattern');
+    }
+    if (boton?.componentName !== undefined &&
+        (typeof boton.componentName !== 'string' || !/^[A-Za-z][\w.]*$/.test(boton.componentName))) {
+        throw new Error("varsense.config.json: 'buttonStyleDetection.componentName' debe ser un identificador JSX (p. ej. Button)");
+    }
+    if (boton?.componentProps !== undefined) {
+        assertNombresCss(boton.componentProps, 'buttonStyleDetection.componentProps', /^[A-Za-z][\w-]*$/);
+    }
+    if (boton?.styleProperties !== undefined) {
+        assertNombresCss(boton.styleProperties, 'buttonStyleDetection.styleProperties', /^[a-z-]+$/i);
+    }
+    if (boton?.minStyleProperties !== undefined &&
+        (typeof boton.minStyleProperties !== 'number' || !Number.isInteger(boton.minStyleProperties) || boton.minStyleProperties < 1)) {
+        throw new Error("varsense.config.json: 'buttonStyleDetection.minStyleProperties' debe ser un entero positivo");
+    }
+}
+
+/* [por que] Estas listas se usan en el mensaje y en una expresión regular: se
+ * limitan a nombres (sin metacaracteres) para que no inyecten patrones. */
+function assertNombresCss(value: unknown, key: string, patron: RegExp): void {
+    assertStringArray(value, key);
+    if ((value as string[]).length === 0 || (value as string[]).some(item => !patron.test(item))) {
+        throw new Error(`varsense.config.json: '${key}' debe ser una lista no vacía de nombres válidos`);
+    }
+}
+
+/* [AG-1] `namespace` debe tener forma `--prefijo-` (así `--color-primary` cuadra con `bg-primary`). */
+function validarThemeNamespaces(value: unknown): void {
+    const clave = 'tokenDetection.themeNamespaces';
+    if (!Array.isArray(value)) {
+        throw new Error(`varsense.config.json: '${clave}' debe ser un array de { namespace, utilities }`);
+    }
+    for (const item of value) {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+            throw new Error(`varsense.config.json: '${clave}' debe contener objetos { namespace, utilities }`);
+        }
+        const { namespace, utilities } = item as Record<string, unknown>;
+        if (typeof namespace !== 'string' || !/^--[\w-]+-$/.test(namespace)) {
+            throw new Error(`varsense.config.json: '${clave}[].namespace' debe tener la forma '--prefijo-'`);
+        }
+        assertNombresCss(utilities, `${clave}[].utilities`, /^[a-z][\w-]*$/i);
     }
 }
 
@@ -280,6 +334,10 @@ export function buildAnalysisConfig(config: VarsenseConfigFile): VarsenseDocumen
                 habilitado: config.tokenDetection?.crossFile?.enabled ?? true,
                 severidad: severityOrDefault(config.tokenDetection?.crossFile?.severity, 'information'),
             },
+            temaNamespaces: config.tokenDetection?.themeNamespaces?.map(item => ({
+                namespace: item.namespace,
+                prefijos: item.utilities,
+            })) ?? NAMESPACES_TEMA_POR_DEFECTO,
         },
         lenguajes: {
             css: config.languages?.css ?? LENGUAJES_POR_DEFECTO.css,
@@ -292,6 +350,10 @@ export function buildAnalysisConfig(config: VarsenseConfigFile): VarsenseDocumen
             carpeta: config.buttonStyleDetection?.componentFolder ?? ESTILO_BOTON_POR_DEFECTO.carpeta,
             patronSelector: config.buttonStyleDetection?.selectorPattern ?? ESTILO_BOTON_POR_DEFECTO.patronSelector,
             patronExcluirArchivo: config.buttonStyleDetection?.excludeFilePattern ?? ESTILO_BOTON_POR_DEFECTO.patronExcluirArchivo,
+            nombreComponente: config.buttonStyleDetection?.componentName ?? ESTILO_BOTON_POR_DEFECTO.nombreComponente,
+            propiedadesComponente: config.buttonStyleDetection?.componentProps ?? ESTILO_BOTON_POR_DEFECTO.propiedadesComponente,
+            propiedadesEstilo: config.buttonStyleDetection?.styleProperties ?? ESTILO_BOTON_POR_DEFECTO.propiedadesEstilo,
+            minimoPropiedadesEstilo: config.buttonStyleDetection?.minStyleProperties ?? ESTILO_BOTON_POR_DEFECTO.minimoPropiedadesEstilo,
         },
     };
 }

@@ -22,6 +22,12 @@ export interface VarsenseBannedPropertyConfig {
     propiedades: string[];
 }
 
+/* [AG-1] Un namespace de tema (`--color-`) y las utilidades que lo consumen (`bg`, `text`...). */
+export interface VarsenseTemaNamespace {
+    namespace: string;
+    prefijos: string[];
+}
+
 export interface VarsenseDocumentAnalysisConfig {
     hardcoded: VarsenseHardcodedConfig;
     inline: VarsenseInlineConfig;
@@ -30,6 +36,8 @@ export interface VarsenseDocumentAnalysisConfig {
         duplicate: { habilitado: boolean; severidad: CoreSeverity; excluirTokens?: string[] };
         unused: { habilitado: boolean; severidad: CoreSeverity; excluirTokens?: string[] };
         crossFile: { habilitado: boolean; severidad: CoreSeverity };
+        /* [AG-1] Namespaces de tema que generan utilidades (Tailwind `@theme`). */
+        temaNamespaces: VarsenseTemaNamespace[];
     };
     estiloBoton: VarsenseEstiloBotonConfig;
     lenguajes: VarsenseLenguajesConfig;

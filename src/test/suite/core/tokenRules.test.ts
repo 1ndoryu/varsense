@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { CssVariable } from '../../../types';
-import { buildAnalysisConfig } from '../../../core/configuracion/config';
+import { buildAnalysisConfig, validateVarsenseConfig } from '../../../core/configuracion/config';
 import { analyzeTokenRules } from '../../../core/analisis/tokenRules';
 import { createCoreDocument } from '../../../core/types';
 
@@ -58,6 +58,36 @@ suite('VarSense token-unused con @theme de Tailwind v4', () => {
   test('excludeTokens exime el token, con o sin prefijo "--"', () => {
     const css = '@theme inline {\n  --color-puente: red;\n  --radius-puente: 1px;\n}';
     assert.deepStrictEqual(tokensSinUso(['--color-puente', '--radius-puente'], css, ['color-puente', '--radius-puente']), []);
+  });
+});
+
+/* [AG-1] Los namespaces de tema son configurables; los defaults siguen siendo los de Tailwind v4. */
+suite('VarSense themeNamespaces configurable', () => {
+  const css = '@theme inline {\n  --brand-x: red;\n}\n<p class="text-x"></p>';
+
+  function sinUsoCon(themeNamespaces: unknown) {
+    const config = buildAnalysisConfig({ tokenDetection: { themeNamespaces } } as never);
+    const variables = new Map([['index.css', [variable('--brand-x')]]]);
+    return analyzeTokenRules(variables, [documento(css)], config).filter(f => f.ruleId === 'token-unused').length;
+  }
+
+  test('sin configurar, --brand- no es namespace de tema y el token sigue sin uso', () => {
+    assert.strictEqual(sinUsoCon(undefined), 1);
+  });
+
+  test('un namespace configurado reconoce sus utilidades', () => {
+    assert.strictEqual(sinUsoCon([{ namespace: '--brand-', utilities: ['text'] }]), 0);
+  });
+
+  test('themeNamespaces con forma inválida se rechaza al cargar', () => {
+    assert.throws(
+      () => validateVarsenseConfig({ tokenDetection: { themeNamespaces: [{ namespace: 'brand', utilities: ['text'] }] } }),
+      /debe tener la forma '--prefijo-'/
+    );
+    assert.throws(
+      () => validateVarsenseConfig({ tokenDetection: { themeNamespaces: [{ namespace: '--brand-', utilities: [] }] } }),
+      /lista no vacía/
+    );
   });
 });
 

@@ -4,12 +4,8 @@
 import { DiagnosticType } from '../../types';
 import { CoreFinding, CoreSeverity, CoreTextDocument, createCoreRange } from '../types';
 
-/* Propiedades que indican implementación manual de botón */
-const PROPS_BOTON = /\b(padding|background(?:-color)?|border(?:-radius)?|cursor)\s*:/gi;
 /* Regla CSS plana: .clase { ... } — no anidada */
 const REGEX_REGLA = /(\.[a-zA-Z][a-zA-Z0-9_-]*)(?:[^{,]*?)\{([^}]*)\}/g;
-/* Mínimo de propiedades estructurales para considerar que reimplementa el botón */
-const MIN_PROPS_BOTON = 2;
 
 /* [por que] Convención del design system del área (NAKOMI): son defaults, no reglas del
  * core. Otro proyecto los cambia en `buttonStyleDetection` de varsense.config.json. */
@@ -22,6 +18,14 @@ export interface VarsenseEstiloBotonConfig {
     patronSelector: string;
     /* Fuente de regex (sin flags) aplicada al nombre de archivo: no se analiza si coincide. */
     patronExcluirArchivo: string;
+    /* Componente que sustituye a la clase local, citado en el mensaje. */
+    nombreComponente: string;
+    /* Props del componente que sustituye a la clase, citadas en el mensaje. */
+    propiedadesComponente: string[];
+    /* Propiedades CSS que indican implementación manual de botón (nombres exactos, sin `:`). */
+    propiedadesEstilo: string[];
+    /* Cuántas de esas propiedades hacen falta para marcar la clase. */
+    minimoPropiedadesEstilo: number;
 }
 
 export const ESTILO_BOTON_POR_DEFECTO: VarsenseEstiloBotonConfig = {
@@ -30,6 +34,10 @@ export const ESTILO_BOTON_POR_DEFECTO: VarsenseEstiloBotonConfig = {
     carpeta: 'components',
     patronSelector: 'btn|button',
     patronExcluirArchivo: '^button',
+    nombreComponente: 'Button',
+    propiedadesComponente: ['variante', 'tamano'],
+    propiedadesEstilo: ['padding', 'background', 'background-color', 'border', 'border-radius', 'cursor'],
+    minimoPropiedadesEstilo: 2,
 };
 
 /* Solo CSS dentro de la carpeta de componentes, salvo el archivo excluido (el propio componente base) */
@@ -48,6 +56,17 @@ function textoSinComentarios(texto: string): string {
     return texto.replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, ' '));
 }
 
+/* [por que] Las propiedades vienen de configuración: se validan como nombres CSS
+ * (en config.ts) antes de entrar en la expresión, así que no hace falta escapar. */
+function regexPropiedadesEstilo(propiedades: string[]): RegExp {
+    return new RegExp(`\\b(${propiedades.join('|')})\\s*:`, 'gi');
+}
+
+function mensajeEstiloBoton(config: VarsenseEstiloBotonConfig, nombreClase: string): string {
+    const props = config.propiedadesComponente.map(prop => `${prop}=...`).join(' ');
+    return `Estilo de botón específico '${nombreClase}' en componente. Usar <${config.nombreComponente} ${props}> en vez de clase local.`;
+}
+
 export function analyzeEstiloBotonEspecifico(
     document: CoreTextDocument,
     config: VarsenseEstiloBotonConfig = ESTILO_BOTON_POR_DEFECTO
@@ -57,6 +76,7 @@ export function analyzeEstiloBotonEspecifico(
     }
 
     const regexSelector = new RegExp(config.patronSelector, 'i');
+    const regexPropiedades = regexPropiedadesEstilo(config.propiedadesEstilo);
     const texto = document.getText();
     const sinComentarios = textoSinComentarios(texto);
     const findings: CoreFinding[] = [];
@@ -69,8 +89,8 @@ export function analyzeEstiloBotonEspecifico(
             continue;
         }
 
-        const propsEncontradas = (match[2].match(PROPS_BOTON) ?? []).length;
-        if (propsEncontradas < MIN_PROPS_BOTON) {
+        const propsEncontradas = (match[2].match(regexPropiedades) ?? []).length;
+        if (propsEncontradas < config.minimoPropiedadesEstilo) {
             continue;
         }
 
@@ -78,7 +98,7 @@ export function analyzeEstiloBotonEspecifico(
         const linea = (texto.substring(0, match.index).match(/\n/g) ?? []).length;
         findings.push({
             ruleId: DiagnosticType.EstiloBotonEspecifico,
-            message: `Estilo de botón específico '${nombreClase}' en componente. Usar <Button variante=... tamano=...> en vez de clase local.`,
+            message: mensajeEstiloBoton(config, nombreClase),
             severity: config.severidad,
             range: createCoreRange(linea, 0, linea, nombreClase.length),
             source: 'VarSense',
