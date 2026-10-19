@@ -1,5 +1,5 @@
 import { CoreSeverity } from '../types';
-import { VarsenseDocumentAnalysisConfig } from '../analisis/analyzeDocument';
+import { LENGUAJES_POR_DEFECTO, VarsenseDocumentAnalysisConfig } from '../analisis/analyzeDocument';
 import { ESTILO_BOTON_POR_DEFECTO } from '../analisis/reglasBotonCss';
 
 /* [095A-4] La configuracion compartida vive en core para que CLI y LSP usen los mismos
@@ -42,6 +42,13 @@ export interface VarsenseConfigFile {
         unused?: { enabled?: boolean; severity?: CoreSeverity; excludeTokens?: string[] };
         crossFile?: { enabled?: boolean; severity?: CoreSeverity };
     };
+    /* [VQ5] Identificadores de lenguaje por familia y extensiones CSS del índice de variables (defaults del core). */
+    languages?: {
+        css?: string[];
+        react?: string[];
+        script?: string[];
+        cssExtensions?: string[];
+    };
     /* [V4] Regla de estilo de botón: los valores por defecto son la convención del área; otro proyecto los cambia aquí. */
     buttonStyleDetection?: {
         enabled?: boolean;
@@ -58,6 +65,8 @@ export const DEFAULT_VARIABLE_PATTERNS = [
     '**/_variables.scss',
     '**/tokens.css',
 ];
+/* [VQ5] Extensiones que el índice de variables toma como CSS (por defecto, solo `.css`). */
+export const EXTENSIONES_CSS_POR_DEFECTO = ['.css'];
 export const DEFAULT_CSS_PATTERNS = ['**/*.css', '**/*.scss', '**/*.less'];
 export const DEFAULT_REACT_PATTERNS = ['**/*.tsx', '**/*.jsx'];
 export const DEFAULT_SCRIPT_PATTERNS = ['**/*.ts', '**/*.js'];
@@ -90,7 +99,7 @@ const VALID_SEVERITIES = new Set<CoreSeverity>(['error', 'warning', 'information
 const CONFIG_KEYS = new Set([
     'variableFiles', 'includePatterns', 'excludePatterns', 'scanAllFiles', 'prefijosPortadores',
     'hardcodedDetection', 'inlineDetection', 'bannedProperties', 'orphanClassDetection', 'todoProseDetection', 'tokenDetection',
-    'buttonStyleDetection',
+    'buttonStyleDetection', 'languages',
 ]);
 const NESTED_KEYS: Record<string, Set<string>> = {
     hardcodedDetection: new Set(['enabled', 'severity', 'properties', 'allowedValues']),
@@ -102,6 +111,7 @@ const NESTED_KEYS: Record<string, Set<string>> = {
      * varsense.config.json con esa sección era rechazado por clave desconocida. */
     tokenDetection: new Set(['duplicate', 'unused', 'crossFile']),
     buttonStyleDetection: new Set(['enabled', 'severity', 'componentFolder', 'selectorPattern', 'excludeFilePattern']),
+    languages: new Set(['css', 'react', 'script', 'cssExtensions']),
 };
 
 function assertStringArray(value: unknown, key: string): asserts value is string[] {
@@ -211,6 +221,13 @@ export function validateVarsenseConfig(value: unknown): asserts value is Varsens
         }
     }
 
+    const lenguajes = config.languages as Record<string, unknown> | undefined;
+    for (const key of ['css', 'react', 'script', 'cssExtensions'] as const) {
+        if (lenguajes?.[key] !== undefined) {
+            assertStringArray(lenguajes[key], `languages.${key}`);
+        }
+    }
+
     const boton = config.buttonStyleDetection as Record<string, unknown> | undefined;
     if (boton?.componentFolder !== undefined &&
         (typeof boton.componentFolder !== 'string' || !/^[^/\\]+$/.test(boton.componentFolder))) {
@@ -263,6 +280,11 @@ export function buildAnalysisConfig(config: VarsenseConfigFile): VarsenseDocumen
                 habilitado: config.tokenDetection?.crossFile?.enabled ?? true,
                 severidad: severityOrDefault(config.tokenDetection?.crossFile?.severity, 'information'),
             },
+        },
+        lenguajes: {
+            css: config.languages?.css ?? LENGUAJES_POR_DEFECTO.css,
+            react: config.languages?.react ?? LENGUAJES_POR_DEFECTO.react,
+            script: config.languages?.script ?? LENGUAJES_POR_DEFECTO.script,
         },
         estiloBoton: {
             habilitado: config.buttonStyleDetection?.enabled ?? ESTILO_BOTON_POR_DEFECTO.habilitado,

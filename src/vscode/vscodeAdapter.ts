@@ -129,5 +129,6 @@ export function configuracionAnalisisDesdeExtension(config: ExtensionConfig): Va
     },
     tokens: buildAnalysisConfig({}).tokens,
     estiloBoton: buildAnalysisConfig({}).estiloBoton,
+    lenguajes: buildAnalysisConfig({}).lenguajes,
   };
 }

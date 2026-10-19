@@ -16,6 +16,8 @@ import {
     DEFAULT_SCRIPT_PATTERNS,
     DEFAULT_VARIABLE_PATTERNS,
     DEFAULT_PREFIJOS_PORTADORES,
+    EXTENSIONES_CSS_POR_DEFECTO,
+    VarsenseConfigFile,
     buildAnalysisConfig,
 } from '@/core/configuracion/config';
 import { parserCssVarsense } from '@/parsers';
@@ -25,6 +27,11 @@ import { readConfig } from '../configuracion';
 import { isFindingScoped, isIncluded, isScopedFile, readFilesFromManifest } from './rutas';
 import { buildMetrics, createPhaseTimer } from './metricas';
 import { cacheStats, createIndexStore } from './indiceCache';
+
+/* [VQ5] Decide qué archivos alimentan el índice de variables: extensiones CSS configurables (por defecto `.css`). */
+function esArchivoCss(ruta: string, configFile: VarsenseConfigFile): boolean {
+    return (configFile.languages?.cssExtensions ?? EXTENSIONES_CSS_POR_DEFECTO).some(extension => ruta.endsWith(extension));
+}
 
 function groupFindingsByFile(findings: Array<{ ruta: string; finding: CoreFinding }>): VarsenseReportEntry[] {
     const entries = new Map<string, CoreFinding[]>();
@@ -81,7 +88,7 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
         variableResult.variablesPorArchivo
     );
     for (const file of includedCandidates) {
-        if (!file.fsPath.endsWith('.css') || variableResult.variablesPorArchivo.has(file.fsPath)) {
+        if (!esArchivoCss(file.fsPath, configFile) || variableResult.variablesPorArchivo.has(file.fsPath)) {
             continue;
         }
         await variableBuilder.addFileToIndex(file, variableResult.indice.variables, variableResult.variablesPorArchivo);
@@ -214,7 +221,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
         variableResult.variablesPorArchivo
     );
     for (const file of includedCandidates) {
-        if (!file.fsPath.endsWith('.css') || variableResult.variablesPorArchivo.has(file.fsPath)) {
+        if (!esArchivoCss(file.fsPath, configFile) || variableResult.variablesPorArchivo.has(file.fsPath)) {
             continue;
         }
         await variableBuilder.addFileToIndex(file, variableResult.indice.variables, variableResult.variablesPorArchivo);

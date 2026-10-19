@@ -32,11 +32,23 @@ export interface VarsenseDocumentAnalysisConfig {
         crossFile: { habilitado: boolean; severidad: CoreSeverity };
     };
     estiloBoton: VarsenseEstiloBotonConfig;
+    lenguajes: VarsenseLenguajesConfig;
 }
 
-const REACT_LANGUAGE_IDS = new Set(['typescriptreact', 'javascriptreact']);
-const SCRIPT_LANGUAGE_IDS = new Set(['typescript', 'javascript']);
-const CSS_LANGUAGE_IDS = new Set(['css', 'scss', 'sass', 'less', 'vue', 'html']);
+/* [VQ5] Identificadores de lenguaje que cada familia de regla trata. Son defaults del core:
+ * un proyecto sin React los vacía en `languages` de varsense.config.json. */
+export interface VarsenseLenguajesConfig {
+    css: string[];
+    react: string[];
+    script: string[];
+}
+
+export const LENGUAJES_POR_DEFECTO: VarsenseLenguajesConfig = {
+    css: ['css', 'scss', 'sass', 'less', 'vue', 'html'],
+    react: ['typescriptreact', 'javascriptreact'],
+    script: ['typescript', 'javascript'],
+};
+
 const REGEX_SCRIPT_INLINE_STYLE = /(?:\.style\.[a-zA-Z][\w]*\s*=|\.style\.setProperty\s*\(|\.setAttribute\s*\(\s*['"]style['"])/g;
 
 function shouldCheckProperty(config: VarsenseHardcodedConfig, property: string): boolean {
@@ -299,18 +311,18 @@ export function analyzeVarsenseDocument(
             ? hallazgos.filter(hallazgo => !lineasSuprimidas.has(hallazgo.range.start.line))
             : hallazgos;
 
-    if (CSS_LANGUAGE_IDS.has(document.languageId)) {
+    if (config.lenguajes.css.includes(document.languageId)) {
         return filtrar([
             ...analyzeCssDocument(document, variableIndex, config, parsers),
             ...analyzeEstiloBotonEspecifico(document, config.estiloBoton),
         ]);
     }
 
-    if (REACT_LANGUAGE_IDS.has(document.languageId)) {
+    if (config.lenguajes.react.includes(document.languageId)) {
         return filtrar(analyzeReactInlineStyles(document, config, parsers));
     }
 
-    if (SCRIPT_LANGUAGE_IDS.has(document.languageId)) {
+    if (config.lenguajes.script.includes(document.languageId)) {
         return filtrar(analyzeScriptInlineStyles(document, config));
     }
 
