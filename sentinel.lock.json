@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-19T20:03:49.008Z",
+  "runtime": {
+    "status": "project-adapter",
+    "version": "1.0.0-local",
+    "commit": "repo-scripts",
+    "artifactSha256": null,
+    "identitySha256": "3ad54a78ccec530199dceeed2aaa0cb8cf4772d8ee3002ccf317f71afdd616aa"
+  },
+  "analyzers": {
+    "sentinel": {
+      "version": "0.7.26",
+      "protocolVersion": 1,
+      "commit": "d516ba497b14a3aaeffb150160a9944ab0940286",
+      "sha256": "a1bf93e7ac4dd558df7c5713a858c53331f94b11d8c9b145e4a13819b8a4101f",
+      "patchSha256": null
+    }
+  }
+}

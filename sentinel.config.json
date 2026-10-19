@@ -6,7 +6,8 @@
   },
   "runtime": {
     "minimumVersion": "0.7.26",
-    "protocolVersion": 1
+    "protocolVersion": 1,
+    "lockFile": "sentinel.lock.json"
   },
   "guard": {
     "directCommands": {
