@@ -32,8 +32,9 @@ desde source queda como **modo de desarrollo explícito**.
 
    - `sha256` verifica la integridad del artifact descargado.
    - `commit`/`version` permiten reproducir y fijar exactamente lo que se
-     ejecuta; un cambio de cualquiera invalida el índice persistente
-     (identidad de `--index-dir`).
+     ejecuta. El `commit` no forma parte de la identidad del índice
+     persistente: solo la versión de la herramienta, la del parser y el hash
+     de la configuración (ver abajo).
    - `protocol` versiona el contrato de salida JSON (`schemaVersion`,
      `metrics`, `phaseDurationMs`).
 
