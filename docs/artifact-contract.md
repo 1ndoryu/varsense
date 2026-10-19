@@ -1,7 +1,7 @@
 # Contrato del artifact publicado de VarSense
 
-> **Estado:** aceptado (Fase 3 de la auditoría, 2026-08-10; tarea `108A-1`)
-> **Vigencia:** a partir del release que adopte este contrato (publicación en Fase 8)
+> **Estado:** especificación aceptada (Fase 3 de la auditoría, 2026-08-10; tarea `108A-1`). **No implementada:** hoy VarSense se instala compilando desde source (ver README, sección Instalación).
+> **Vigencia:** a partir del release de publicación (Fase 8). Hasta entonces, este documento describe el destino, no el comportamiento actual.
 
 ## Objetivo
 
@@ -20,7 +20,7 @@ desde source queda como **modo de desarrollo explícito**.
    {
      "schemaVersion": 1,
      "name": "varsense",
-      "version": "2.2.2",
+     "version": "<version de package.json>",
      "commit": "<sha256 del commit del release>",
      "protocol": 1,
      "capabilities": ["all", "scan", "orphan-classes", "index-dir", "files-from"],
@@ -41,7 +41,7 @@ desde source queda como **modo de desarrollo explícito**.
 
 - `quality:setup` descarga/verifica el artifact (SHA-256) antes de fijar el
   pin; el doctor reporta `cliVersion`/`commit` contra `quality-tools.json` y
-  `sentinel.lock.json` (ya existente).
+  `sentinel.lock.json`. Estas piezas viven en el repo consumidor, no en VarSense.
 - El índice persistente se invalida por **contenido, config, versión,
   plataforma y dependencias** (identidad actual en `createIndexStore`).
 
