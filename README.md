@@ -39,12 +39,16 @@ El binario `varsense-lsp` publica diagnostics desde el mismo core que la extensi
 
 ## Instalacion
 
+Requiere Node.js >= 18.
+
 ```
-npm install
-npm run compile
+npm install          # instala y compila dist/ (script prepare)
 npm run check:core   # falla si src/core importa vscode fuera del adapter
 npm run smoke:lsp    # levanta el server stdio y verifica publishDiagnostics
 ```
+
+Tras cambiar código, `npm run compile` regenera `dist/`. Los scripts `cli` y `lsp` no compilan: ejecutan `dist/` tal cual.
+Para el comando `varsense` desde el checkout: `npm link`, o `node dist/cli/index.js <comando>`.
 
 ## Configuracion
 
