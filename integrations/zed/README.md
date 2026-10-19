@@ -4,11 +4,10 @@ Esta carpeta contiene la integracion minima de Zed para VarSense. La extension n
 
 ## Desarrollo local
 
-1. Desde la raiz de VarSense, instala dependencias y compila:
+1. Desde la raiz de VarSense, instala dependencias (el script `prepare` compila `dist/`):
 
 ```bash
 npm install
-npm run compile
 ```
 
 2. En Zed, ejecuta `zed: install dev extension` y selecciona `integrations/zed`.
