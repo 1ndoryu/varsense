@@ -133,10 +133,21 @@ export function removeComments(texto: string): string {
     return result;
 }
 
-export function isInsideString(source: string, index: number): boolean {
+/* Estado de cadena en cada posición de la última fuente consultada. Se calcula una
+ * sola vez por archivo: recorrer la fuente desde el principio en cada match era
+ * O(matches × longitud) y dominaba el escaneo (classIndexMs). */
+let fuenteMemo: string | null = null;
+let mapaMemo = new Uint8Array(0);
+
+function mapaCadenas(source: string): Uint8Array {
+    if (source === fuenteMemo) {
+        return mapaMemo;
+    }
+    const mapa = new Uint8Array(source.length + 1);
     let quote = '';
     let escaped = false;
-    for (let cursor = 0; cursor < index; cursor++) {
+    for (let cursor = 0; cursor < source.length; cursor++) {
+        mapa[cursor] = quote ? 1 : 0;
         const current = source[cursor];
         if (quote) {
             if (escaped) {escaped = false;}
@@ -146,7 +157,16 @@ export function isInsideString(source: string, index: number): boolean {
             quote = current;
         }
     }
-    return Boolean(quote);
+    mapa[source.length] = quote ? 1 : 0;
+    fuenteMemo = source;
+    mapaMemo = mapa;
+    return mapa;
+}
+
+export function isInsideString(source: string, index: number): boolean {
+    /* Más allá del final, el estado es el del último carácter, igual que el recorrido anterior */
+    const mapa = mapaCadenas(source);
+    return mapa[Math.min(index, source.length)] === 1;
 }
 
 export function isCodeMatch(source: string, matchIndex: number): boolean {
