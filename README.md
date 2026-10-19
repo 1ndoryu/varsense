@@ -28,7 +28,7 @@ varsense --version
 - `--files-from <ruta>`: limita los archivos reportados a un manifiesto de rutas relativas.
 - `--index-dir <ruta>`: persiste el índice entre ejecuciones (caché por rama).
 - `--timeout <segundos>`: límite del análisis (por defecto 600; `0` lo desactiva). Al agotarse, sale con código 2 y un mensaje en stderr.
-- `--help` / `--version`: muestran la ayuda o la versión y salen con código 0.
+- `--help` / `-h` y `--version`: muestran la ayuda o la versión y salen con código 0.
 - Archivos de más de 2 MiB se omiten del análisis; el CLI avisa en stderr con sus rutas (hasta 5). La salida no cambia para el resto.
 
 ## Token detection

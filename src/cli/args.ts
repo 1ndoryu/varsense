@@ -35,7 +35,7 @@ export function usage(): string {
         '  --files-from <path> Limita los archivos reportados a un manifiesto relativo',
         '  --index-dir <path>   Persiste el índice entre ejecuciones (cache por rama)',
         '  --timeout <segundos> Límite de tiempo del análisis. 0 lo desactiva. Por defecto: 600',
-        '  --help              Muestra esta ayuda',
+        '  --help, -h          Muestra esta ayuda',
         '  --version           Muestra la version instalada',
     ].join('\n');
 }
@@ -110,7 +110,8 @@ export function parseCliArgs(args: string[]): ParsedCliArgs {
                 parsed.ayuda = true;
                 return parsed;
             default:
-                throw new Error(`Opcion no reconocida: ${arg}\n${usage()}`);
+                // Mismo formato que el comando desconocido: el error indica cómo ver la ayuda, sin volcarla entera.
+                throw new Error(`Opcion no reconocida: ${arg}. Ejecuta con --help para ver el uso.`);
         }
     }
 
