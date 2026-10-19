@@ -1,0 +1,11 @@
+{
+  "excludePatterns": [
+    "**/node_modules/**",
+    "**/vendor/**",
+    "**/*.min.css",
+    "**/dist/**",
+    "**/build/**",
+    "**/fixtures/**",
+    "**/src/test/**"
+  ]
+}
