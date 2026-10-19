@@ -6,6 +6,7 @@ import { CoreFinding, CoreTextDocument } from '@/core/types';
 import { CachedNodeDocumentProvider, NodeDocumentProvider, NodeWorkspaceFileProvider, matchesAnyGlob } from '@/core/nodeProviders';
 import { TAMANO_MAXIMO_ARCHIVO_BYTES, TiempoAgotadoError, conTiempoLimite } from '@/core/limites';
 import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
+import { cargarVarsenseConfig } from '@/core/configArchivo';
 import { FilePersistentIndexStore, PARSER_VERSION, PERSISTENT_INDEX_FILENAME, buildVariableReverseIndex, configHashFor, indexIdentity } from '@/core/persistentIndex';
 import { ClassIndexBuilder } from '@/core/classIndexBuilder';
 import { analyzeVarsenseDocument, orphanClassToFinding, parsearLineasSuprimidas } from '@/core/analyzeDocument';
@@ -73,28 +74,13 @@ export interface CliAnalysisResult {
 
 export const VARSENSE_JSON_SCHEMA_VERSION = '1';
 
-async function fileExists(filePath: string): Promise<boolean> {
-    try {
-        await fs.access(filePath);
-        return true;
-    } catch {
-        return false;
-    }
-}
-
+/* [V10] Un --config explícito que no existe es un error de uso (rc 2), no una configuración vacía. */
 async function readConfig(configPath: string | undefined, workspacePath: string): Promise<VarsenseConfigFile> {
     const candidate = configPath
         ? path.resolve(configPath)
         : path.resolve(workspacePath, 'varsense.config.json');
 
-    if (!await fileExists(candidate)) {
-        return {};
-    }
-
-    const raw = await fs.readFile(candidate, 'utf8');
-    const parsed: unknown = JSON.parse(raw);
-    validateVarsenseConfig(parsed);
-    return parsed;
+    return cargarVarsenseConfig(candidate, { obligatorio: configPath !== undefined });
 }
 
 function pathKey(filePath: string): string {
@@ -581,6 +567,10 @@ export async function runCli(rawArgs: string[]): Promise<number> {
         return 0;
     }
     const args = parseCliArgs(rawArgs);
+    if (args.ayuda) {
+        process.stdout.write(`${usage()}\n`);
+        return 0;
+    }
     /* [V7] El límite de tiempo acota la espera; el análisis que lo excede se cierra en el punto de entrada. */
     const result = await conTiempoLimite(analyzeCliTarget(args), args.timeoutMs);
     avisarOmitidos(result.omitidosPorTamano, args.workspacePath);

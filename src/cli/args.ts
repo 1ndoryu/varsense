@@ -15,6 +15,8 @@ export interface ParsedCliArgs {
     indexDir?: string;
     /* [V7] Límite de tiempo del análisis en milisegundos; 0 lo desactiva. */
     timeoutMs: number;
+    /* [V10] --help en cualquier posición: se pide la ayuda, no es un error de uso. */
+    ayuda?: boolean;
 }
 
 export function usage(): string {
@@ -104,7 +106,9 @@ export function parseCliArgs(args: string[]): ParsedCliArgs {
             }
             case '--help':
             case '-h':
-                throw new Error(usage());
+                // Se corta aquí: lo que venga después no se valida si se pidió ayuda.
+                parsed.ayuda = true;
+                return parsed;
             default:
                 throw new Error(`Opcion no reconocida: ${arg}\n${usage()}`);
         }

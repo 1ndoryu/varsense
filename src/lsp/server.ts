@@ -20,18 +20,27 @@ import { NodeDocumentProvider, NodeWorkspaceFileProvider } from '@/core/nodeProv
 import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
 import {
     buildAnalysisConfig,
+    DEFAULT_CSS_PATTERNS,
     DEFAULT_EXCLUDE_PATTERNS,
     DEFAULT_VARIABLE_PATTERNS,
+    VarsenseConfigFile,
 } from '@/core/config';
+import { cargarVarsenseConfig } from '@/core/configArchivo';
 import { conTiempoLimite, TAMANO_MAXIMO_ARCHIVO_BYTES, TIMEOUT_LSP_MS } from '@/core/limites';
 import { findingToLspDiagnostic } from './diagnostics';
+import { crearCacheIndice } from './cacheIndice';
 
 /* Un editor con miles de avisos se vuelve lento de pintar: se muestran los primeros. */
 const MAX_DIAGNOSTICOS = 500;
+/* Tecleo seguido: se valida al pausar, no en cada pulsación. */
+const DEBOUNCE_VALIDACION_MS = 150;
+/* Cambios fuera del editor (checkout, otra herramienta) se detectan al caducar la caché. */
+const TTL_INDICE_MS = 30_000;
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 let workspaceRoot: string | undefined;
+const pendientes = new Map<string, ReturnType<typeof setTimeout>>();
 
 function fsPathFromUri(uri: string): string {
     try {
@@ -86,16 +95,27 @@ function archivoGrandeDiagnostic(): Diagnostic {
     };
 }
 
-async function buildVariableIndex(rootPath: string) {
-    const fileProvider = new NodeWorkspaceFileProvider(rootPath);
-    const documentProvider = new NodeDocumentProvider();
-    const builder = new VariableIndexBuilder(fileProvider, documentProvider);
-
-    return builder.build({
-        patterns: DEFAULT_VARIABLE_PATTERNS,
-        exclude: DEFAULT_EXCLUDE_PATTERNS,
-    });
+interface ContextoAnalisis {
+    config: VarsenseConfigFile;
+    indice: Awaited<ReturnType<VariableIndexBuilder['build']>>['indice'];
 }
+
+/* Mismo varsense.config.json y mismos patrones que la CLI: el LSP no decide por su cuenta. */
+async function construirContexto(rootPath: string): Promise<ContextoAnalisis> {
+    const config = await cargarVarsenseConfig(path.resolve(rootPath, 'varsense.config.json'));
+    const builder = new VariableIndexBuilder(
+        new NodeWorkspaceFileProvider(rootPath),
+        new NodeDocumentProvider()
+    );
+    const resultado = await builder.build({
+        patterns: config.scanAllFiles ? DEFAULT_CSS_PATTERNS : (config.variableFiles ?? DEFAULT_VARIABLE_PATTERNS),
+        exclude: config.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS,
+    });
+
+    return { config, indice: resultado.indice };
+}
+
+const cacheContexto = crearCacheIndice({ construir: construirContexto, ttlMs: TTL_INDICE_MS });
 
 async function diagnosticosDelDocumento(document: TextDocument, rootPath: string): Promise<Diagnostic[]> {
     // Medir en bytes UTF-8: el mismo criterio que el límite de la CLI sobre el archivo en disco.
@@ -103,11 +123,11 @@ async function diagnosticosDelDocumento(document: TextDocument, rootPath: string
         return [archivoGrandeDiagnostic()];
     }
 
-    const variableResult = await buildVariableIndex(rootPath);
+    const { config, indice } = await cacheContexto.obtener(rootPath);
     const findings = analyzeVarsenseDocument(
         coreDocumentFromLsp(document),
-        variableResult.indice,
-        buildAnalysisConfig({})
+        indice,
+        buildAnalysisConfig(config)
     );
 
     if (findings.length > MAX_DIAGNOSTICOS) {
@@ -155,15 +175,33 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
     };
 });
 
+function programarValidacion(uri: string): void {
+    clearTimeout(pendientes.get(uri));
+    pendientes.set(uri, setTimeout(() => {
+        pendientes.delete(uri);
+        const document = documents.get(uri);
+        if (document) {
+            void validateTextDocument(document);
+        }
+    }, DEBOUNCE_VALIDACION_MS));
+}
+
 documents.onDidOpen(event => {
     void validateTextDocument(event.document);
 });
 
 documents.onDidChangeContent(event => {
-    void validateTextDocument(event.document);
+    programarValidacion(event.document.uri);
+});
+
+// Un guardado puede cambiar variables o la configuración: la caché del índice deja de valer.
+documents.onDidSave(() => {
+    cacheContexto.invalidar();
 });
 
 documents.onDidClose(event => {
+    clearTimeout(pendientes.get(event.document.uri));
+    pendientes.delete(event.document.uri);
     connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
 });
 
