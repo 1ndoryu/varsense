@@ -463,8 +463,7 @@ function extraerReturnsDeIIFE(valor: string, tokens: Set<string>, familyPrefixes
         }
         const cuerpo = valor.slice(indiceCuerpo + 1, cierre);
         const reReturn = /\breturn\b/g;
-        let ret: RegExpExecArray | null;
-        while ((ret = reReturn.exec(cuerpo)) !== null) {
+        while (reReturn.exec(cuerpo) !== null) {
             const resto = cuerpo.slice(reReturn.lastIndex);
             const literales = extraerLiterales(resto);
             if (literales.length > 0) {
@@ -1641,8 +1640,7 @@ function resolverLlamadaMapper(body: string, source: string, tokens: Set<string>
     /* Cada `return <literal>` del mapper aporta la(s) clase(s) reales. Se
      * avanza hasta el ';' del return para no releer returns posteriores. */
     const reReturn = /\breturn\b/g;
-    let match: RegExpExecArray | null;
-    while ((match = reReturn.exec(cuerpo)) !== null) {
+    while (reReturn.exec(cuerpo) !== null) {
         const resto = cuerpo.slice(reReturn.lastIndex);
         const literales = extraerLiterales(resto);
         if (literales.length > 0) {
@@ -1694,8 +1692,7 @@ function extraerFuncionesQueDevuelvenClases(source: string): Map<string, Set<str
     for (const def of escanearDefinicionesFunciones(source)) {
         const literales = new Set<string>();
         const reReturn = /\breturn\b/g;
-        let match: RegExpExecArray | null;
-        while ((match = reReturn.exec(def.cuerpo)) !== null) {
+        while (reReturn.exec(def.cuerpo) !== null) {
             const resto = def.cuerpo.slice(reReturn.lastIndex);
             if (/^\s*['"`]/.test(resto)) {
                 for (const encontrado of extraerLiterales(resto)) {
