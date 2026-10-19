@@ -19,23 +19,25 @@
   "analyzers": {
     "sentinel": {
       "enabled": true,
-      "profile": "project-default"
+      "profile": "project-default",
+      "config": {
+        "includePatterns": [
+          "**/*"
+        ],
+        "excludePatterns": [
+          "**/node_modules/**",
+          "**/dist/**",
+          "**/out/**",
+          "**/.vscode-test/**",
+          "**/fixtures/**"
+        ],
+        "directoryExceptions": [],
+        "portableBoundaries": {
+          "dom": ["/platform/", "/plataforma/", "/adapters/", "/dom."],
+          "window": ["/platform/", "/plataforma/", "/adapters/", "/navigation/"]
+        },
+        "rules": {}
+      }
     }
-  },
-  "includePatterns": [
-    "**/*"
-  ],
-  "excludePatterns": [
-    "**/node_modules/**",
-    "**/dist/**",
-    "**/out/**",
-    "**/.vscode-test/**",
-    "**/fixtures/**"
-  ],
-  "directoryExceptions": [],
-  "portableBoundaries": {
-    "dom": ["/platform/", "/plataforma/", "/adapters/", "/dom."],
-    "window": ["/platform/", "/plataforma/", "/adapters/", "/navigation/"]
-  },
-  "rules": {}
+  }
 }
