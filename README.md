@@ -90,6 +90,10 @@ separado); en `unused`, los tokens consumidos fuera del alcance analizado.
 
 `buttonStyleDetection` configura la regla `estiloBotonEspecifico` (CSS de componente con clase tipo botón): `enabled`, `severity`, `componentFolder` (nombre de carpeta, sin `/`), `selectorPattern` y `excludeFilePattern` (expresiones regulares sin flags, sin distinguir mayúsculas; una regex inválida falla al cargar). Los valores por defecto son la convención del área (`components`, `btn|button`, `^button`). La extensión de VS Code no lee este bloque: aplica esos mismos defaults.
 
+La misma regla acepta la forma del mensaje y las propiedades estructurales: `componentName` (identificador JSX, por defecto `Button`), `componentProps` (props que se sugieren, por defecto `variante`, `tamano`), `styleProperties` (propiedades CSS que cuentan como estructurales) y `minStyleProperties` (entero positivo, por defecto 2). Cada lista se valida al cargar y no puede estar vacía.
+
+`tokenDetection.themeNamespaces` define los namespaces de tema de Tailwind v4 que reconoce `token-unused`: una lista de `{ "namespace": "--prefijo-", "utilities": ["clase", ...] }`. Sin configurar usa `--color-`, `--radius-` y `--font-` (los de Tailwind v4). El namespace debe tener la forma `--prefijo-`.
+
 `languages` indica qué identificadores de lenguaje analiza cada familia de regla: `css`, `react` (inline styles en JSX) y `script` (inline styles en TS/JS), más `cssExtensions` (extensiones que alimentan el índice de variables; por defecto `.css`). Una lista vacía desactiva esa familia en ese proyecto. Los defaults son los del core (`LENGUAJES_POR_DEFECTO`).
 
 ## Arquitectura
