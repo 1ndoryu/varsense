@@ -14,7 +14,7 @@ import {obtenerConfigService} from '@/services/configService';
 import {esLenguajeSoportado, debounce, coincideConPatron} from '@/utils/fileUtils';
 import { analyzeVarsenseDocument } from '@/core/analyzeDocument';
 import { CoreFinding } from '@/core/types';
-import { configuracionAnalisisDesdeExtension, documentFromVsCode, findingToDiagnostic } from '@/core/vscodeAdapter';
+import { configuracionAnalisisDesdeExtension, documentFromVsCode, findingToDiagnostic } from '@/vscode/vscodeAdapter';
 import { parserCssVarsense } from '@/parsers';
 
 /*

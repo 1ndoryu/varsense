@@ -4,7 +4,7 @@
  */
 
 import { ClassIndexBuilder, ResultadoClasesHuerfanas } from '@/core/classIndexBuilder';
-import { VscodeDocumentProvider, VscodeWorkspaceFileProvider } from '@/core/vscodeAdapter';
+import { VscodeDocumentProvider, VscodeWorkspaceFileProvider } from '@/vscode/vscodeAdapter';
 
 export type { ClaseCssDefinida, ResultadoClasesHuerfanas } from '@/core/classIndexBuilder';
 

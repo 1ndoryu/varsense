@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import { CssVariable, VariableIndex, CacheState, ScoredVariable, ScannerStatistics } from '@/types';
 import { debounce } from '@/utils/fileUtils';
 import { obtenerConfigService } from '@/services/configService';
-import { VscodeDocumentProvider, VscodeFileWatcherProvider, VscodeWorkspaceFileProvider } from '@/core/vscodeAdapter';
+import { VscodeDocumentProvider, VscodeFileWatcherProvider, VscodeWorkspaceFileProvider } from '@/vscode/vscodeAdapter';
 import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
 import { FileWatcher, FileWatcherProvider, WorkspaceFile } from '@/core/workspaceProviders';
 import { parserCssVarsense } from '@/parsers';

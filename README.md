@@ -87,6 +87,6 @@ separado); en `unused`, los tokens consumidos fuera del alcance analizado.
 
 ## Arquitectura
 
-- `src/core/`: indexadores y reglas agnosticos (VariableIndex, ClassIndex, tokenRules) sin imports de VS Code, salvo `src/core/vscodeAdapter.ts`, la única excepción permitida por `check:core`.
+- `src/core/`: indexadores y reglas agnosticos (VariableIndex, ClassIndex, tokenRules) sin imports de VS Code. El adaptador a VS Code vive en `src/vscode/`, fuera del core; `check:core` no admite excepciones.
 - `src/cli/`, `src/lsp/`, `src/extension.ts`: adapters de presentacion sobre el mismo core.
 - `src/test/suite/coreContracts.test.ts`: paridad core/CLI/LSP con fixtures versionadas.

@@ -12,7 +12,7 @@ import { obtenerResolver } from '@/services/variableResolver';
 import { obtenerConfigService } from '@/services/configService';
 import { parsearColor } from '@/utils/colorUtils';
 import { obtenerRutaRelativa } from '@/utils/fileUtils';
-import { documentFromVsCode } from '@/core/vscodeAdapter';
+import { documentFromVsCode } from '@/vscode/vscodeAdapter';
 
 /*
  * Provider de autocompletado para CSS

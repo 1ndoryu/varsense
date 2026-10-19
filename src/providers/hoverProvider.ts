@@ -10,7 +10,7 @@ import { VariableScanner } from '@/services/variableScanner';
 import { obtenerResolver } from '@/services/variableResolver';
 import { parsearColor, generarMarkdownColor } from '@/utils/colorUtils';
 import { obtenerRutaRelativa } from '@/utils/fileUtils';
-import { documentFromVsCode, rangeToVsCodeRange } from '@/core/vscodeAdapter';
+import { documentFromVsCode, rangeToVsCodeRange } from '@/vscode/vscodeAdapter';
 
 /*
  * Provider de hover para CSS

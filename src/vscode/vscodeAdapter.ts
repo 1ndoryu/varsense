@@ -1,13 +1,13 @@
-/* [045A-1] Adaptador entre los hallazgos core de VarSense y diagnosticos VS Code.
- * Pendiente: los providers seguiran usando VS Code hasta mover parser y scanners al core. */
+/* [045A-1] Adaptador entre el core de VarSense y VS Code: traduce documentos, rangos
+ * y hallazgos. Vive fuera de src/core para que el core no dependa de vscode. */
 
 import * as vscode from 'vscode';
-import { CoreFinding, CoreRange, CoreSeverity, CoreTextDocument, createCoreDocument } from './types';
-import { VarsenseDocumentAnalysisConfig } from './analyzeDocument';
-import { buildAnalysisConfig } from './config';
+import { CoreFinding, CoreRange, CoreSeverity, CoreTextDocument, createCoreDocument } from '@/core/types';
+import { VarsenseDocumentAnalysisConfig } from '@/core/analyzeDocument';
+import { buildAnalysisConfig } from '@/core/config';
 import { DiagnosticSeverityValue, ExtensionConfig } from '@/types';
 import { buscarArchivos } from '@/utils/fileUtils';
-import { DocumentProvider, FileWatcher, FileWatcherCallbacks, FileWatcherProvider, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
+import { DocumentProvider, FileWatcher, FileWatcherCallbacks, FileWatcherProvider, WorkspaceFile, WorkspaceFileProvider } from '@/core/workspaceProviders';
 
 export function documentFromVsCode(document: vscode.TextDocument): CoreTextDocument {
   return createCoreDocument({

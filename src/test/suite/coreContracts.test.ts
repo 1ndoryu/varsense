@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { createCoreDocument, createCoreRange, serializeCoreFindings, CoreFinding } from '../../core/types';
-import { findingToDiagnostic } from '../../core/vscodeAdapter';
+import { findingToDiagnostic } from '../../vscode/vscodeAdapter';
 import { parsearDocumento } from '../../parsers/cssParser';
 import { parsearDefinicionesRuntime } from '../../parsers/cssParser';
 import { analyzeVarsenseDocument } from '../../core/analyzeDocument';
