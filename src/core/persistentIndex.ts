@@ -39,6 +39,9 @@ export interface PersistentIndexEntry {
      * presente junto a consumerTokens para reusar una entrada; una entrada
      * vieja (sin el campo) se re-parsea (PARSER_VERSION 2→3). */
     consumerFamilyPrefixes?: string[];
+    /* [VarSense V5] Prefijos de nombre portador con que se parseo el archivo (unidos por coma):
+     * si cambian en la configuracion, la entrada se re-parsea. */
+    consumerPrefijos?: string;
     /* [318A-7V24] Carriers propios del archivo (fn → posiciones portadoras) y
      * call-sites con literales ({f, p, l}). Solo lo que el archivo aporta por
      * sí mismo: el cruce cross-file se computa en memoria por ejecución para

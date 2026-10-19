@@ -5,7 +5,6 @@ Orden de ejecución: de arriba abajo. Cada bloque: probar en la 89, documentar, 
 
 ## Pendiente
 
-- [ ] **V5 Agnosticismo.** `core/classIndexBuilder.ts:721-726` fija el prefijo `clase*` del área; comentarios citan NAKOMI y `PanelRecordatorios.tsx`. `services/configService.ts:55-65` trae palabras clave en español por defecto. Pasar a configuración.
 - [ ] **V6 Arquitectura.** `core/classIndexBuilder.ts` tiene 2974 líneas: partirlo por responsabilidad. Eliminar duplicación `utils/colorUtils.ts` vs `colorConversion`/`colorParsing`.
 - [ ] **V7 Límites.** No hay timeout ni tamaño máximo de archivo en CLI ni LSP. Añadirlos y acotar la salida.
 
@@ -14,6 +13,7 @@ Orden de ejecución: de arriba abajo. Cada bloque: probar en la 89, documentar, 
 - `vsce package` y publicación: reservado a la usuaria (AGENTS §3).
 
 ## Hecho
+- V5 Agnosticismo (2026-10-19): prefijos portadores configurables (`prefijosPortadores` en CLI, `cssVarsValidator.carrierPrefixes` en la extensión); el core no asume `clase`; sugerencias contextuales sin palabras en español en el código. Verificado en la 89; gate Sentinel `--cierre` 0 nuevos. Test `coreContracts` actualizado, no ejecutado (requiere VS Code).
 - V9 Autogate (2026-10-19): `varsense.config.json` excluye `fixtures/` y `src/test/` (código de prueba con CSS inline intencionado). Autogate `all` en la 89: 0 errores, 0 warnings, 80 archivos (antes 11 errores, 5 warnings). Gate Sentinel: base 53, cierre 0 nuevos.
 - V4 Dos pipelines de análisis (2026-10-19): V4.1 regla de botón en el core; V4.2 la extensión delega en `analyzeVarsenseDocument` y se eliminan los detectores duplicados. Verificado en la 89 (ver `Agente/completados/tareas-2026-10-19.md`). Cambio visible: mensajes de diagnóstico del core.
 - V1 Higiene del repo (2026-10-19): `tsc_output.txt`, `reproduce_issue.js` fuera; `PLANIFICACION.md` a `Agente/planes/completados/`. Verificado en la 89: pretest completo en verde (compile, compile:tests, lint con 3 warnings, check:core, smoke:lsp OK).

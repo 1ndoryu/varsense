@@ -17,6 +17,7 @@ import {
     DEFAULT_REACT_PATTERNS,
     DEFAULT_SCRIPT_PATTERNS,
     DEFAULT_VARIABLE_PATTERNS,
+    DEFAULT_PREFIJOS_PORTADORES,
     VarsenseConfigFile,
     buildAnalysisConfig,
     validateVarsenseConfig,
@@ -416,6 +417,7 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
         exclude: excludePatterns,
         minLength: configFile.orphanClassDetection?.minClassLength ?? 3,
         excludedClassPatterns: configFile.orphanClassDetection?.excludeClassPatterns ?? [],
+        prefijosPortadores: configFile.prefijosPortadores ?? DEFAULT_PREFIJOS_PORTADORES,
     });
 
     const clasesHuerfanas = await filtrarClasesSuprimidas(result.clasesHuerfanas);
@@ -454,6 +456,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
         exclude: excludePatterns,
         minLength: configFile.orphanClassDetection?.minClassLength ?? 3,
         excludedClassPatterns: configFile.orphanClassDetection?.excludeClassPatterns ?? [],
+        prefijosPortadores: configFile.prefijosPortadores ?? DEFAULT_PREFIJOS_PORTADORES,
     });
     timer.mark('classIndexMs');
     const includePatterns = configFile.includePatterns ?? DEFAULT_INCLUDE_PATTERNS;

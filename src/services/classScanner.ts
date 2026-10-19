@@ -15,7 +15,8 @@ export async function escanearClasesHuerfanas(
     excluidos: string[],
     longitudMinima: number = 3,
     patronesExcluidosClase: string[] = [],
-    onProgress?: (fase: string, actual: number, total: number) => void
+    onProgress?: (fase: string, actual: number, total: number) => void,
+    prefijosPortadores: string[] = []
 ): Promise<ResultadoClasesHuerfanas> {
     const builder = new ClassIndexBuilder(
         new VscodeWorkspaceFileProvider(),
@@ -25,6 +26,7 @@ export async function escanearClasesHuerfanas(
     return builder.scan({
         exclude: excluidos,
         minLength: longitudMinima,
-        excludedClassPatterns: patronesExcluidosClase
+        excludedClassPatterns: patronesExcluidosClase,
+        prefijosPortadores
     }, onProgress);
 }

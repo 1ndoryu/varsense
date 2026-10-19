@@ -51,26 +51,8 @@ const DEFAULT_CONFIG: ExtensionConfig = {
         severidad: vscode.DiagnosticSeverity.Warning,
         propiedades: ['box-shadow']
     },
-    sugerenciasContextuales: {
-        'font-size': ['font', 'size', 'fs', 'text', 'tipo'],
-        'font-family': ['font', 'family', 'tipo'],
-        'font-weight': ['font', 'weight', 'fw'],
-        'line-height': ['line', 'height', 'lh'],
-        'color': ['color', 'clr', 'text', 'primary', 'secondary'],
-        'background-color': ['bg', 'background', 'fondo'],
-        'background': ['bg', 'background', 'fondo'],
-        'border-color': ['border', 'borde', 'color'],
-        'border-radius': ['radius', 'round', 'borde'],
-        'gap': ['space', 'gap', 'espacio'],
-        'margin': ['space', 'margin', 'espacio'],
-        'padding': ['space', 'padding', 'espacio'],
-        'width': ['width', 'size', 'ancho'],
-        'height': ['height', 'size', 'alto'],
-        'box-shadow': ['shadow', 'sombra'],
-        'z-index': ['z', 'index', 'layer'],
-        'transition': ['transition', 'duration', 'ease'],
-        'opacity': ['opacity', 'alpha']
-    },
+    sugerenciasContextuales: {},
+    prefijosPortadores: ['clase'],
     patronesExcluidos: [
         '**/node_modules/**',
         '**/vendor/**',
@@ -244,6 +226,7 @@ class ConfigService {
                 'contextualSuggestions',
                 DEFAULT_CONFIG.sugerenciasContextuales
             ),
+            prefijosPortadores: config.get<string[]>('carrierPrefixes', DEFAULT_CONFIG.prefijosPortadores),
             patronesExcluidos: config.get<string[]>('excludePatterns', DEFAULT_CONFIG.patronesExcluidos),
             escanearTodosArchivos: config.get<boolean>('scanAllFiles', DEFAULT_CONFIG.escanearTodosArchivos)
         };

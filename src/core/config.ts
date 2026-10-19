@@ -9,6 +9,7 @@ export interface VarsenseConfigFile {
     includePatterns?: string[];
     excludePatterns?: string[];
     scanAllFiles?: boolean;
+    prefijosPortadores?: string[];
     hardcodedDetection?: {
         enabled?: boolean;
         severity?: CoreSeverity;
@@ -52,6 +53,8 @@ export const DEFAULT_CSS_PATTERNS = ['**/*.css', '**/*.scss', '**/*.less'];
 export const DEFAULT_REACT_PATTERNS = ['**/*.tsx', '**/*.jsx'];
 export const DEFAULT_SCRIPT_PATTERNS = ['**/*.ts', '**/*.js'];
 export const DEFAULT_INCLUDE_PATTERNS = ['**/*'];
+/* Convencion del design system del area (NAKOMI): default del CLI, no del core. */
+export const DEFAULT_PREFIJOS_PORTADORES = ['clase'];
 export const DEFAULT_EXCLUDE_PATTERNS = [
     '**/node_modules/**',
     '**/vendor/**',
@@ -76,7 +79,7 @@ const DEFAULT_HARDCODED_PROPERTIES: Record<string, boolean> = {
 };
 const VALID_SEVERITIES = new Set<CoreSeverity>(['error', 'warning', 'information', 'hint']);
 const CONFIG_KEYS = new Set([
-    'variableFiles', 'includePatterns', 'excludePatterns', 'scanAllFiles',
+    'variableFiles', 'includePatterns', 'excludePatterns', 'scanAllFiles', 'prefijosPortadores',
     'hardcodedDetection', 'inlineDetection', 'bannedProperties', 'orphanClassDetection', 'todoProseDetection', 'tokenDetection',
 ]);
 const NESTED_KEYS: Record<string, Set<string>> = {
@@ -113,7 +116,7 @@ export function validateVarsenseConfig(value: unknown): asserts value is Varsens
             throw new Error(`varsense.config.json: clave desconocida '${key}'`);
         }
     }
-    for (const key of ['variableFiles', 'includePatterns', 'excludePatterns'] as const) {
+    for (const key of ['variableFiles', 'includePatterns', 'excludePatterns', 'prefijosPortadores'] as const) {
         if (config[key] !== undefined) {
             assertStringArray(config[key], key);
         }

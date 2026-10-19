@@ -9,6 +9,9 @@ import { analyzeCrossFileDuplicates, analyzeTokenRules } from '../../core/tokenR
 import { VariableIndexBuilder } from '../../core/variableIndexBuilder';
 import { ClassIndexBuilder } from '../../core/classIndexBuilder';
 import { detectarCarriersMismoArchivo, extraerMapasExportados, extraerNombresImportadosRelativos, esNombrePortadorClase } from '../../core/classIndexBuilder';
+
+/* Convencion del area: el core no la asume; los tests que la usan la pasan explicita. */
+const PREFIJOS_AREA = ['clase'];
 import { NodeWorkspaceFileProvider } from '../../core/nodeProviders';
 import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../core/workspaceProviders';
 import * as fs from 'fs';
@@ -159,7 +162,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     const builder = new ClassIndexBuilder(provider, provider);
 
     await assert.rejects(
-      builder.scan({ exclude: [], token }),
+      builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], token }),
       /Análisis cancelado/
     );
   });
@@ -175,7 +178,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [] });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [] });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'unusedClass');
@@ -189,7 +192,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     }, undefined, patterns => findCalls.push(patterns));
     const builder = new ClassIndexBuilder(provider, provider);
 
-    await builder.scan({ exclude: [] });
+    await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [] });
 
     assert.strictEqual(findCalls.length, 2, 'CSS y consumidores deben descubrirse en dos recorridos');
     assert.deepStrictEqual(findCalls[1], [
@@ -216,7 +219,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     const builder = new ClassIndexBuilder(provider, provider);
 
     await assert.rejects(
-      builder.scan({ exclude: [], token }),
+      builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], token }),
       /Análisis cancelado/
     );
   });
@@ -232,17 +235,17 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const first = await builder.scan({ exclude: [] });
+    const first = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [] });
     assert.strictEqual(first.totalClasesHuerfanas, 0);
 
     opened.length = 0;
-    const second = await builder.scan({ exclude: [] });
+    const second = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [] });
     assert.deepStrictEqual(opened, []);
 
     files['/workspace/src/styles.css'].content = '.newClass { color: blue; }';
     builder.invalidateFile('/workspace/src/styles.css');
     opened.length = 0;
-    const third = await builder.scan({ exclude: [] });
+    const third = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [] });
 
     /* [318A-7V3] El CSS inválidado se reabre en ambos recorridos: el de
      * definiciones y el de consumo (los CSS son consumidores desde 318A-7V3),
@@ -263,10 +266,10 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    await builder.scan({ exclude: [] });
+    await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [] });
     opened.length = 0;
     builder.clearCache();
-    await builder.scan({ exclude: [] });
+    await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [] });
 
     /* [318A-7V3] Ídem: con clearCache el CSS se reabre en ambos recorridos
      * (definiciones + consumo), por eso aparece dos veces en la lista. */
@@ -307,7 +310,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelOculto');
@@ -343,7 +346,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'unusedPanel');
@@ -364,7 +367,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'unusedClass');
@@ -393,7 +396,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'otraClaseMuerta');
@@ -421,7 +424,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'selectorOtroVivo');
@@ -447,7 +450,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'estadoViabilidadMuerto');
@@ -482,7 +485,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     /* La familia espuria "adjunto" NO debe eximir adjuntosAreaCarga--bloqueado;
      * la clase usada literalmente (adjuntosAreaCarga) sí está en uso. El único
@@ -518,7 +521,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     /* La familia `badgeInfo--` (token pegado) exime ambas variantes; la clase
      * muerta sin prefijo sigue reportándose: 0 FN, 0 FP. */
@@ -559,7 +562,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     /* `detallePlan` en uso (clase base); `premium` (estado runtime, zona
      * gris documentada) y la muerta real se reportan con fundamento. */
@@ -602,7 +605,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     /* La familia `selectorNivelBoton` (token pegado) exime las variantes;
      * la muerta sin prefijo sigue reportada: 0 FN, 0 FP. */
@@ -634,7 +637,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelMuertoReal');
@@ -659,7 +662,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'stillOrphan');
@@ -696,7 +699,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelMuerto');
@@ -731,7 +734,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'dashboardContenedor--muerto');
@@ -769,7 +772,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'botonIcono');
@@ -863,7 +866,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelResize--muerto');
@@ -896,7 +899,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelCelda--muerto');
@@ -927,7 +930,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'badgeMuerto');
@@ -956,7 +959,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelExpVida--muerta');
@@ -1241,7 +1244,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'otraMuerta');
@@ -1264,7 +1267,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'icoMuerto');
@@ -1289,7 +1292,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelMuerto');
@@ -1314,7 +1317,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 2);
   });
@@ -1337,7 +1340,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.equal(result.clasesHuerfanas.some(item => item.nombre === 'prefOk'), false);
   });
@@ -1578,7 +1581,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'selectorFechaCalendario__dia--muerto');
@@ -1624,7 +1627,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'pullToRefreshMuerto');
@@ -1669,7 +1672,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'indicadorPlanMuerto');
@@ -1715,7 +1718,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'etiquetaMuerta');
@@ -1738,7 +1741,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
     const nombres = result.clasesHuerfanas.map(clase => clase.nombre);
 
     assert.ok(!nombres.includes('png'), 'png no debe existir como clase');
@@ -1783,7 +1786,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'activity-image-muerta');
@@ -1820,7 +1823,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'notificacionesPopover__item--muerta');
@@ -1864,7 +1867,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     /* `scratchpadVistaPreviaTitulo` (segmento estático), la familia
      * `--h` (h1/h4) y `scratchpadVistaPreviaChecklist` en uso; la muerta
@@ -1914,7 +1917,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'recordatoriosTextoMuerto');
@@ -1953,7 +1956,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'itemNotificacion--muerta');
@@ -2001,7 +2004,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'barraRellenoMuerta');
@@ -2062,7 +2065,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'scratchpadVistaPreviaMuerto');
@@ -2108,7 +2111,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'elMuerta');
@@ -2146,7 +2149,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'retMuerta');
@@ -2183,7 +2186,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'carMuerta');
@@ -2215,7 +2218,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'attrMuerta');
@@ -2244,7 +2247,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'lstMuerta');
@@ -2283,7 +2286,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.deepStrictEqual(result.clasesHuerfanas.map(clase => clase.nombre), []);
   });
@@ -2324,7 +2327,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.deepStrictEqual(result.clasesHuerfanas.map(clase => clase.nombre), []);
   });
@@ -2356,7 +2359,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.deepStrictEqual(
       result.clasesHuerfanas.map(clase => clase.nombre),
@@ -2384,7 +2387,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.deepStrictEqual(result.clasesHuerfanas.map(clase => clase.nombre), ['sueltoUno']);
   });
@@ -2413,7 +2416,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.deepStrictEqual(result.clasesHuerfanas.map(clase => clase.nombre), []);
   });
@@ -2637,7 +2640,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     );
 
     const builder = new ClassIndexBuilder(provider, provider);
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'iconoMuerta');
@@ -2670,7 +2673,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'tarjetaMuerta');
@@ -2698,7 +2701,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'sondaEscapeMuerta');
@@ -2725,7 +2728,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'menuDesplegableMuerto');
@@ -2759,7 +2762,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelMuerto');
@@ -2768,16 +2771,16 @@ suite('VarSense editor-agnostic core contracts', () => {
   /* [299A-13 F5] La convención de nombre portador en un solo punto: las tres
    * vías de emisión (declaraciones, compuestos, push) la comparten. */
   test('esNombrePortadorClase cubre className/contentClass y prefijos clase/Clase', () => {
-    assert.strictEqual(esNombrePortadorClase('className'), true);
-    assert.strictEqual(esNombrePortadorClase('contentClass'), true);
-    assert.strictEqual(esNombrePortadorClase('claseVariante'), true);
-    assert.strictEqual(esNombrePortadorClase('claseTamano'), true);
-    assert.strictEqual(esNombrePortadorClase('clases'), true);
-    assert.strictEqual(esNombrePortadorClase('ClaseExtra'), true);
-    assert.strictEqual(esNombrePortadorClase('titulo'), false);
-    assert.strictEqual(esNombrePortadorClase('variante'), false);
-    assert.strictEqual(esNombrePortadorClase('onClick'), false);
-    assert.strictEqual(esNombrePortadorClase('myclass'), false);
+    assert.strictEqual(esNombrePortadorClase('className', PREFIJOS_AREA), true);
+    assert.strictEqual(esNombrePortadorClase('contentClass', PREFIJOS_AREA), true);
+    assert.strictEqual(esNombrePortadorClase('claseVariante', PREFIJOS_AREA), true);
+    assert.strictEqual(esNombrePortadorClase('claseTamano', PREFIJOS_AREA), true);
+    assert.strictEqual(esNombrePortadorClase('clases', PREFIJOS_AREA), true);
+    assert.strictEqual(esNombrePortadorClase('ClaseExtra', PREFIJOS_AREA), true);
+    assert.strictEqual(esNombrePortadorClase('titulo', PREFIJOS_AREA), false);
+    assert.strictEqual(esNombrePortadorClase('variante', PREFIJOS_AREA), false);
+    assert.strictEqual(esNombrePortadorClase('onClick', PREFIJOS_AREA), false);
+    assert.strictEqual(esNombrePortadorClase('myclass', PREFIJOS_AREA), false);
   });
 
   /* [299A-13 F4] Helper rest+join (`function combinarClases(...clases) {
@@ -2804,7 +2807,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'modalPruebaMuerto');
@@ -2878,7 +2881,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'pagoPrueba--muerto');
@@ -2919,7 +2922,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'estadoMuerto');
@@ -2965,7 +2968,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ prefijosPortadores: PREFIJOS_AREA, exclude: [], minLength: 3 });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'pagoEnv--muerto');

@@ -110,6 +110,7 @@ export interface ExtensionConfig {
     deteccionInline: InlineDetectionConfig;
     deteccionPropiedadesProhibidas: BannedPropertyConfig;
     sugerenciasContextuales: Record<string, string[]>;
+    prefijosPortadores: string[];
     patronesExcluidos: string[];
     escanearTodosArchivos: boolean;
 }

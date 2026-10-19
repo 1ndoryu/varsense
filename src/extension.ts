@@ -770,6 +770,7 @@ async function comandoDetectarClasesHuerfanas(): Promise<void> {
     ]);
     const longitudMinima = config.get<number>('orphanClassDetection.minClassLength', 3);
     const patronesExcluidos = config.get<string[]>('orphanClassDetection.excludeClassPatterns', []);
+    const prefijosPortadores = config.get<string[]>('carrierPrefixes', ['clase']);
 
     let resultado: ResultadoClasesHuerfanas | null = null;
 
@@ -786,7 +787,8 @@ async function comandoDetectarClasesHuerfanas(): Promise<void> {
                 patronesExcluidos,
                 (fase, actual, total) => {
                     progress.report({ message: `${fase} (${actual}/${total})` });
-                }
+                },
+                prefijosPortadores
             );
         }
     );

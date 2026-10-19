@@ -152,6 +152,16 @@
                     },
                     "description": "Valores permitidos que no serán marcados como hardcodeados"
                 },
+                "cssVarsValidator.carrierPrefixes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "clase"
+                    ],
+                    "description": "Prefijos de nombres que portan clases (ademas de className y contentClass). Con 'clase', claseVariante, claseTamano... cuentan como portadoras. Vacio = solo className y contentClass."
+                },
                 "cssVarsValidator.contextualSuggestions": {
                     "type": "object",
                     "default": {

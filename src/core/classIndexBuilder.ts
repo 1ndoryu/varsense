@@ -26,6 +26,9 @@ export interface ClassIndexScanOptions {
     excludedClassPatterns?: string[];
     cssPatterns?: string[];
     consumerPatterns?: string[];
+    /* Prefijos (ademas de className/contentClass) que marcan un nombre portador de
+     * clases. El core no asume convencion: sin valor, solo cuentan className/contentClass. */
+    prefijosPortadores?: string[];
     token?: CancellationToken;
 }
 
@@ -716,16 +719,20 @@ function registrarPrefijosFamilia(value: string, familyPrefixes: Set<string>, co
 }
 
 /* [299A-13 F5] Nombre portador de clases: className/contentClass o cualquier
- * identificador que empiece por clase/Clase (claseVariante, claseTamano,
- * clases...). Convención del design system del área (ver bloque V2): una
+ * identificador que empiece por un prefijo configurado (con 'clase': claseVariante,
+ * claseTamano, clases...). Convención del design system del área (ver bloque V2): una
  * declaración con este nombre contiene clases por construcción, así que sus
  * templates registran familia con contextoAttr=true aunque vivan fuera de un
  * atributo (`const claseVariante = `boton${...}`` en Button.tsx:19 de NAKOMI,
  * consumido luego en className: sin esto, `boton` nunca era familia y
  * botonPrimario/botonMediano se reportaban). Fuente única para los tres
  * gates de emisión (declaraciones, compuestos, push). Exportada para tests. */
-export function esNombrePortadorClase(nombre: string): boolean {
-    return nombre === 'className' || nombre === 'contentClass' || /^[Cc]lase/.test(nombre);
+export function esNombrePortadorClase(nombre: string, prefijos: readonly string[] = []): boolean {
+    if (nombre === 'className' || nombre === 'contentClass') {
+        return true;
+    }
+    /* Cada prefijo cuenta en minuscula y con la inicial en mayuscula (clase -> Clase). */
+    return prefijos.some(prefijo => prefijo !== '' && (nombre.startsWith(prefijo) || nombre.startsWith(prefijo.charAt(0).toUpperCase() + prefijo.slice(1))));
 }
 
 function addClassTokens(value: string, tokens: Set<string>, familyPrefixes?: Set<string>, contextoAttr = false): void {
@@ -981,7 +988,7 @@ function resolverFragmentosDeArray(
     }
 }
 
-function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): Map<string, Set<string>> {
+function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>, prefijos: readonly string[] = []): Map<string, Set<string>> {
     const variables = new Map<string, Set<string>>();
 
     for (const declaracion of escanearDeclaraciones(source)) {
@@ -1003,7 +1010,7 @@ function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>): M
          * `boton${...}``) registra su familia con contexto de clase aunque
          * el template viva fuera de un atributo. Vale para las tres formas
          * de valor (literal, ternario, array). */
-        const contextoPortador = esNombrePortadorClase(nombre);
+        const contextoPortador = esNombrePortadorClase(nombre, prefijos);
         if (/^(['"`])[\s\S]*\1$/.test(valor)) {
             addClassTokens(valor.slice(1, -1), tokensVariable, familyPrefixes, contextoPortador);
             addQuotedClassTokens(valor, tokensVariable, familyPrefixes, contextoPortador);
@@ -2138,12 +2145,12 @@ function isCodeMatch(source: string, matchIndex: number): boolean {
     return !isInsideString(source, matchIndex);
 }
 
-function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes?: Set<string>, referenciasMapa?: Set<string>, llamadasClaseFuera?: Set<string>): void {
+function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes?: Set<string>, referenciasMapa?: Set<string>, llamadasClaseFuera?: Set<string>, prefijos: readonly string[] = []): void {
     const source = removeComments(texto);
     let match: RegExpExecArray | null;
     /* [J-8] La indirección requiere conocer las declaraciones antes de
      * resolver los usos (className={ident}). Se recopila una vez por archivo. */
-    const variables = recopilarDeclaraciones(source, familyPrefixes);
+    const variables = recopilarDeclaraciones(source, familyPrefixes, prefijos);
     /* [299A-13 F3b] Nombres traídos por import relativo: permiten distinguir
      * un mapa importado (`STATUS_CLASS` de otro archivo) de un global
      * desconocido al registrar referencias para la fase 2. */
@@ -2343,7 +2350,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
     }
 
     for (const declaracion of escanearDeclaraciones(source)) {
-        const esCarrier = esNombrePortadorClase(declaracion.nombre);
+        const esCarrier = esNombrePortadorClase(declaracion.nombre, prefijos);
         if (!esCarrier) {
             continue;
         }
@@ -2361,7 +2368,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
      * emiten directo al archivo; recopilarDeclaraciones ya los fusionó al set
      * de la variable para la vía de indirección className={clase}. */
     for (const compuesto of escanearAsignacionesCompuestas(source)) {
-        const esCarrierCompuesto = esNombrePortadorClase(compuesto.nombre);
+        const esCarrierCompuesto = esNombrePortadorClase(compuesto.nombre, prefijos);
         if (!esCarrierCompuesto || !isCodeMatch(source, compuesto.indice)) {
             continue;
         }
@@ -2371,7 +2378,7 @@ function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes
      * al archivo (misma regla que los compuestos); el set para indirección ya
      * se fusionó en recopilarDeclaraciones. */
     for (const push of escanearPushs(source)) {
-        const esCarrierPush = esNombrePortadorClase(push.nombre);
+        const esCarrierPush = esNombrePortadorClase(push.nombre, prefijos);
         if (!esCarrierPush || !isCodeMatch(source, push.indice)) {
             continue;
         }
@@ -2465,6 +2472,8 @@ export class ClassIndexBuilder {
     private readonly cssFileCache = new Map<string, ClaseCssDefinida[]>();
     /* [318A-7V24] carriers propios + call-sites con literales por archivo: el
      * cruce cross-file (unión global) se computa en scan() en memoria. */
+    /* Firma (prefijos unidos por coma) con la que se lleno consumerFileCache: si cambia, se vacia. */
+    private firmaPrefijosConsumo = '';
     private readonly consumerFileCache = new Map<string, {
         tokens: Set<string>;
         familyPrefixes: Set<string>;
@@ -2509,6 +2518,11 @@ export class ClassIndexBuilder {
         const cssPatterns = options.cssPatterns ?? DEFAULT_CSS_PATTERNS;
         const consumerPatterns = options.consumerPatterns ?? DEFAULT_CONSUMER_PATTERNS;
         const minLength = options.minLength ?? DEFAULT_MIN_LENGTH;
+        const prefijos = options.prefijosPortadores ?? [];
+        if (this.firmaPrefijosConsumo !== prefijos.join(',')) {
+            this.consumerFileCache.clear();
+            this.firmaPrefijosConsumo = prefijos.join(',');
+        }
 
         const { clasesMap, totalArchivos: archivosCss } = await this.scanCssDefinitions(
             cssPatterns,
@@ -2522,6 +2536,7 @@ export class ClassIndexBuilder {
         const { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, filesMapasExportados, filesReferenciasMapa, filesFuncionesClase, filesLlamadasClase, totalArchivos: archivosConsumo } = await this.extractConsumerTokens(
             consumerPatterns,
             options.exclude,
+            prefijos,
             options.token
         );
         /* [318A-7V24] Unión global de carriers: fn → posiciones portadoras en
@@ -2758,6 +2773,7 @@ export class ClassIndexBuilder {
     private async extractConsumerTokens(
         patterns: string[],
         exclude: string[],
+        prefijos: readonly string[],
         token?: CancellationToken
     ): Promise<{
         filesTokens: Map<string, Set<string>>;
@@ -2798,7 +2814,7 @@ export class ClassIndexBuilder {
             try {
                 let cached = this.consumerFileCache.get(file.fsPath);
                 if (!cached) {
-                    cached = await this.loadConsumerTokens(file, token);
+                    cached = await this.loadConsumerTokens(file, prefijos, token);
                 }
                 filesTokens.set(file.fsPath, cached.tokens);
                 filesFamilyPrefixes.set(file.fsPath, cached.familyPrefixes);
@@ -2859,7 +2875,7 @@ export class ClassIndexBuilder {
      * [318A-7V24] Además persiste carriers + llamadas con literales (mismo
      * criterio V14: entrada vieja sin los campos se re-parsea). Solo archivos
      * script aportan carriers/llamadas (los carriers son un idioma JS/TS). */
-    private async loadConsumerTokens(file: WorkspaceFile, token?: CancellationToken): Promise<{
+    private async loadConsumerTokens(file: WorkspaceFile, prefijos: readonly string[], token?: CancellationToken): Promise<{
         tokens: Set<string>;
         familyPrefixes: Set<string>;
         carriers: Map<string, Set<number>>;
@@ -2880,7 +2896,8 @@ export class ClassIndexBuilder {
         if (stored?.hash === hash && stored.consumerTokens && stored.consumerFamilyPrefixes
             && stored.consumerCarriers && stored.consumerCarrierCalls
             && stored.consumerExportedClassMaps && stored.consumerMapReferences
-            && stored.consumerClassFunctions && stored.consumerClassFunctionCalls) {
+            && stored.consumerClassFunctions && stored.consumerClassFunctionCalls
+            && stored.consumerPrefijos === prefijos.join(',')) {
             if (store) {store.stats.reused++;}
             const cached = {
                 tokens: new Set<string>(stored.consumerTokens),
@@ -2906,7 +2923,7 @@ export class ClassIndexBuilder {
         const fileFamilyPrefixes = new Set<string>();
         const fileReferenciasMapa = new Set<string>();
         const fileLlamadasClase = new Set<string>();
-        extraerTokensDeTexto(texto, fileTokens, fileFamilyPrefixes, fileReferenciasMapa, fileLlamadasClase);
+        extraerTokensDeTexto(texto, fileTokens, fileFamilyPrefixes, fileReferenciasMapa, fileLlamadasClase, prefijos);
         /* [299A-13 F3b] Mapas de clases exportados (`export const
          * PAYMENT_STATUS_CLASS: Record<...> = {...}`). Solo scripts: el
          * `export const` es un idioma JS/TS (mismo gate que carriers). */
@@ -2946,6 +2963,7 @@ export class ClassIndexBuilder {
                 consumerMapReferences: [...fileReferenciasMapa],
                 consumerClassFunctions: Object.fromEntries([...funcionesClase].map(([fn, literales]) => [fn, [...literales]])),
                 consumerClassFunctionCalls: [...fileLlamadasClase],
+                consumerPrefijos: prefijos.join(','),
             });
             if (store) {store.stats.reparsed++;}
         }
