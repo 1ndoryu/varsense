@@ -8,7 +8,7 @@
 import * as assert from 'assert';
 import { createCoreDocument } from '../../../core/types';
 import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument';
-import { buildAnalysisConfig } from '../../../core/configuracion/config';
+import { buildAnalysisConfig, validateVarsenseConfig } from '../../../core/configuracion/config';
 import { DiagnosticType } from '../../../types';
 import { parserCssVarsense } from '../../../parsers';
 
@@ -53,5 +53,42 @@ suite('VarSense estiloBotonEspecifico (core)', () => {
     test('la desactivación en la línea anterior suprime el hallazgo', () => {
         const css = '/* varsense-disable-next-line */\n' + CSS_BOTON;
         assert.strictEqual(analizar('src/components/Tarjeta.css', css).length, 0);
+    });
+
+    /* [V4] La convención se lee de buttonStyleDetection: otro proyecto puede cambiarla. */
+    test('buttonStyleDetection cambia carpeta, selector y severidad', () => {
+        const config = buildAnalysisConfig({
+            buttonStyleDetection: { componentFolder: 'ui', selectorPattern: 'cta', severity: 'error' },
+        });
+        const documento = createCoreDocument({
+            uri: 'file:///workspace/src/ui/Tarjeta.css',
+            fileName: '/workspace/src/ui/Tarjeta.css',
+            languageId: 'css',
+            content: '.ctaPrimario {\n  padding: 4px;\n  background: red;\n}\n',
+        });
+        const hallazgos = analyzeVarsenseDocument(documento, indiceVacio() as never, config, parserCssVarsense)
+            .filter(hallazgo => hallazgo.ruleId === DiagnosticType.EstiloBotonEspecifico);
+        assert.strictEqual(hallazgos.length, 1);
+        assert.strictEqual(hallazgos[0].severity, 'error');
+    });
+
+    test('buttonStyleDetection.enabled false desactiva la regla', () => {
+        const config = buildAnalysisConfig({ buttonStyleDetection: { enabled: false } });
+        const documento = createCoreDocument({
+            uri: 'file:///workspace/src/components/Tarjeta.css',
+            fileName: '/workspace/src/components/Tarjeta.css',
+            languageId: 'css',
+            content: CSS_BOTON,
+        });
+        const hallazgos = analyzeVarsenseDocument(documento, indiceVacio() as never, config, parserCssVarsense)
+            .filter(hallazgo => hallazgo.ruleId === DiagnosticType.EstiloBotonEspecifico);
+        assert.strictEqual(hallazgos.length, 0);
+    });
+
+    test('rechaza una expresion regular invalida en la configuracion', () => {
+        assert.throws(
+            () => validateVarsenseConfig({ buttonStyleDetection: { selectorPattern: '(' } }),
+            /no es una expresión regular válida/
+        );
     });
 });

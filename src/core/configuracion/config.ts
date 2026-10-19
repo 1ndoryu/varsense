@@ -1,5 +1,6 @@
 import { CoreSeverity } from '../types';
 import { VarsenseDocumentAnalysisConfig } from '../analisis/analyzeDocument';
+import { ESTILO_BOTON_POR_DEFECTO } from '../analisis/reglasBotonCss';
 
 /* [095A-4] La configuracion compartida vive en core para que CLI y LSP usen los mismos
  * defaults sin que el servidor stdio importe ni ejecute el entrypoint de la CLI. */
@@ -41,6 +42,14 @@ export interface VarsenseConfigFile {
         unused?: { enabled?: boolean; severity?: CoreSeverity; excludeTokens?: string[] };
         crossFile?: { enabled?: boolean; severity?: CoreSeverity };
     };
+    /* [V4] Regla de estilo de botón: los valores por defecto son la convención del área; otro proyecto los cambia aquí. */
+    buttonStyleDetection?: {
+        enabled?: boolean;
+        severity?: CoreSeverity;
+        componentFolder?: string;
+        selectorPattern?: string;
+        excludeFilePattern?: string;
+    };
 }
 
 export const DEFAULT_VARIABLE_PATTERNS = [
@@ -81,6 +90,7 @@ const VALID_SEVERITIES = new Set<CoreSeverity>(['error', 'warning', 'information
 const CONFIG_KEYS = new Set([
     'variableFiles', 'includePatterns', 'excludePatterns', 'scanAllFiles', 'prefijosPortadores',
     'hardcodedDetection', 'inlineDetection', 'bannedProperties', 'orphanClassDetection', 'todoProseDetection', 'tokenDetection',
+    'buttonStyleDetection',
 ]);
 const NESTED_KEYS: Record<string, Set<string>> = {
     hardcodedDetection: new Set(['enabled', 'severity', 'properties', 'allowedValues']),
@@ -91,11 +101,24 @@ const NESTED_KEYS: Record<string, Set<string>> = {
     /* [MN-token] 'crossFile' estaba tipada y mapeada pero ausente aquí: un
      * varsense.config.json con esa sección era rechazado por clave desconocida. */
     tokenDetection: new Set(['duplicate', 'unused', 'crossFile']),
+    buttonStyleDetection: new Set(['enabled', 'severity', 'componentFolder', 'selectorPattern', 'excludeFilePattern']),
 };
 
 function assertStringArray(value: unknown, key: string): asserts value is string[] {
     if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
         throw new Error(`varsense.config.json: '${key}' debe ser string[]`);
+    }
+}
+
+/* [por que] Una regex inválida fallaría en cada análisis; se rechaza al cargar la configuración. */
+function assertRegexSource(value: unknown, key: string): void {
+    if (typeof value !== 'string' || value.length === 0) {
+        throw new Error(`varsense.config.json: '${key}' debe ser una cadena no vacía`);
+    }
+    try {
+        new RegExp(value, 'i');
+    } catch {
+        throw new Error(`varsense.config.json: '${key}' no es una expresión regular válida`);
     }
 }
 
@@ -187,6 +210,18 @@ export function validateVarsenseConfig(value: unknown): asserts value is Varsens
             assertStringArray(section.excludeTokens, `tokenDetection.${key}.excludeTokens`);
         }
     }
+
+    const boton = config.buttonStyleDetection as Record<string, unknown> | undefined;
+    if (boton?.componentFolder !== undefined &&
+        (typeof boton.componentFolder !== 'string' || !/^[^/\\]+$/.test(boton.componentFolder))) {
+        throw new Error("varsense.config.json: 'buttonStyleDetection.componentFolder' debe ser un nombre de carpeta (sin '/')");
+    }
+    if (boton?.selectorPattern !== undefined) {
+        assertRegexSource(boton.selectorPattern, 'buttonStyleDetection.selectorPattern');
+    }
+    if (boton?.excludeFilePattern !== undefined) {
+        assertRegexSource(boton.excludeFilePattern, 'buttonStyleDetection.excludeFilePattern');
+    }
 }
 
 function severityOrDefault(value: CoreSeverity | undefined, fallback: CoreSeverity): CoreSeverity {
@@ -228,6 +263,13 @@ export function buildAnalysisConfig(config: VarsenseConfigFile): VarsenseDocumen
                 habilitado: config.tokenDetection?.crossFile?.enabled ?? true,
                 severidad: severityOrDefault(config.tokenDetection?.crossFile?.severity, 'information'),
             },
+        },
+        estiloBoton: {
+            habilitado: config.buttonStyleDetection?.enabled ?? ESTILO_BOTON_POR_DEFECTO.habilitado,
+            severidad: severityOrDefault(config.buttonStyleDetection?.severity, ESTILO_BOTON_POR_DEFECTO.severidad),
+            carpeta: config.buttonStyleDetection?.componentFolder ?? ESTILO_BOTON_POR_DEFECTO.carpeta,
+            patronSelector: config.buttonStyleDetection?.selectorPattern ?? ESTILO_BOTON_POR_DEFECTO.patronSelector,
+            patronExcluirArchivo: config.buttonStyleDetection?.excludeFilePattern ?? ESTILO_BOTON_POR_DEFECTO.patronExcluirArchivo,
         },
     };
 }

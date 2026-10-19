@@ -107,7 +107,7 @@ const SEVERIDAD_CORE: Record<DiagnosticSeverityValue, CoreSeverity> = {
 
 /*
  * Traduce la configuración de la extensión al formato de análisis del core.
- * analyzeVarsenseDocument no lee los tokens: van con los defaults del core.
+ * La extensión no lee tokens ni la regla de botón: van con los defaults del core.
  */
 export function configuracionAnalisisDesdeExtension(config: ExtensionConfig): VarsenseDocumentAnalysisConfig {
   const { deteccionHardcoded: hardcoded, deteccionInline: inline, deteccionPropiedadesProhibidas: prohibidas } = config;
@@ -128,5 +128,6 @@ export function configuracionAnalisisDesdeExtension(config: ExtensionConfig): Va
       propiedades: prohibidas.propiedades,
     },
     tokens: buildAnalysisConfig({}).tokens,
+    estiloBoton: buildAnalysisConfig({}).estiloBoton,
   };
 }

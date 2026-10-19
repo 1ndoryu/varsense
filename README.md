@@ -86,6 +86,8 @@ correspondiente ignora. Sirve para lo que la regla no puede deducir sola: en
 `--popover` valen lo mismo que `--background` para poder re-tematizarse por
 separado); en `unused`, los tokens consumidos fuera del alcance analizado.
 
+`buttonStyleDetection` configura la regla `estiloBotonEspecifico` (CSS de componente con clase tipo botón): `enabled`, `severity`, `componentFolder` (nombre de carpeta, sin `/`), `selectorPattern` y `excludeFilePattern` (expresiones regulares sin flags, sin distinguir mayúsculas; una regex inválida falla al cargar). Los valores por defecto son la convención del área (`components`, `btn|button`, `^button`). La extensión de VS Code no lee este bloque: aplica esos mismos defaults.
+
 ## Arquitectura
 
 - `src/core/`: indexadores y reglas agnosticos (VariableIndex, ClassIndex, tokenRules) sin imports de VS Code. El adaptador a VS Code vive en `src/vscode/`, fuera del core; `check:core` no admite excepciones.

@@ -2,7 +2,7 @@ import { DiagnosticType, VariableIndex } from '@/types';
 import { CoreFinding, CoreSeverity, CoreTextDocument, createCoreRange, positionAtOffset } from '../types';
 import type { ParserVarsense } from '../puertoParsers';
 import { enmascararComentarios } from './enmascararComentarios';
-import { analyzeEstiloBotonEspecifico } from './reglasBotonCss';
+import { analyzeEstiloBotonEspecifico, VarsenseEstiloBotonConfig } from './reglasBotonCss';
 
 export interface VarsenseHardcodedConfig {
     habilitado: boolean;
@@ -31,6 +31,7 @@ export interface VarsenseDocumentAnalysisConfig {
         unused: { habilitado: boolean; severidad: CoreSeverity; excluirTokens?: string[] };
         crossFile: { habilitado: boolean; severidad: CoreSeverity };
     };
+    estiloBoton: VarsenseEstiloBotonConfig;
 }
 
 const REACT_LANGUAGE_IDS = new Set(['typescriptreact', 'javascriptreact']);
@@ -301,7 +302,7 @@ export function analyzeVarsenseDocument(
     if (CSS_LANGUAGE_IDS.has(document.languageId)) {
         return filtrar([
             ...analyzeCssDocument(document, variableIndex, config, parsers),
-            ...analyzeEstiloBotonEspecifico(document),
+            ...analyzeEstiloBotonEspecifico(document, config.estiloBoton),
         ]);
     }
 
