@@ -4,7 +4,8 @@
  */
 
 import * as vscode from 'vscode';
-import { DiagnosticProvider, DiagnosticCodeActionProvider } from '@/providers/diagnosticProvider';
+import { DiagnosticProvider } from '@/providers/diagnosticProvider';
+import { DiagnosticCodeActionProvider } from '@/providers/diagnosticCodeActions';
 import { crearHoverProvider } from '@/providers/hoverProvider';
 import { crearCompletionProvider } from '@/providers/completionProvider';
 import { VariableScanner } from '@/services/variableScanner';
