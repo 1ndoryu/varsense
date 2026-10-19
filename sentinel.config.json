@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "mode": "observe",
+  "mode": "enforce",
   "project": {
     "primaryBranch": "main"
   },
