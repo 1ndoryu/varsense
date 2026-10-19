@@ -11,7 +11,7 @@
     },
     "engines": {
         "vscode": "^1.85.0",
-        "node": ">=18"
+        "node": ">=20.19"
     },
     "categories": [
         "Linters",
@@ -350,9 +350,10 @@
         "smoke:lsp": "node scripts/smoke-lsp-stdio.mjs",
         "smoke:persistent-index": "node scripts/smoke-persistent-index.mjs",
         "smoke:tramo4": "node scripts/smoke-tramo4.mjs",
-        "pretest": "npm run compile && npm run compile:tests && npm run lint && npm run check:core && npm run smoke:lsp",
+        "pretest": "npm run compile && npm run compile:tests && npm run lint && npm run check:core && npm run smoke:lsp && npm run test:unit",
         "lint": "eslint src --ext ts",
         "lint:fix": "eslint src --ext ts --fix",
+        "test:unit": "node scripts/test-unit.mjs",
         "test": "node ./dist/test/runTest.js",
         "package": "vsce package"
     },

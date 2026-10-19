@@ -31,8 +31,17 @@ interface EntryWithFindings {
     findings: CoreFinding[];
 }
 
+/* Sube desde __dirname hasta hallar fixtures/equivalence: la profundidad cambia entre tsc y el empaquetado de test:unit */
 function fixturePath(name: string): string {
-    return path.resolve(__dirname, '../../..', 'fixtures', 'equivalence', name);
+    let dir = __dirname;
+    while (!fs.existsSync(path.join(dir, 'fixtures', 'equivalence'))) {
+        const padre = path.dirname(dir);
+        if (padre === dir) {
+            throw new Error('No se encuentra fixtures/equivalence desde ' + __dirname);
+        }
+        dir = padre;
+    }
+    return path.join(dir, 'fixtures', 'equivalence', name);
 }
 
 function loadExpected(rootPath: string): ExpectedFinding[] {

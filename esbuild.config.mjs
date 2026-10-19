@@ -1,35 +1,5 @@
 import * as esbuild from 'esbuild';
-import * as path from 'path';
-import * as fs from 'fs';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-/*
- * Plugin para resolver aliases @/* -> src/*
- * Equivalente a los paths de tsconfig.json para esbuild
- */
-const aliasPlugin = {
-    name: 'alias-path',
-    setup(build) {
-        build.onResolve({ filter: /^@\// }, (args) => {
-            const relativePath = args.path.replace(/^@\//, 'src/');
-            const basePath = path.resolve(__dirname, relativePath);
-
-            const candidates = [
-                `${basePath}.ts`,
-                path.join(basePath, 'index.ts'),
-            ];
-
-            for (const candidate of candidates) {
-                if (fs.existsSync(candidate)) {
-                    return { path: candidate };
-                }
-            }
-            return { path: basePath };
-        });
-    }
-};
+import { aliasPlugin } from './scripts/alias-esbuild.mjs';
 
 const isWatch = process.argv.includes('--watch');
 const isMinify = process.argv.includes('--minify');
