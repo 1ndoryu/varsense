@@ -3,6 +3,9 @@
 
 import * as vscode from 'vscode';
 import { CoreFinding, CoreRange, CoreSeverity, CoreTextDocument, createCoreDocument } from './types';
+import { VarsenseDocumentAnalysisConfig } from './analyzeDocument';
+import { buildAnalysisConfig } from './config';
+import { DiagnosticSeverityValue, ExtensionConfig } from '@/types';
 import { buscarArchivos } from '@/utils/fileUtils';
 import { DocumentProvider, FileWatcher, FileWatcherCallbacks, FileWatcherProvider, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
 
@@ -90,4 +93,40 @@ export function findingToDiagnostic(finding: CoreFinding): vscode.Diagnostic {
   diagnostic.source = finding.source;
   diagnostic.code = finding.ruleId;
   return diagnostic;
+}
+
+/*
+ * Severidad numérica de la extensión (valores de vscode.DiagnosticSeverity) a la del core
+ */
+const SEVERIDAD_CORE: Record<DiagnosticSeverityValue, CoreSeverity> = {
+  0: 'error',
+  1: 'warning',
+  2: 'information',
+  3: 'hint',
+};
+
+/*
+ * Traduce la configuración de la extensión al formato de análisis del core.
+ * analyzeVarsenseDocument no lee los tokens: van con los defaults del core.
+ */
+export function configuracionAnalisisDesdeExtension(config: ExtensionConfig): VarsenseDocumentAnalysisConfig {
+  const { deteccionHardcoded: hardcoded, deteccionInline: inline, deteccionPropiedadesProhibidas: prohibidas } = config;
+  return {
+    hardcoded: {
+      habilitado: hardcoded.habilitado,
+      severidad: SEVERIDAD_CORE[hardcoded.severidad],
+      propiedades: hardcoded.propiedades,
+      valoresPermitidos: hardcoded.valoresPermitidos,
+    },
+    inline: {
+      habilitado: inline.habilitado,
+      severidad: SEVERIDAD_CORE[inline.severidad],
+    },
+    bannedProperties: {
+      habilitado: prohibidas.habilitado,
+      severidad: SEVERIDAD_CORE[prohibidas.severidad],
+      propiedades: prohibidas.propiedades,
+    },
+    tokens: buildAnalysisConfig({}).tokens,
+  };
 }

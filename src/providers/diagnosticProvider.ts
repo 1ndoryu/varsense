@@ -8,25 +8,18 @@
 
 import * as vscode from 'vscode';
 import {DiagnosticType} from '@/types';
-import {ParseResult} from '@/types';
-import {parsearDocumento} from '@/parsers/cssParser';
 import {VariableScanner} from '@/services/variableScanner';
 import {obtenerResolver} from '@/services/variableResolver';
 import {obtenerConfigService} from '@/services/configService';
 import {esLenguajeSoportado, debounce, coincideConPatron} from '@/utils/fileUtils';
-import { documentFromVsCode, rangeToVsCodeRange } from '@/core/vscodeAdapter';
+import { analyzeVarsenseDocument } from '@/core/analyzeDocument';
+import { CoreFinding } from '@/core/types';
+import { configuracionAnalisisDesdeExtension, documentFromVsCode, findingToDiagnostic } from '@/core/vscodeAdapter';
 
 /*
  * Lenguajes React para detección de inline CSS
  */
 const LENGUAJES_REACT = ['typescriptreact', 'javascriptreact'];
-
-/*
- * [124A-AUDIT1] Regex precompiladas para detección de inline CSS React.
- * Antes se recreaban en cada llamada a detectarInlineCssReact (por keystroke).
- */
-const REGEX_STYLE_OBJ = /style\s*=\s*\{\s*\{/g;
-const REGEX_STYLE_VAR = /style\s*=\s*\{(?!\s*\{)([^}]+)\}/g;
 
 /*
  * Nombre de la colección de diagnósticos
@@ -67,55 +60,6 @@ interface DiagnosticMetadata {
 }
 
 const diagnosticMetadataMap = new WeakMap<vscode.Diagnostic, DiagnosticMetadata>();
-
-/*
- * Parsea comentarios de supresión VarSense en el documento.
- * Soporta:
- *   /* varsense-disable-line *\/    → suprime diagnósticos en esa línea
- *   /* varsense-disable-next-line *\/ → suprime diagnósticos en la línea siguiente
- *   /* varsense-disable *\/  ...  /* varsense-enable *\/ → suprime un bloque
- *
- * El orden de las comprobaciones importa: las variantes más específicas
- * (disable-next-line, disable-line) se evalúan antes que la genérica (disable)
- * para evitar coincidencias parciales.
- */
-function parsearSupresiones(documento: vscode.TextDocument): Set<number> {
-    const lineasSuprimidas = new Set<number>();
-    const totalLineas = documento.lineCount;
-    let enBloqueDeshabilitado = false;
-
-    for (let i = 0; i < totalLineas; i++) {
-        const textoLinea = documento.lineAt(i).text;
-
-        if (textoLinea.includes('varsense-disable-next-line')) {
-            if (i + 1 < totalLineas) {
-                lineasSuprimidas.add(i + 1);
-            }
-            continue;
-        }
-
-        if (textoLinea.includes('varsense-enable')) {
-            enBloqueDeshabilitado = false;
-            continue;
-        }
-
-        if (textoLinea.includes('varsense-disable-line')) {
-            lineasSuprimidas.add(i);
-            continue;
-        }
-
-        if (textoLinea.includes('varsense-disable')) {
-            enBloqueDeshabilitado = true;
-            continue;
-        }
-
-        if (enBloqueDeshabilitado) {
-            lineasSuprimidas.add(i);
-        }
-    }
-
-    return lineasSuprimidas;
-}
 
 /*
  * Provider de diagnósticos
@@ -212,7 +156,9 @@ export class DiagnosticProvider {
     }
 
     /*
-     * Actualiza diagnósticos para un documento específico
+     * Actualiza diagnósticos para un documento específico.
+     * El análisis lo hace el core (analyzeVarsenseDocument), igual que CLI y LSP:
+     * aquí solo se aplican las puertas de la extensión y se traducen los hallazgos.
      */
     public async actualizarDiagnosticos(documento: vscode.TextDocument): Promise<void> {
         const configService = obtenerConfigService();
@@ -228,176 +174,38 @@ export class DiagnosticProvider {
             return;
         }
 
-        /* Si es un archivo React, solo buscar inline CSS */
-        if (LENGUAJES_REACT.includes(documento.languageId)) {
-            const diagnosticosInline = this.detectarInlineCssReact(documento);
-            this._coleccion.set(documento.uri, diagnosticosInline);
-            return;
-        }
-
-        /* Asegurar que el índice de variables global esté actualizado */
-        await VariableScanner.obtenerInstancia().escanear();
-
-        /* Parsear documento actual */
-        const resultadoParse = parsearDocumento(documentFromVsCode(documento), {
-            debeVerificarPropiedad: propiedad => configService.deberiVerificarPropiedad(propiedad),
-            esValorPermitido: valor => configService.esValorPermitido(valor),
-            propiedadesProhibidas: configService.obtenerConfigProhibidas(),
-        });
-        const diagnosticos: vscode.Diagnostic[] = [];
-
-        /* 1. Detectar variables no definidas */
-        const diagnosticosVariables = this.detectarVariablesNoDefinidas(resultadoParse);
-        diagnosticos.push(...diagnosticosVariables);
-
-        /* 2. Detectar valores hardcodeados */
-        // Usamos los detectados por el parser directamente
-        for (const hardcoded of resultadoParse.valoresHardcoded) {
-            const severidad = configService.obtenerConfigHardcoded().severidad;
-            const diagnostic = new vscode.Diagnostic(rangeToVsCodeRange(hardcoded.rango), `Valor hardcodeado '${hardcoded.valor}' en '${hardcoded.propiedad}' - considera usar una variable CSS`, severidad);
-            diagnostic.code = DiagnosticType.ValorHardcoded;
-            diagnostic.source = 'CSS Vars Validator';
-
-            diagnosticMetadataMap.set(diagnostic, {
-                propiedad: hardcoded.propiedad,
-                valor: hardcoded.valor
-            });
-
-            diagnosticos.push(diagnostic);
-        }
-
-        /* 3. Detectar propiedades prohibidas (ej: box-shadow) */
-        for (const prohibida of resultadoParse.propiedadesProhibidas) {
-            const severidad = configService.obtenerConfigProhibidas().severidad;
-            const diagnostic = new vscode.Diagnostic(rangeToVsCodeRange(prohibida.rango), `Propiedad prohibida '${prohibida.propiedad}' — eliminar o reemplazar con alternativa permitida`, severidad);
-            diagnostic.code = DiagnosticType.PropiedadProhibida;
-            diagnostic.source = 'CSS Vars Validator';
-            diagnosticos.push(diagnostic);
-        }
-
-        /* 4. Detectar estilos de botón específicos de componente */
-        const diagnosticosBoton = this.detectarEstilosBotonEspecificos(documento);
-        diagnosticos.push(...diagnosticosBoton);
-
-        /* Filtrar diagnósticos suprimidos por comentarios varsense-disable */
-        const lineasSuprimidas = parsearSupresiones(documento);
-        const diagnosticosFiltrados = lineasSuprimidas.size > 0
-            ? diagnosticos.filter(d => !lineasSuprimidas.has(d.range.start.line))
-            : diagnosticos;
-
-        this._coleccion.set(documento.uri, diagnosticosFiltrados);
-    }
-
-    /*
-     * Detecta clases CSS en archivos de componentes que reimplementan estilos de botón.
-     * Los componentes deben usar <Button variante=... tamano=...> en vez de clases propias.
-     *
-     * Criterio: archivo CSS dentro de components/ con una regla cuyo selector contiene
-     * 'btn' o 'button' (case-insensitive) Y define ≥2 propiedades estructurales de botón
-     * (padding, background, background-color, border, border-radius, cursor).
-     *
-     * Excepción: Button.css (el propio componente base).
-     */
-    private detectarEstilosBotonEspecificos(documento: vscode.TextDocument): vscode.Diagnostic[] {
-        const ruta = documento.uri.fsPath.replace(/\\/g, '/');
-
-        /* Solo CSS dentro de components/, excluir el propio Button.css */
-        if (!ruta.includes('/components/') || !ruta.endsWith('.css')) {
-            return [];
-        }
-        const nombreArchivo = ruta.split('/').pop() ?? '';
-        if (/^button/i.test(nombreArchivo)) {
-            return [];
-        }
-
-        const diagnosticos: vscode.Diagnostic[] = [];
-        const texto = documento.getText();
-
-        /* Eliminar comentarios para evitar falsos positivos.
-         * IMPORTANTE: se preservan las líneas para mantener los índices de línea. */
-        const textoSinComentarios = texto.replace(/\/\*[\s\S]*?\*\//g, match => '\n'.repeat((match.match(/\n/g) ?? []).length));
-
-        /* Construir set de líneas con comentario de desactivación.
-         * Soporta: sentinel-disable EstiloBotonEspecifico
-         *          varsense-disable: EstiloBotonEspecifico
-         *          varsense-disable (desactiva cualquier regla en la siguiente línea) */
-        const lineasConDisable = new Set<number>();
-        const REGEX_DISABLE = /\/\*[^*]*(?:sentinel-disable|varsense-disable)[^*]*\*\//g;
-        let disableMatch: RegExpExecArray | null;
-        while ((disableMatch = REGEX_DISABLE.exec(texto)) !== null) {
-            const lineaComentario = (texto.substring(0, disableMatch.index).match(/\n/g) ?? []).length;
-            /* La desactivación aplica a la clase en la línea siguiente al comentario */
-            lineasConDisable.add(lineaComentario + 1);
-        }
-
-        /* Propiedades que indican implementación manual de botón */
-        const PROPS_BOTON = /\b(padding|background(?:-color)?|border(?:-radius)?|cursor)\s*:/gi;
-        /* Selector que contiene 'btn' o 'button' (case-insensitive) */
-        const REGEX_BTN_SELECTOR = /btn|button/i;
-        /* Regla CSS plana: .clase { ... } — no anidada */
-        const REGEX_REGLA = /(\.[a-zA-Z][a-zA-Z0-9_-]*)(?:[^{,]*?)\{([^}]*)\}/g;
-
-        let match: RegExpExecArray | null;
-        REGEX_REGLA.lastIndex = 0;
-
-        while ((match = REGEX_REGLA.exec(textoSinComentarios)) !== null) {
-            const nombreClase = match[1];
-            const cuerpo = match[2];
-
-            if (!REGEX_BTN_SELECTOR.test(nombreClase)) {
-                continue;
-            }
-
-            /* Contar propiedades estructurales de botón en el bloque */
-            const propsEncontradas = (cuerpo.match(PROPS_BOTON) ?? []).length;
-            if (propsEncontradas < 2) {
-                continue;
-            }
-
-            /* Calcular línea de inicio del selector en el texto original */
-            const posInicio = match.index;
-            const linea = (texto.substring(0, posInicio).match(/\n/g) ?? []).length;
-
-            /* Omitir si hay comentario de desactivación en la línea anterior o la misma */
-            if (lineasConDisable.has(linea) || lineasConDisable.has(linea + 1)) {
-                continue;
-            }
-
-            const rango = new vscode.Range(linea, 0, linea, nombreClase.length);
-
-            const diag = new vscode.Diagnostic(
-                rango,
-                `Estilo de botón específico '${nombreClase}' en componente. Usar <Button variante=... tamano=...> en vez de clase local.`,
-                vscode.DiagnosticSeverity.Warning
-            );
-            diag.code = DiagnosticType.EstiloBotonEspecifico;
-            diag.source = 'CSS Vars Validator';
-            diagnosticos.push(diag);
-        }
-
-        return diagnosticos;
-    }
-
-    /*
-     * Detecta usos de variables CSS que no están definidas
-     */
-    private detectarVariablesNoDefinidas(resultadoParse: ParseResult): vscode.Diagnostic[] {
-        const diagnosticos: vscode.Diagnostic[] = [];
+        /* Solo CSS necesita el índice al día; React no usa variables y no escanea */
         const scanner = VariableScanner.obtenerInstancia();
+        const indice = LENGUAJES_REACT.includes(documento.languageId)
+            ? scanner.obtenerIndice()
+            : await scanner.escanear();
 
-        for (const uso of resultadoParse.usosVariables) {
-            /* Verificar si la variable existe en el índice global */
-            if (!scanner.existeVariable(uso.nombreVariable)) {
-                const diagnostic = new vscode.Diagnostic(rangeToVsCodeRange(uso.rango), `Variable '${uso.nombreVariable}' no está definida`, vscode.DiagnosticSeverity.Error);
+        const hallazgos = analyzeVarsenseDocument(
+            documentFromVsCode(documento),
+            indice,
+            configuracionAnalisisDesdeExtension(configService.obtenerConfig())
+        );
 
-                diagnostic.code = DiagnosticType.VariableNoDefinida;
-                diagnostic.source = 'CSS Vars Validator';
+        this._coleccion.set(documento.uri, hallazgos.map(hallazgo => this.diagnosticoDesdeHallazgo(hallazgo)));
+    }
 
-                diagnosticos.push(diagnostic);
-            }
+    /*
+     * Convierte un hallazgo del core en diagnóstico de VS Code. La fuente debe ser
+     * 'CSS Vars Validator': el quick fix filtra por ella.
+     */
+    private diagnosticoDesdeHallazgo(hallazgo: CoreFinding): vscode.Diagnostic {
+        const diagnostic = findingToDiagnostic(hallazgo);
+        diagnostic.source = 'CSS Vars Validator';
+
+        /* El quick fix de valores hardcodeados necesita propiedad y valor */
+        if (hallazgo.ruleId === DiagnosticType.ValorHardcoded) {
+            diagnosticMetadataMap.set(diagnostic, {
+                propiedad: String(hallazgo.metadata?.property ?? ''),
+                valor: String(hallazgo.metadata?.value ?? ''),
+            });
         }
 
-        return diagnosticos;
+        return diagnostic;
     }
 
     /*
@@ -525,81 +333,6 @@ export class DiagnosticProvider {
             totalArchivosConProblemas: archivosConProblemas.length,
             archivosConProblemas
         };
-    }
-
-    /*
-     * Detecta uso de CSS inline (style={{ }}) en archivos React TSX/JSX
-     */
-    private detectarInlineCssReact(documento: vscode.TextDocument): vscode.Diagnostic[] {
-        const configService = obtenerConfigService();
-        const configInline = configService.obtenerConfigInline();
-
-        if (!configInline.habilitado) {
-            return [];
-        }
-
-        const diagnosticos: vscode.Diagnostic[] = [];
-        const texto = documento.getText();
-
-        /* Patrón 1: style={{ ... }} — objeto literal inline */
-        REGEX_STYLE_OBJ.lastIndex = 0;
-        let match: RegExpExecArray | null;
-
-        while ((match = REGEX_STYLE_OBJ.exec(texto)) !== null) {
-            /* Encontrar el cierre correspondiente */
-            let profundidad = 2; /* ya abrimos {{ */
-            let i = match.index + match[0].length;
-
-            while (i < texto.length && profundidad > 0) {
-                if (texto[i] === '{') {
-                    profundidad++;
-                } else if (texto[i] === '}') {
-                    profundidad--;
-                }
-                i++;
-            }
-
-            const inicio = documento.positionAt(match.index);
-            const fin = documento.positionAt(i);
-            const rango = new vscode.Range(inicio, fin);
-
-            const diagnostic = new vscode.Diagnostic(
-                rango,
-                'CSS inline detectado — usa clases CSS con variables en vez de style={{}}',
-                configInline.severidad
-            );
-            diagnostic.code = DiagnosticType.CssInlineReact;
-            diagnostic.source = 'CSS Vars Validator';
-            diagnosticos.push(diagnostic);
-        }
-
-        /* Patrón 2: style={variable} — variable que contiene estilos */
-        REGEX_STYLE_VAR.lastIndex = 0;
-
-        while ((match = REGEX_STYLE_VAR.exec(texto)) !== null) {
-            /* Verificar que no sea un ternario o expresión compleja con className */
-            const contenido = match[1].trim();
-
-            /* Saltar si ya fue capturado por el patrón 1 (doble llave) */
-            if (contenido.startsWith('{')) {
-                continue;
-            }
-
-            const inicio = documento.positionAt(match.index);
-            const fin = documento.positionAt(match.index + match[0].length);
-            const rango = new vscode.Range(inicio, fin);
-
-            const diagnostic = new vscode.Diagnostic(
-                rango,
-                `CSS inline detectado (style={${contenido}}) — usa clases CSS con variables`,
-                configInline.severidad
-            );
-            diagnostic.code = DiagnosticType.CssInlineReact;
-            diagnostic.source = 'CSS Vars Validator';
-            diagnosticos.push(diagnostic);
-        }
-
-        return diagnosticos;
     }
 
     /*
