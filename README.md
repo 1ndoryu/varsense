@@ -45,7 +45,7 @@ La severidad es independiente y configurable; los tokens se resuelven sobre la c
 
 El binario `varsense-lsp` publica diagnostics desde el mismo core que la extension y el CLI. Para integracion en Zed, usa `zed: install dev extension` y selecciona `integrations/zed`; el adaptador busca el LSP en este orden: variable de entorno `VARSENSE_LSP_PATH`, luego `varsense-lsp` en el PATH, y por último el `dist/` del checkout si Zed se abrió desde él.
 
-Límites: un archivo de más de 2 MiB no se analiza y recibe un aviso informativo; el análisis de un documento dura como máximo 10 s (si no, se publica un error en el documento) y se muestran como máximo 500 diagnósticos por documento. Si el documento cambia durante el análisis, su resultado se descarta.
+Límites: el tope de 2 MiB por archivo (ver CLI) aplica aquí con un aviso informativo; el análisis de un documento dura como máximo 10 s (si no, se publica un error en el documento) y se muestran como máximo 500 diagnósticos por documento. Si el documento cambia durante el análisis, su resultado se descarta.
 
 ## Instalacion
 
@@ -58,12 +58,13 @@ npm run smoke:lsp    # levanta el server stdio y verifica publishDiagnostics
 ```
 
 Otros scripts: `npm run compile:tests` (compila `dist/` y los tests), `npm run test:unit` (tests sin VS Code, con mocha; `npm test` ejecuta los de VS Code y descarga VS Code la primera vez), `npm run lint` (ESLint sobre `src`), `npm run check:zed` (cargo check del adaptador Zed, requiere el target `wasm32-wasip2`), `npm run smoke:persistent-index` y `npm run smoke:tramo4` (comprobaciones de índice persistente y del tramo 4).
+En Linux, `npm test` necesita un servidor gráfico: `xvfb-run -a npm test` (igual que el CI, `.github/workflows/ci.yml`).
 
 Tras cambiar código, `npm run compile` regenera `dist/`. Los scripts `cli` y `lsp` no compilan: ejecutan `dist/` tal cual.
 Para el comando `varsense` desde el checkout: `npm link` (necesario para tener `varsense` en el PATH), o sin enlazar, `node dist/cli/index.js <comando>`. Si tras `npm link` `varsense` no se encuentra, el directorio de binarios globales de npm (`npm prefix -g` + `/bin`, o `\bin` en Windows) no está en el PATH: añádelo o usa la ruta directa.
 Durante `npm install` pueden aparecer avisos `npm warn install-scripts` y avisos de dependencias obsoletas (`deprecated`); no impiden la instalación.
 
-Para instalar una extensión ya empaquetada en `.vsix`, sin compilar nada: `code --install-extension <ruta>.vsix`.
+Para instalar una extensión ya empaquetada en `.vsix`, sin compilar nada: `code --install-extension <ruta>.vsix`. El `.vsix` lo genera el mantenedor con `npm run package` (`vsce package`); no forma parte de la instalación del CLI.
 
 ## Configuracion
 
@@ -89,4 +90,4 @@ separado); en `unused`, los tokens consumidos fuera del alcance analizado.
 
 - `src/core/`: indexadores y reglas agnosticos (VariableIndex, ClassIndex, tokenRules) sin imports de VS Code. El adaptador a VS Code vive en `src/vscode/`, fuera del core; `check:core` no admite excepciones.
 - `src/cli/`, `src/lsp/`, `src/extension.ts`: adapters de presentacion sobre el mismo core.
-- `src/test/suite/core/coreContracts.test.ts`: paridad core/CLI/LSP con fixtures versionadas.
+- `src/test/suite/core/coreContracts*.test.ts` (3 partes): paridad core/CLI/LSP con fixtures versionadas.

@@ -26,7 +26,7 @@ desde source queda como **modo de desarrollo explícito**.
      "capabilities": ["all", "scan", "orphan-classes", "index-dir", "files-from"],
      "sha256": "<sha256 del artifact comprimido>",
      "platform": "win32-x64",
-     "node": ">=18"
+     "node": ">=20.19"
    }
    ```
 
