@@ -19,11 +19,25 @@ import { finTemplateLiteral } from '../plantillas/plantillas';
  * INTERNA `clases` arranca a profundidad 1 y corta en su propio ';' sin ser
  * tragada. Antes, el salto tras el corte ocultaba las declaraciones anidadas
  * y su familia de clases (boton--, 20 FPs en Boton.tsx de PT). */
-export function estadoScanning(source: string, indice: number): { profundidad: number; enString: boolean } {
+/* Estado de brackets y comillas en cada posición de la última fuente pedida.
+ * escanearDeclaraciones llama a estadoScanning una vez por declaración sobre
+ * la misma fuente: sin memo, cada llamada recorría la fuente desde 0. */
+let fuenteEstados: string | null = null;
+let profundidadesMemo = new Int32Array(0);
+let enCadenaMemo = new Uint8Array(0);
+
+function calcularEstados(source: string): void {
+    if (source === fuenteEstados) {
+        return;
+    }
+    const profundidades = new Int32Array(source.length + 1);
+    const enCadena = new Uint8Array(source.length + 1);
     let profundidad = 0;
     let quote = '';
     let escaped = false;
-    for (let cursor = 0; cursor < indice; cursor++) {
+    for (let cursor = 0; cursor < source.length; cursor++) {
+        profundidades[cursor] = profundidad;
+        enCadena[cursor] = quote ? 1 : 0;
         const current = source[cursor];
         if (quote) {
             if (escaped) {escaped = false;}
@@ -35,7 +49,18 @@ export function estadoScanning(source: string, indice: number): { profundidad: n
         if (current === '(' || current === '[' || current === '{') {profundidad++; continue;}
         if (current === ')' || current === ']' || current === '}') {profundidad--; continue;}
     }
-    return { profundidad, enString: Boolean(quote) };
+    profundidades[source.length] = profundidad;
+    enCadena[source.length] = quote ? 1 : 0;
+    fuenteEstados = source;
+    profundidadesMemo = profundidades;
+    enCadenaMemo = enCadena;
+}
+
+export function estadoScanning(source: string, indice: number): { profundidad: number; enString: boolean } {
+    calcularEstados(source);
+    /* Más allá del final no cambia nada: el estado es el del último carácter */
+    const posicion = Math.max(0, Math.min(indice, source.length));
+    return { profundidad: profundidadesMemo[posicion], enString: enCadenaMemo[posicion] === 1 };
 }
 
 export function escanearDeclaraciones(source: string): Array<{ nombre: string; valor: string; indice: number }> {
