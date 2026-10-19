@@ -1,0 +1,9 @@
+{
+  "excludePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/out/**",
+    "**/.vscode-test/**",
+    "**/fixtures/**"
+  ]
+}
