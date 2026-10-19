@@ -49,7 +49,7 @@ Límites: un archivo de más de 2 MiB no se analiza y recibe un aviso informativ
 
 ## Instalacion
 
-Requiere Node.js >= 20.19 (la suite de tests usa mocha 12). Verificado con Node 24.
+Requiere Node.js >= 20.19 (la suite de tests usa mocha 12). Instalación limpia probada con Node 22.23.
 
 ```
 npm install          # instala y compila dist/ (script prepare)
@@ -57,11 +57,11 @@ npm run check:core   # falla si src/core importa vscode fuera del adapter
 npm run smoke:lsp    # levanta el server stdio y verifica publishDiagnostics
 ```
 
-Otros scripts: `npm run compile:tests` (compila `dist/` y los tests), `npm run test:unit` (tests sin VS Code, con mocha; `npm test` ejecuta los de VS Code), `npm run lint` (ESLint sobre `src`), `npm run check:zed` (cargo check del adaptador Zed, requiere el target `wasm32-wasip2`), `npm run smoke:persistent-index` y `npm run smoke:tramo4` (comprobaciones de índice persistente y del tramo 4).
+Otros scripts: `npm run compile:tests` (compila `dist/` y los tests), `npm run test:unit` (tests sin VS Code, con mocha; `npm test` ejecuta los de VS Code y descarga VS Code la primera vez), `npm run lint` (ESLint sobre `src`), `npm run check:zed` (cargo check del adaptador Zed, requiere el target `wasm32-wasip2`), `npm run smoke:persistent-index` y `npm run smoke:tramo4` (comprobaciones de índice persistente y del tramo 4).
 
 Tras cambiar código, `npm run compile` regenera `dist/`. Los scripts `cli` y `lsp` no compilan: ejecutan `dist/` tal cual.
 Para el comando `varsense` desde el checkout: `npm link` (necesario para tener `varsense` en el PATH), o sin enlazar, `node dist/cli/index.js <comando>`.
-Durante `npm install` pueden aparecer avisos `npm warn install-scripts`; no impiden la instalación.
+Durante `npm install` pueden aparecer avisos `npm warn install-scripts` y avisos de dependencias obsoletas (`deprecated`); no impiden la instalación.
 
 Para instalar una extensión ya empaquetada en `.vsix`, sin compilar nada: `code --install-extension <ruta>.vsix`.
 
