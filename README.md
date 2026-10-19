@@ -69,6 +69,15 @@ Para instalar una extensión ya empaquetada en `.vsix`, sin compilar nada: `code
 
 `varsense.config.json` valida estrictamente sus claves; las desconocidas fallan. Permite severidades, allowedValues para hardcoded detection, exclusiones y la convencion de tokens del proyecto.
 
+Cada entorno lee su propia fuente, y las dos se documentan aquí para no confundirlas:
+
+| Entorno | Qué lee | Ejemplo |
+|---|---|---|
+| CLI y LSP (Zed u otro cliente LSP) | `varsense.config.json` del workspace (o `--config`) | `tokenDetection`, exclusiones |
+| Extensión de VS Code | ajustes `cssVarsValidator.*` de VS Code | `cssVarsValidator.excludePatterns`, `cssVarsValidator.carrierPrefixes` |
+
+Son dos mecanismos equivalentes para la misma funcionalidad, no un único archivo compartido: un cambio de convención en el JSON no altera los ajustes de la extensión y viceversa.
+
 `tokenDetection.duplicate.excludeTokens` y `tokenDetection.unused.excludeTokens`
 aceptan una lista de nombres de token (con o sin el prefijo `--`) que la regla
 correspondiente ignora. Sirve para lo que la regla no puede deducir sola: en
