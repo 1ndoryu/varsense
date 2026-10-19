@@ -5,7 +5,7 @@ Orden de ejecución: de arriba abajo. Cada bloque: probar en la 89, documentar, 
 
 ## Pendiente
 
-- [ ] **V4 Dos pipelines de análisis.** La extensión usa `providers/diagnosticProvider.ts` + `parsers/cssParser.ts`; CLI y LSP usan `core/analyzeDocument.ts`. Unificar en un solo pipeline.
+- [ ] **V4 Dos pipelines de análisis.** La extensión usa `providers/diagnosticProvider.ts` + `parsers/cssParser.ts`; CLI y LSP usan `core/analyzeDocument.ts`. Unificar en un solo pipeline. Avance: V4.1 hecho (regla de botón en el core, `tareas-2026-10-19.md`); falta V4.2 (la extensión delega en el core).
 - [ ] **V5 Agnosticismo.** `core/classIndexBuilder.ts:721-726` fija el prefijo `clase*` del área; comentarios citan NAKOMI y `PanelRecordatorios.tsx`. `services/configService.ts:55-65` trae palabras clave en español por defecto. Pasar a configuración.
 - [ ] **V6 Arquitectura.** `core/classIndexBuilder.ts` tiene 2974 líneas: partirlo por responsabilidad. Eliminar duplicación `utils/colorUtils.ts` vs `colorConversion`/`colorParsing`.
 - [ ] **V7 Límites.** No hay timeout ni tamaño máximo de archivo en CLI ni LSP. Añadirlos y acotar la salida.

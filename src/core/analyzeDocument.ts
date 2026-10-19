@@ -3,6 +3,7 @@ import { parsearDocumento } from '@/parsers/cssParser';
 import { REGEX_ATRIBUTO_ESTILO, clavesDeExpresionEstilo, esSoloDefinicionTokens, finExpresionEstilo } from '@/parsers/estiloInline';
 import { CoreFinding, CoreSeverity, CoreTextDocument, createCoreRange, positionAtOffset } from './types';
 import { enmascararComentarios } from './enmascararComentarios';
+import { analyzeEstiloBotonEspecifico } from './reglasBotonCss';
 
 export interface VarsenseHardcodedConfig {
     habilitado: boolean;
@@ -35,7 +36,7 @@ export interface VarsenseDocumentAnalysisConfig {
 
 const REACT_LANGUAGE_IDS = new Set(['typescriptreact', 'javascriptreact']);
 const SCRIPT_LANGUAGE_IDS = new Set(['typescript', 'javascript']);
-const CSS_LANGUAGE_IDS = new Set(['css', 'scss', 'less']);
+const CSS_LANGUAGE_IDS = new Set(['css', 'scss', 'sass', 'less', 'vue', 'html']);
 const REGEX_SCRIPT_INLINE_STYLE = /(?:\.style\.[a-zA-Z][\w]*\s*=|\.style\.setProperty\s*\(|\.setAttribute\s*\(\s*['"]style['"])/g;
 
 function shouldCheckProperty(config: VarsenseHardcodedConfig, property: string): boolean {
@@ -294,7 +295,10 @@ export function analyzeVarsenseDocument(
             : hallazgos;
 
     if (CSS_LANGUAGE_IDS.has(document.languageId)) {
-        return filtrar(analyzeCssDocument(document, variableIndex, config));
+        return filtrar([
+            ...analyzeCssDocument(document, variableIndex, config),
+            ...analyzeEstiloBotonEspecifico(document),
+        ]);
     }
 
     if (REACT_LANGUAGE_IDS.has(document.languageId)) {
