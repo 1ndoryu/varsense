@@ -33,3 +33,7 @@ build/
 
 # Informe generado por el propio VarSense
 .varsense-report.md
+
+# Trabajo interno (no se publica)
+roadmap.md
+Agente/completados/
