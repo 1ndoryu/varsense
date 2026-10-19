@@ -17,6 +17,7 @@ import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../co
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { parserCssVarsense } from '../../parsers';
 
 class MemoryWorkspaceProvider implements WorkspaceFileProvider, DocumentProvider {
   constructor(
@@ -127,7 +128,7 @@ suite('VarSense editor-agnostic core contracts', () => {
         content: ':root { --colorPrincipal: #fff; }',
       },
     });
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
 
@@ -143,7 +144,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     }, () => {
       token.isCancellationRequested = true;
     });
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     await assert.rejects(
       builder.build({ patterns: ['**/*.css'], exclude: [], maxConcurrent: 1, token }),
@@ -980,10 +981,10 @@ suite('VarSense editor-agnostic core contracts', () => {
         ');',
       ].join('\n'),
     });
-    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
 
     assert.strictEqual(hallazgos.length, 0);
   });
@@ -1000,10 +1001,10 @@ suite('VarSense editor-agnostic core contracts', () => {
         ');',
       ].join('\n'),
     });
-    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
 
     assert.strictEqual(hallazgos.length, 0);
   });
@@ -1019,10 +1020,10 @@ suite('VarSense editor-agnostic core contracts', () => {
         'const B = () => <div style={{ width: 11 }} />;',
       ].join('\n'),
     });
-    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
 
     assert.strictEqual(hallazgos.length, 0);
   });
@@ -1039,10 +1040,10 @@ suite('VarSense editor-agnostic core contracts', () => {
         'const B = () => <div style={{ width: 11 }} />;',
       ].join('\n'),
     });
-    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
 
     assert.strictEqual(hallazgos.length, 1);
     assert.strictEqual(hallazgos[0].ruleId, 'cssInlineReact');
@@ -1067,7 +1068,7 @@ suite('VarSense editor-agnostic core contracts', () => {
         content: ':root { --ptr-translateY: 0; }',
       },
     });
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
     const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
@@ -1087,7 +1088,7 @@ suite('VarSense editor-agnostic core contracts', () => {
         content: ':root { --dashboard-fondoPrincipal: #000000; --dashboard-fondoSecundario: #000000; }',
       },
     });
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
     const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
@@ -1115,7 +1116,7 @@ suite('VarSense editor-agnostic core contracts', () => {
         ].join('\n'),
       },
     });
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
     const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
@@ -1137,7 +1138,7 @@ suite('VarSense editor-agnostic core contracts', () => {
         content: ':root { --aliasUno: #ffffff; --aliasDos: #ffffff; }',
       },
     });
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
     const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
@@ -1161,7 +1162,7 @@ suite('VarSense editor-agnostic core contracts', () => {
         content: '.menu { --menuPosTop: 0px; --menuPosLeft: 0px; --menuAncho: 0; --menuAlto: 0; }',
       },
     });
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
     const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
@@ -1183,7 +1184,7 @@ suite('VarSense editor-agnostic core contracts', () => {
         content: ':root { --texto: #000000; --borde: var(--texto); --foco: var(--texto); --aliasUno: #111111; --aliasDos: #111111; }',
       },
     });
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
     const objetos = Array.from(result.variablesPorArchivo.entries()).map(([file, variables]) => ({
@@ -1213,10 +1214,10 @@ suite('VarSense editor-agnostic core contracts', () => {
         'const C = () => <div style={{ "--token": valor, color: tema }} />;',
       ].join('\n'),
     });
-    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
     const inline = hallazgos.filter(hallazgo => hallazgo.ruleId === 'cssInlineReact');
 
     assert.strictEqual(inline.length, 1);
@@ -1363,12 +1364,12 @@ suite('VarSense editor-agnostic core contracts', () => {
       languageId: 'css',
       content: '.boton { color: #ff0000; }',
     });
-    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const porDefecto = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+    const porDefecto = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
     const enError = analyzeVarsenseDocument(
-      documento, indice, buildAnalysisConfig({ hardcodedDetection: { severity: 'error' } })
+      documento, indice, buildAnalysisConfig({ hardcodedDetection: { severity: 'error' } }), parserCssVarsense
     );
     const hardcodedDefecto = porDefecto.filter(hallazgo => hallazgo.ruleId === 'valorHardcoded');
     const hardcodedError = enError.filter(hallazgo => hallazgo.ruleId === 'valorHardcoded');
@@ -1393,10 +1394,10 @@ suite('VarSense editor-agnostic core contracts', () => {
         'const B = () => <div style={estilos} />;',
       ].join('\n'),
     });
-    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
 
     assert.strictEqual(hallazgos.length, 2);
     assert.ok(hallazgos.every(hallazgo => hallazgo.ruleId === 'cssInlineReact'));
@@ -1414,10 +1415,10 @@ suite('VarSense editor-agnostic core contracts', () => {
         'const Otro = ({ estilo }: { estilo: React.CSSProperties }) => <div style={ { color: estilo.color } } />;',
       ].join('\n'),
     });
-    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
 
     assert.strictEqual(hallazgos.length, 1);
     assert.strictEqual(hallazgos[0].range.start.line, 1);
@@ -1439,12 +1440,12 @@ suite('VarSense editor-agnostic core contracts', () => {
         'export const x = 1;',
       ].join('\n'),
     });
-    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}));
+    const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const porDefecto = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}));
+    const porDefecto = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
     const explicita = analyzeVarsenseDocument(
-      documento, indice, buildAnalysisConfig({ todoProseDetection: { enabled: false } })
+      documento, indice, buildAnalysisConfig({ todoProseDetection: { enabled: false } }), parserCssVarsense
     );
 
     assert.strictEqual(porDefecto.length, 0);
@@ -1465,7 +1466,7 @@ suite('VarSense editor-agnostic core contracts', () => {
         content: ':root { --color-bordes: #e5e5e5; }',
       },
     });
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
     const hallazgos = analyzeCrossFileDuplicates(result.variablesPorArchivo, buildAnalysisConfig({}));
@@ -1491,7 +1492,7 @@ suite('VarSense editor-agnostic core contracts', () => {
         content: ':root { --dashboard-radioMinimo: 0; }',
       },
     });
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
     const hallazgos = analyzeCrossFileDuplicates(result.variablesPorArchivo, buildAnalysisConfig({}));
@@ -1512,7 +1513,7 @@ suite('VarSense editor-agnostic core contracts', () => {
         content: ':root { --color-fondo: #fff; }',
       },
     });
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
     const hallazgos = analyzeCrossFileDuplicates(result.variablesPorArchivo, buildAnalysisConfig({}));
@@ -1533,7 +1534,7 @@ suite('VarSense editor-agnostic core contracts', () => {
         content: ':root { --color-bordes: #e5e5e5; }',
       },
     });
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
     const apagado = analyzeCrossFileDuplicates(
@@ -2457,7 +2458,7 @@ suite('VarSense editor-agnostic core contracts', () => {
       },
     };
     const provider = new MemoryWorkspaceProvider(archivos);
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
     const construido = await builder.build({ patterns: ['**/*.css'], exclude: [] });
     await builder.agregarDefinicionesRuntime(
       [{ uri: 'file:///workspace/src/panel.ts', fsPath: '/workspace/src/panel.ts' }],
@@ -2472,7 +2473,7 @@ suite('VarSense editor-agnostic core contracts', () => {
       languageId: 'css',
       content: archivos['/workspace/src/estilos.css'].content,
     });
-    const hallazgos = analyzeVarsenseDocument(documento, construido.indice, buildAnalysisConfig({}));
+    const hallazgos = analyzeVarsenseDocument(documento, construido.indice, buildAnalysisConfig({}), parserCssVarsense);
 
     assert.deepStrictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'variableNoDefinida'), []);
   });
@@ -2497,7 +2498,7 @@ suite('VarSense editor-agnostic core contracts', () => {
       },
     };
     const provider = new MemoryWorkspaceProvider(archivos);
-    const builder = new VariableIndexBuilder(provider, provider);
+    const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
     const construido = await builder.build({ patterns: ['**/*.css'], exclude: [] });
     await builder.agregarDefinicionesRuntime(
       [{ uri: 'file:///workspace/src/Panel.tsx', fsPath: '/workspace/src/Panel.tsx' }],
@@ -2518,7 +2519,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     });
 
     assert.deepStrictEqual(
-      analyzeVarsenseDocument(documento, construido.indice, buildAnalysisConfig({}))
+      analyzeVarsenseDocument(documento, construido.indice, buildAnalysisConfig({}), parserCssVarsense)
         .filter(hallazgo => hallazgo.ruleId === 'variableNoDefinida'),
       []
     );
@@ -2539,7 +2540,7 @@ suite('VarSense editor-agnostic core contracts', () => {
       ].join('\n'),
     });
 
-    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}));
+    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}), parserCssVarsense);
 
     assert.deepStrictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'cssInlineReact'), []);
   });
@@ -2558,7 +2559,7 @@ suite('VarSense editor-agnostic core contracts', () => {
       ].join('\n'),
     });
 
-    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}));
+    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}), parserCssVarsense);
 
     assert.strictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'cssInlineReact').length, 1);
   });
@@ -2581,7 +2582,7 @@ suite('VarSense editor-agnostic core contracts', () => {
       ].join('\n'),
     });
 
-    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}));
+    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}), parserCssVarsense);
 
     assert.deepStrictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'valorHardcoded'), []);
   });
@@ -2596,7 +2597,7 @@ suite('VarSense editor-agnostic core contracts', () => {
       content: '.a { color: var(--texto, #ff0000); }',
     });
 
-    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}));
+    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}), parserCssVarsense);
 
     assert.strictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'valorHardcoded').length, 1);
   });

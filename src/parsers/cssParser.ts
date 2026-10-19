@@ -8,6 +8,7 @@ import { CorePosition, CoreRange, CoreTextDocument, createCoreRange, positionAtO
 import {extraerVariablesDeValor, esDefinicionVariable, obtenerNombreVariable, esValorHardcodeado, extraerValorLimpio, crearUsosVariable} from './valueParser';
 import {REGEX_ATRIBUTO_ESTILO, clavesDeExpresionEstilo, finExpresionEstilo, nombreCustomProperty} from './estiloInline';
 import {esColor} from '@/utils/colorUtils';
+import type {OpcionesParserCss} from '@/core/puertoParsers';
 
 /*
  * Regex para encontrar bloques de reglas CSS
@@ -26,15 +27,8 @@ const DECLARATION_REGEX = /([a-zA-Z-]+)\s*:\s*([^;]+);?/g;
 const COMMENT_REGEX = /\/\*[\s\S]*?\*\//g;
 
 /* [085A-1] Opciones inyectables para que el parser no importe configService ni vscode.
- * Pendiente: los scanners recibiran providers de documentos/archivos en la siguiente fase. */
-export interface CssParserOptions {
-    debeVerificarPropiedad?: (propiedad: string) => boolean;
-    esValorPermitido?: (valor: string) => boolean;
-    propiedadesProhibidas?: {
-        habilitado: boolean;
-        propiedades: string[];
-    };
-}
+ * La forma vive en el puerto del core: el adapter la implementa, no la define. */
+export type CssParserOptions = OpcionesParserCss;
 
 /*
  * Clase principal del parser CSS

@@ -11,6 +11,7 @@ import { obtenerConfigService } from '@/services/configService';
 import { VscodeDocumentProvider, VscodeFileWatcherProvider, VscodeWorkspaceFileProvider } from '@/core/vscodeAdapter';
 import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
 import { FileWatcher, FileWatcherProvider, WorkspaceFile } from '@/core/workspaceProviders';
+import { parserCssVarsense } from '@/parsers';
 
 /*
  * Patrones glob para escanear todos los archivos CSS del proyecto
@@ -48,7 +49,7 @@ export class VariableScanner {
         this.onVariablesChange = this._onVariablesChange.event;
         this._indexBuilder = new VariableIndexBuilder(
             new VscodeWorkspaceFileProvider(),
-            new VscodeDocumentProvider()
+            new VscodeDocumentProvider(), parserCssVarsense
         );
         this._fileWatcherProvider = new VscodeFileWatcherProvider();
 

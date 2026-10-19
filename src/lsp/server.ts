@@ -29,6 +29,7 @@ import { cargarVarsenseConfig } from '@/core/configArchivo';
 import { conTiempoLimite, TAMANO_MAXIMO_ARCHIVO_BYTES, TIMEOUT_LSP_MS } from '@/core/limites';
 import { findingToLspDiagnostic } from './diagnostics';
 import { crearCacheIndice } from './cacheIndice';
+import { parserCssVarsense } from '@/parsers';
 
 /* Un editor con miles de avisos se vuelve lento de pintar: se muestran los primeros. */
 const MAX_DIAGNOSTICOS = 500;
@@ -105,7 +106,7 @@ async function construirContexto(rootPath: string): Promise<ContextoAnalisis> {
     const config = await cargarVarsenseConfig(path.resolve(rootPath, 'varsense.config.json'));
     const builder = new VariableIndexBuilder(
         new NodeWorkspaceFileProvider(rootPath),
-        new NodeDocumentProvider()
+        new NodeDocumentProvider(), parserCssVarsense
     );
     const resultado = await builder.build({
         patterns: config.scanAllFiles ? DEFAULT_CSS_PATTERNS : (config.variableFiles ?? DEFAULT_VARIABLE_PATTERNS),
@@ -127,7 +128,7 @@ async function diagnosticosDelDocumento(document: TextDocument, rootPath: string
     const findings = analyzeVarsenseDocument(
         coreDocumentFromLsp(document),
         indice,
-        buildAnalysisConfig(config)
+        buildAnalysisConfig(config), parserCssVarsense
     );
 
     if (findings.length > MAX_DIAGNOSTICOS) {

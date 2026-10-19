@@ -15,6 +15,7 @@ import {esLenguajeSoportado, debounce, coincideConPatron} from '@/utils/fileUtil
 import { analyzeVarsenseDocument } from '@/core/analyzeDocument';
 import { CoreFinding } from '@/core/types';
 import { configuracionAnalisisDesdeExtension, documentFromVsCode, findingToDiagnostic } from '@/core/vscodeAdapter';
+import { parserCssVarsense } from '@/parsers';
 
 /*
  * Lenguajes React para detección de inline CSS
@@ -183,7 +184,7 @@ export class DiagnosticProvider {
         const hallazgos = analyzeVarsenseDocument(
             documentFromVsCode(documento),
             indice,
-            configuracionAnalisisDesdeExtension(configService.obtenerConfig())
+            configuracionAnalisisDesdeExtension(configService.obtenerConfig()), parserCssVarsense
         );
 
         this._coleccion.set(documento.uri, hallazgos.map(hallazgo => this.diagnosticoDesdeHallazgo(hallazgo)));

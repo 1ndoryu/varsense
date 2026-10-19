@@ -15,6 +15,7 @@ import {
     DEFAULT_VARIABLE_PATTERNS,
 } from '../../cli';
 import { parseCliArgs } from '../../cli/args';
+import { parserCssVarsense } from '../../parsers';
 
 interface ExpectedFinding {
     file: string;
@@ -76,7 +77,7 @@ function sortFindings(findings: ExpectedFinding[]): ExpectedFinding[] {
 async function analyzeScanWithCore(rootPath: string): Promise<EntryWithFindings[]> {
     const fileProvider = new NodeWorkspaceFileProvider(rootPath);
     const documentProvider = new NodeDocumentProvider();
-    const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider);
+    const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider, parserCssVarsense);
     const variableResult = await variableBuilder.build({
         patterns: DEFAULT_VARIABLE_PATTERNS,
         exclude: DEFAULT_EXCLUDE_PATTERNS,
@@ -87,7 +88,7 @@ async function analyzeScanWithCore(rootPath: string): Promise<EntryWithFindings[
 
     for (const file of files) {
         const document = await documentProvider.openTextDocument(file);
-        const findings = analyzeVarsenseDocument(document, variableResult.indice, config);
+        const findings = analyzeVarsenseDocument(document, variableResult.indice, config, parserCssVarsense);
         if (findings.length > 0) {
             entries.push({ ruta: file.fsPath, findings });
         }

@@ -15,6 +15,7 @@ import { createCoreDocument } from '../../core/types';
 import { analyzeVarsenseDocument } from '../../core/analyzeDocument';
 import { buildAnalysisConfig } from '../../core/config';
 import { enmascararComentarios } from '../../core/enmascararComentarios';
+import { parserCssVarsense } from '../../parsers';
 
 function indiceVacio() {
     return { variables: new Map(), ultimaActualizacion: 0, archivosEscaneados: [] as string[] };
@@ -27,7 +28,7 @@ function analizar(fileName: string, languageId: string, content: string) {
         languageId,
         content,
     });
-    return analyzeVarsenseDocument(documento, indiceVacio() as never, buildAnalysisConfig({}));
+    return analyzeVarsenseDocument(documento, indiceVacio() as never, buildAnalysisConfig({}), parserCssVarsense);
 }
 
 function inlineReact(fileName: string, content: string) {

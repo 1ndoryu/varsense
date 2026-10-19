@@ -1,7 +1,6 @@
 import { DiagnosticType, VariableIndex } from '@/types';
-import { parsearDocumento } from '@/parsers/cssParser';
-import { REGEX_ATRIBUTO_ESTILO, clavesDeExpresionEstilo, esSoloDefinicionTokens, finExpresionEstilo } from '@/parsers/estiloInline';
 import { CoreFinding, CoreSeverity, CoreTextDocument, createCoreRange, positionAtOffset } from './types';
+import type { ParserVarsense } from './puertoParsers';
 import { enmascararComentarios } from './enmascararComentarios';
 import { analyzeEstiloBotonEspecifico } from './reglasBotonCss';
 
@@ -77,9 +76,10 @@ function finding(
 function analyzeCssDocument(
     document: CoreTextDocument,
     variableIndex: VariableIndex,
-    config: VarsenseDocumentAnalysisConfig
+    config: VarsenseDocumentAnalysisConfig,
+    parsers: ParserVarsense
 ): CoreFinding[] {
-    const parseResult = parsearDocumento(document, {
+    const parseResult = parsers.parsearDocumento(document, {
         debeVerificarPropiedad: property => shouldCheckProperty(config.hardcoded, property),
         esValorPermitido: value => isAllowedValue(config.hardcoded, value),
         propiedadesProhibidas: {
@@ -132,8 +132,10 @@ function esReenvioDePropStyle(expresion: string): boolean {
 
 function analyzeReactInlineStyles(
     document: CoreTextDocument,
-    config: VarsenseDocumentAnalysisConfig
+    config: VarsenseDocumentAnalysisConfig,
+    parsers: ParserVarsense
 ): CoreFinding[] {
+    const estilo = parsers.estilo;
     if (!config.inline.habilitado) {
         return [];
     }
@@ -151,14 +153,14 @@ function analyzeReactInlineStyles(
      * dos: caia en la rama generica y sus claves no llegaban al indice. Aqui el
      * atributo se delimita balanceando llaves y se miran TODOS los objetos
      * literales de la expresion. */
-    REGEX_ATRIBUTO_ESTILO.lastIndex = 0;
-    while ((match = REGEX_ATRIBUTO_ESTILO.exec(text)) !== null) {
+    estilo.regexAtributo.lastIndex = 0;
+    while ((match = estilo.regexAtributo.exec(text)) !== null) {
         const inicioLlave = match.index + match[0].length - 1;
-        const fin = finExpresionEstilo(text, inicioLlave);
+        const fin = estilo.finExpresion(text, inicioLlave);
 
         /* Objeto solo con custom properties = definicion runtime de tokens
          * (mismo patron eximido que setProperty): no es inline. */
-        if (esSoloDefinicionTokens(clavesDeExpresionEstilo(text, inicioLlave, fin))) {
+        if (estilo.esSoloDefinicionTokens(estilo.clavesDeExpresion(text, inicioLlave, fin))) {
             continue;
         }
 
@@ -283,10 +285,12 @@ export function parsearLineasSuprimidas(texto: string): Set<number> {
     return lineasSuprimidas;
 }
 
+/* El parser llega por parametro (puerto): el core no conoce la implementacion. */
 export function analyzeVarsenseDocument(
     document: CoreTextDocument,
     variableIndex: VariableIndex,
-    config: VarsenseDocumentAnalysisConfig
+    config: VarsenseDocumentAnalysisConfig,
+    parsers: ParserVarsense
 ): CoreFinding[] {
     const lineasSuprimidas = parsearLineasSuprimidas(document.getText());
     const filtrar = (hallazgos: CoreFinding[]): CoreFinding[] =>
@@ -296,13 +300,13 @@ export function analyzeVarsenseDocument(
 
     if (CSS_LANGUAGE_IDS.has(document.languageId)) {
         return filtrar([
-            ...analyzeCssDocument(document, variableIndex, config),
+            ...analyzeCssDocument(document, variableIndex, config, parsers),
             ...analyzeEstiloBotonEspecifico(document),
         ]);
     }
 
     if (REACT_LANGUAGE_IDS.has(document.languageId)) {
-        return filtrar(analyzeReactInlineStyles(document, config));
+        return filtrar(analyzeReactInlineStyles(document, config, parsers));
     }
 
     if (SCRIPT_LANGUAGE_IDS.has(document.languageId)) {

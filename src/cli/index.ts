@@ -22,7 +22,6 @@ import {
     DEFAULT_PREFIJOS_PORTADORES,
     VarsenseConfigFile,
     buildAnalysisConfig,
-    validateVarsenseConfig,
 } from '@/core/config';
 
 export {
@@ -36,8 +35,9 @@ export {
     validateVarsenseConfig,
 } from '@/core/config';
 
-import type { ParsedCliArgs, VarsenseCliCommand, VarsenseCliFormat } from './args';
+import type { ParsedCliArgs } from './args';
 import { parseCliArgs, usage } from './args';
+import { parserCssVarsense } from '@/parsers';
 
 export type VarsenseCliConfigFile = VarsenseConfigFile;
 
@@ -204,7 +204,7 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
     const fileProvider = new NodeWorkspaceFileProvider(args.workspacePath);
     const documentProvider = new NodeDocumentProvider();
     const persistentStore = await createIndexStore(args, configFile);
-    const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider, persistentStore);
+    const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider, parserCssVarsense, persistentStore);
     const variablePatterns = configFile.scanAllFiles
         ? DEFAULT_CSS_PATTERNS
         : (configFile.variableFiles ?? DEFAULT_VARIABLE_PATTERNS);
@@ -243,7 +243,7 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
 
     for (const file of includedCandidates) {
         const document = await documentProvider.openTextDocument(file);
-        const documentFindings = analyzeVarsenseDocument(document, variableResult.indice, analysisConfig);
+        const documentFindings = analyzeVarsenseDocument(document, variableResult.indice, analysisConfig, parserCssVarsense);
         for (const documentFinding of documentFindings) {
             findings.push({ ruta: file.fsPath, finding: documentFinding });
         }
@@ -341,7 +341,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     const fileProvider = new NodeWorkspaceFileProvider(args.workspacePath);
     const documentProvider = new CachedNodeDocumentProvider();
     const persistentStore = await createIndexStore(args, configFile);
-    const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider, persistentStore);
+    const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider, parserCssVarsense, persistentStore);
     const variablePatterns = configFile.scanAllFiles ? DEFAULT_CSS_PATTERNS : (configFile.variableFiles ?? DEFAULT_VARIABLE_PATTERNS);
     timer.mark('configMs');
     const variableResult = await variableBuilder.build({ patterns: variablePatterns, exclude: excludePatterns });
@@ -395,7 +395,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
          * sin indice se abren todos para el escaneo de texto de token-unused
          * pero se reportan unicamente los del alcance). */
         if (isScopedFile(file.fsPath, scopedFiles)) {
-            for (const documentFinding of analyzeVarsenseDocument(document, variableResult.indice, analysisConfig)) {
+            for (const documentFinding of analyzeVarsenseDocument(document, variableResult.indice, analysisConfig, parserCssVarsense)) {
                 findings.push({ ruta: file.fsPath, finding: documentFinding });
             }
         }

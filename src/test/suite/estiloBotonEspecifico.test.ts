@@ -10,6 +10,7 @@ import { createCoreDocument } from '../../core/types';
 import { analyzeVarsenseDocument } from '../../core/analyzeDocument';
 import { buildAnalysisConfig } from '../../core/config';
 import { DiagnosticType } from '../../types';
+import { parserCssVarsense } from '../../parsers';
 
 function indiceVacio() {
     return { variables: new Map(), ultimaActualizacion: 0, archivosEscaneados: [] as string[] };
@@ -22,7 +23,7 @@ function analizar(fileName: string, content: string) {
         languageId: 'css',
         content,
     });
-    return analyzeVarsenseDocument(documento, indiceVacio() as never, buildAnalysisConfig({}))
+    return analyzeVarsenseDocument(documento, indiceVacio() as never, buildAnalysisConfig({}), parserCssVarsense)
         .filter(hallazgo => hallazgo.ruleId === DiagnosticType.EstiloBotonEspecifico);
 }
 

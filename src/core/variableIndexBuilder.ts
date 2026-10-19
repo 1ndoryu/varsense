@@ -1,7 +1,7 @@
 import { CssVariable, VariableIndex } from '@/types';
-import { parsearDefiniciones, parsearDefinicionesRuntime } from '@/parsers/cssParser';
 import { CancellationToken, DocumentProvider, throwIfCancelled, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
 import { PersistentIndexStore, sha256File } from './persistentIndex';
+import type { ParserVarsense } from './puertoParsers';
 
 export interface VariableIndexBuildResult {
     indice: VariableIndex;
@@ -31,6 +31,7 @@ export class VariableIndexBuilder {
     constructor(
         private readonly fileProvider: WorkspaceFileProvider,
         private readonly documentProvider: DocumentProvider,
+        private readonly parsers: ParserVarsense,
         private readonly persistentStore?: PersistentIndexStore
     ) {}
 
@@ -80,7 +81,7 @@ export class VariableIndexBuilder {
         } else {
             const document = await this.documentProvider.openTextDocument(file);
             throwIfCancelled(token);
-            variables = parsearDefiniciones(document);
+            variables = this.parsers.parsearDefiniciones(document);
             if (hash && store) {
                 const previa = store.getEntry(file.fsPath) ?? {};
                 store.setEntry(file.fsPath, { ...previa, hash, variables });
@@ -113,7 +114,7 @@ export class VariableIndexBuilder {
             throwIfCancelled(token);
             const document = await this.documentProvider.openTextDocument(file);
             throwIfCancelled(token);
-            const runtime = parsearDefinicionesRuntime(document);
+            const runtime = this.parsers.parsearDefinicionesRuntime(document);
             if (runtime.length === 0) {
                 continue;
             }
