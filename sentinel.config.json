@@ -1,8 +1,26 @@
 {
   "schemaVersion": 2,
-  "mode": "advisory",
+  "mode": "observe",
   "project": {
     "primaryBranch": "main"
+  },
+  "runtime": {
+    "minimumVersion": "0.7.26",
+    "protocolVersion": 1
+  },
+  "guard": {
+    "directCommands": {
+      "npmScripts": [],
+      "npxTools": ["tsc"],
+      "cargoSubcommands": [],
+      "tools": ["tsc"]
+    }
+  },
+  "analyzers": {
+    "sentinel": {
+      "enabled": true,
+      "profile": "project-default"
+    }
   },
   "includePatterns": [
     "**/*"
@@ -15,5 +33,9 @@
     "**/fixtures/**"
   ],
   "directoryExceptions": [],
+  "portableBoundaries": {
+    "dom": ["/platform/", "/plataforma/", "/adapters/", "/dom."],
+    "window": ["/platform/", "/plataforma/", "/adapters/", "/navigation/"]
+  },
   "rules": {}
 }
