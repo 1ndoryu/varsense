@@ -34,6 +34,11 @@ function copyDirSync(src: string, dest: string): void {
 }
 
 async function main() {
+    /* Directorio temporal fuera del try: hay que limpiarlo pase lo que pase */
+    const tempBase = path.join(os.tmpdir(), 'vscode-test-cssvar');
+    /* Borrar restos de una corrida anterior que murió sin limpiar */
+    fs.rmSync(tempBase, { recursive: true, force: true });
+
     try {
         /* 
          * Ruta original de la extensión (puede contener espacios)
@@ -43,7 +48,6 @@ async function main() {
         /* 
          * Crear directorio temporal sin espacios para la extensión
          */
-        const tempBase = path.join(os.tmpdir(), 'vscode-test-cssvar');
         const tempExtensionPath = path.join(tempBase, 'extension');
         const tempTestsPath = path.join(tempExtensionPath, 'dist', 'test', 'suite', 'index.js');
         const userDataDir = path.join(tempBase, 'user-data');
@@ -100,7 +104,11 @@ async function main() {
         });
     } catch (err) {
         console.error('Error ejecutando tests:', err);
-        process.exit(1);
+        /* No usar process.exit: aborta sin ejecutar el finally que limpia el temporal */
+        process.exitCode = 1;
+    } finally {
+        /* Borrar siempre el temporal: VS Code descargado + copia de la extensión superan 1 GB */
+        fs.rmSync(tempBase, { recursive: true, force: true });
     }
 }
 
