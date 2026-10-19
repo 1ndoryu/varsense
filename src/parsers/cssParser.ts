@@ -3,10 +3,11 @@
  * Analiza documentos CSS para extraer declaraciones, variables y usos
  */
 
-import {CssVariable, CssDeclaration, CssRule, ParseResult, VariableUsage, HardcodedValue, BannedPropertyUsage} from '@/types';
-import { CorePosition, CoreRange, CoreTextDocument, createCoreRange, positionAtOffset } from '@/core/types';
+import {CssVariable, CssDeclaration, CssRule, ParseResult, HardcodedValue, BannedPropertyUsage} from '@/types';
+import { CoreRange, CoreTextDocument, createCoreRange, positionAtOffset } from '@/core/types';
 import {extraerVariablesDeValor, esDefinicionVariable, obtenerNombreVariable, esValorHardcodeado, extraerValorLimpio, crearUsosVariable} from './valueParser';
 import {REGEX_ATRIBUTO_ESTILO, clavesDeExpresionEstilo, finExpresionEstilo, nombreCustomProperty} from './estiloInline';
+import {buscarAmbitoInnermost, mapearAmbitosBloques} from './cssAmbitos';
 import {esColor} from '@/utils/colorUtils';
 import type {OpcionesParserCss} from '@/core/puertoParsers';
 
@@ -469,207 +470,10 @@ export function parsearDefiniciones(documento: CoreTextDocument): CssVariable[] 
 }
 
 /*
- * [229A-1] Pre-escaneo de ambitos: por cada `{` registra el selector del
- * bloque que abre (texto desde el ultimo `;`, `{` o `}`), ignorando
- * comentarios y literales. `buscarAmbitoInnermost` resuelve el bloque mas
- * interno que contiene un offset con busqueda binaria. El mismo token con
- * el mismo valor en ambitos distintos es shadowing de cascada, no
- * duplicado; el mismo selector repetido conserva su texto y sigue
- * agrupando igual que antes.
- */
-interface EntradaAmbito {
-    apertura: number;
-    cierre: number;
-    ambito: string;
-}
-
-function mapearAmbitosBloques(texto: string): EntradaAmbito[] {
-    const ambitos: EntradaAmbito[] = [];
-    const pila: Array<{ apertura: number; ambito: string }> = [];
-    let inicioSelector = 0;
-    let i = 0;
-
-    const saltarLiteral = (comilla: string): void => {
-        i++;
-        while (i < texto.length) {
-            if (texto[i] === '\\') {
-                i += 2;
-                continue;
-            }
-            if (texto[i] === comilla) {
-                i++;
-                return;
-            }
-            i++;
-        }
-    };
-
-    while (i < texto.length) {
-        const actual = texto[i];
-        const siguiente = i + 1 < texto.length ? texto[i + 1] : '';
-
-        if (actual === '/' && siguiente === '*') {
-            const fin = texto.indexOf('*/', i + 2);
-            i = fin < 0 ? texto.length : fin + 2;
-            inicioSelector = i;
-            continue;
-        }
-
-        if (actual === '"' || actual === "'") {
-            saltarLiteral(actual);
-            continue;
-        }
-
-        if (actual === '{') {
-            const selector = texto.slice(inicioSelector, i).trim().replace(/\s+/g, ' ');
-            pila.push({ apertura: i, ambito: selector });
-            inicioSelector = i + 1;
-            i++;
-            continue;
-        }
-
-        if (actual === '}') {
-            const abierto = pila.pop();
-            if (abierto !== undefined) {
-                ambitos.push({ apertura: abierto.apertura, cierre: i, ambito: abierto.ambito });
-            }
-            inicioSelector = i + 1;
-            i++;
-            continue;
-        }
-
-        if (actual === ';' && pila.length === 0) {
-            inicioSelector = i + 1;
-        }
-        i++;
-    }
-
-    ambitos.sort((a, b) => a.apertura - b.apertura);
-    return ambitos;
-}
-
-function buscarAmbitoInnermost(ambitos: EntradaAmbito[], offset: number): string | undefined {
-    /* Ultimo bloque con apertura <= offset: el mas interno posible. */
-    let izquierda = 0;
-    let derecha = ambitos.length - 1;
-    let posicion = -1;
-
-    while (izquierda <= derecha) {
-        const medio = (izquierda + derecha) >> 1;
-        if (ambitos[medio].apertura <= offset) {
-            posicion = medio;
-            izquierda = medio + 1;
-        } else {
-            derecha = medio - 1;
-        }
-    }
-
-    /* Retroceder hasta el primero que realmente contenga el offset. */
-    while (posicion >= 0) {
-        const candidato = ambitos[posicion];
-        if (offset <= candidato.cierre) {
-            return candidato.ambito;
-        }
-        posicion--;
-    }
-
-    return undefined;
-}
-
-/*
  * [318A-7V24] Función helper para parsear definiciones de variables en
  * runtime (setProperty) de un documento script.
  */
 export function parsearDefinicionesRuntime(documento: CoreTextDocument): CssVariable[] {
     const parser = new CssParser(documento);
     return parser.parsearDefinicionesRuntime();
-}
-
-/*
- * Busca todos los usos de var() en un documento
- */
-export function buscarUsosVariables(documento: CoreTextDocument): VariableUsage[] {
-    const texto = documento.getText();
-    const usos: VariableUsage[] = [];
-
-    const varRegex = /var\(\s*(--[\w-]+)\s*(?:,\s*([^)]+))?\s*\)/g;
-    let match: RegExpExecArray | null;
-
-    while ((match = varRegex.exec(texto)) !== null) {
-        const posicionInicio = positionAtOffset(documento, match.index);
-        const posicionFin = positionAtOffset(documento, match.index + match[0].length);
-
-        usos.push({
-            nombreVariable: match[1],
-            archivo: documento.fileName,
-            linea: posicionInicio.line,
-            columna: posicionInicio.character,
-            rango: { start: posicionInicio, end: posicionFin },
-            fallback: match[2]?.trim()
-        });
-    }
-
-    return usos;
-}
-
-/*
- * Encuentra la variable bajo el cursor en un documento
- */
-export function encontrarVariableEnPosicion(documento: CoreTextDocument, posicion: CorePosition): {nombre: string; rango: CoreRange} | null {
-    const lineaTexto = documento.lineAt(posicion.line).text;
-
-    /* Buscar var(--...) en la línea */
-    const varRegex = /var\(\s*(--[\w-]+)\s*(?:,\s*[^)]+)?\s*\)/g;
-    let match: RegExpExecArray | null;
-
-    while ((match = varRegex.exec(lineaTexto)) !== null) {
-        const inicio = match.index;
-        const fin = inicio + match[0].length;
-
-        /* Verificar si el cursor está dentro del match */
-        if (posicion.character >= inicio && posicion.character <= fin) {
-            /* Encontrar el rango exacto del nombre de la variable */
-            const nombreInicio = lineaTexto.indexOf(match[1], inicio);
-            const nombreFin = nombreInicio + match[1].length;
-
-            return {
-                nombre: match[1],
-                rango: createCoreRange(posicion.line, nombreInicio, posicion.line, nombreFin)
-            };
-        }
-    }
-
-    /* También buscar definiciones de variables: --nombre: */
-    const defRegex = /(--[\w-]+)\s*:/g;
-    while ((match = defRegex.exec(lineaTexto)) !== null) {
-        const inicio = match.index;
-        const fin = inicio + match[1].length;
-
-        if (posicion.character >= inicio && posicion.character <= fin) {
-            return {
-                nombre: match[1],
-                rango: createCoreRange(posicion.line, inicio, posicion.line, fin)
-            };
-        }
-    }
-
-    return null;
-}
-
-/*
- * Obtiene la propiedad CSS en una posición del documento
- * Útil para autocompletado contextual
- */
-export function obtenerPropiedadEnPosicion(documento: CoreTextDocument, posicion: CorePosition): string | null {
-    const lineaTexto = documento.lineAt(posicion.line).text;
-
-    /* Buscar propiedad: valor en la línea */
-    const propRegex = /^\s*([a-zA-Z-]+)\s*:\s*/;
-    const match = propRegex.exec(lineaTexto);
-
-    if (match && posicion.character > lineaTexto.indexOf(':')) {
-        return match[1];
-    }
-
-    return null;
 }

@@ -6,7 +6,7 @@
 
 import * as vscode from 'vscode';
 import { CompletionInfo } from '@/types';
-import { obtenerPropiedadEnPosicion } from '@/parsers/cssParser';
+import { obtenerPropiedadEnPosicion } from '@/parsers/cssCursor';
 import { VariableScanner } from '@/services/variableScanner';
 import { obtenerResolver } from '@/services/variableResolver';
 import { obtenerConfigService } from '@/services/configService';

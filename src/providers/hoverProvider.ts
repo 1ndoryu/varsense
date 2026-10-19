@@ -5,7 +5,7 @@
  */
 
 import * as vscode from 'vscode';
-import { encontrarVariableEnPosicion } from '@/parsers/cssParser';
+import { encontrarVariableEnPosicion } from '@/parsers/cssCursor';
 import { VariableScanner } from '@/services/variableScanner';
 import { obtenerResolver } from '@/services/variableResolver';
 import { parsearColor, generarMarkdownColor } from '@/utils/colorUtils';
