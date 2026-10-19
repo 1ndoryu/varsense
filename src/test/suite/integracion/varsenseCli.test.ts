@@ -89,6 +89,26 @@ suite('VarSense CLI editor-agnostic', () => {
         }
     });
 
+    /* Mismo marcador por la ruta `all`, que lee los CSS desde el proveedor con caché. */
+    test('all calla la clase con marcador en su linea de definicion', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-marcador-all-');
+        escribir(root, 'src/styles.css', [
+            '/* sentinel-disable-next-line claseHuerfana — la pone el HTML inyectado. */',
+            '.inyectada { color: red; }',
+            '.sinMarcador { color: blue; }',
+        ].join('\n'));
+
+        try {
+            const result = await analyzeCliTarget(parseCliArgs(['all', '--workspace', root, '--format', 'json']));
+            const findings = result.entries.flatMap(entry => entry.findings);
+
+            assert.strictEqual(findings.some(finding => finding.message.includes('inyectada')), false);
+            assert.ok(findings.some(finding => finding.message.includes('sinMarcador')));
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
     /* [15A-27] La funcion que devuelve la clase puede vivir en otro archivo
      * (`claseEstadoSample` en estadoVisual.tsx). Antes solo se resolvia si el
      * consumidor estaba en el mismo archivo. */

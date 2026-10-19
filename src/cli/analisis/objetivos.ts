@@ -1,7 +1,8 @@
 /* Orquestación del análisis de cada comando (scan, orphan-classes, all) sobre el workspace. */
-import * as fs from 'fs/promises';
+import { pathToFileURL } from 'url';
 import { CoreFinding, CoreTextDocument } from '@/core/types';
-import { CachedNodeDocumentProvider, NodeDocumentProvider, NodeWorkspaceFileProvider } from '@/core/proveedores/nodeProviders';
+import { CachedNodeDocumentProvider, NodeWorkspaceFileProvider } from '@/core/proveedores/nodeProviders';
+import type { DocumentProvider } from '@/core/proveedores/workspaceProviders';
 import { VariableIndexBuilder } from '@/core/indices/variableIndexBuilder';
 import { buildVariableReverseIndex } from '@/core/indices/persistentIndex';
 import { ClassIndexBuilder } from '@/core/indices/classIndexBuilder';
@@ -56,7 +57,9 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
     const includePatterns = configFile.includePatterns ?? DEFAULT_INCLUDE_PATTERNS;
     const excludePatterns = configFile.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS;
     const fileProvider = new NodeWorkspaceFileProvider(args.workspacePath);
-    const documentProvider = new NodeDocumentProvider();
+    /* Caché de documentos: el índice de variables y el análisis leen los mismos
+     * archivos; con caché cada uno se lee del disco una sola vez. */
+    const documentProvider = new CachedNodeDocumentProvider();
     const persistentStore = await createIndexStore(args, configFile);
     const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider, parserCssVarsense, persistentStore);
     const variablePatterns = configFile.scanAllFiles
@@ -135,13 +138,19 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
  * marcador existia y no hacia nada (KAMPLES: `.prose` y compania).
  * `clase.linea` y el set del parser son ambos 0-based: se comparan tal cual
  * (restar 1 hacia que el marcador callara tambien la linea siguiente). */
-async function filtrarClasesSuprimidas<T extends { archivo: string; linea: number }>(clases: T[]): Promise<T[]> {
+async function filtrarClasesSuprimidas<T extends { archivo: string; linea: number }>(
+    clases: T[],
+    documentProvider: DocumentProvider
+): Promise<T[]> {
     const suprimidas = new Map<string, Set<number> | null>();
     const conservadas: T[] = [];
     for (const clase of clases) {
         if (!suprimidas.has(clase.archivo)) {
-            const texto = await fs.readFile(clase.archivo, 'utf8').catch(() => null);
-            suprimidas.set(clase.archivo, texto === null ? null : parsearLineasSuprimidas(texto));
+            /* Pasa por el proveedor (con caché en `all`) para no releer archivos ya leídos. */
+            const documento = await documentProvider
+                .openTextDocument({ uri: pathToFileURL(clase.archivo).toString(), fsPath: clase.archivo })
+                .catch(() => null);
+            suprimidas.set(clase.archivo, documento === null ? null : parsearLineasSuprimidas(documento.getText()));
         }
         const lineas = suprimidas.get(clase.archivo);
         if (lineas && lineas.has(clase.linea)) {
@@ -158,7 +167,7 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
     const scopedFiles = await readFilesFromManifest(args);
     const excludePatterns = configFile.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS;
     const fileProvider = new NodeWorkspaceFileProvider(args.workspacePath);
-    const documentProvider = new NodeDocumentProvider();
+    const documentProvider = new CachedNodeDocumentProvider();
     const persistentStore = await createIndexStore(args, configFile);
     const builder = new ClassIndexBuilder(fileProvider, documentProvider, undefined, persistentStore);
     const result = await builder.scan({
@@ -168,7 +177,7 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
         prefijosPortadores: configFile.prefijosPortadores ?? DEFAULT_PREFIJOS_PORTADORES,
     });
 
-    const clasesHuerfanas = await filtrarClasesSuprimidas(result.clasesHuerfanas);
+    const clasesHuerfanas = await filtrarClasesSuprimidas(result.clasesHuerfanas, documentProvider);
     const entries = groupFindingsByFile(clasesHuerfanas.filter(clase => isScopedFile(clase.archivo, scopedFiles)).map(clase => ({
         ruta: clase.archivo,
         finding: orphanClassToFinding(clase, configFile.orphanClassDetection?.severity ?? 'warning'),
@@ -269,7 +278,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
         }
     }
     timer.mark('tokenRulesMs');
-    findings.push(...(await filtrarClasesSuprimidas(classResult.clasesHuerfanas)).filter(clase => isScopedFile(clase.archivo, scopedFiles)).map(clase => ({
+    findings.push(...(await filtrarClasesSuprimidas(classResult.clasesHuerfanas, documentProvider)).filter(clase => isScopedFile(clase.archivo, scopedFiles)).map(clase => ({
         ruta: clase.archivo,
         finding: orphanClassToFinding(clase, configFile.orphanClassDetection?.severity ?? 'warning'),
     })));
