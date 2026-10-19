@@ -10,7 +10,8 @@
         "url": "https://github.com/1ndoryu/varsense"
     },
     "engines": {
-        "vscode": "^1.85.0"
+        "vscode": "^1.85.0",
+        "node": ">=18"
     },
     "categories": [
         "Linters",
@@ -328,9 +329,10 @@
     },
     "scripts": {
         "vscode:prepublish": "npm run compile",
+        "prepare": "npm run compile",
         "compile": "node esbuild.config.mjs --minify",
-        "cli": "npm run compile && node ./dist/cli/index.js",
-        "lsp": "npm run compile && node ./dist/lsp/server.js --stdio",
+        "cli": "node ./dist/cli/index.js",
+        "lsp": "node ./dist/lsp/server.js --stdio",
         "compile:tests": "tsc -p ./tsconfig.json && node esbuild.config.mjs --minify",
         "watch": "node esbuild.config.mjs --watch",
         "check:core": "node scripts/check-core-no-vscode.mjs",
