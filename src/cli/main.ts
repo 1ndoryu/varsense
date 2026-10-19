@@ -3,7 +3,7 @@
 /* Punto de entrada de la CLI: se compila a dist/cli/index.js (bin y scripts).
  * Re-exporta la API pública para que los tests y scripts importen el mismo bundle. */
 
-import { TiempoAgotadoError } from '@/core/limites';
+import { TiempoAgotadoError } from '@/core/analisis/limites';
 import { runCli } from './run';
 
 export * from './index';

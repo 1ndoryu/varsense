@@ -1,13 +1,13 @@
 import * as assert from 'assert';
-import { createCoreDocument } from '../../core/types';
-import { parsearDefinicionesRuntime } from '../../parsers/cssParser';
-import { analyzeVarsenseDocument } from '../../core/analyzeDocument';
-import { buildAnalysisConfig } from '../../core/config';
-import { VariableIndexBuilder } from '../../core/variableIndexBuilder';
-import { ClassIndexBuilder } from '../../core/classIndexBuilder';
-import { detectarCarriersMismoArchivo, extraerMapasExportados, extraerNombresImportadosRelativos, esNombrePortadorClase } from '../../core/classIndexBuilder';
-import { parserCssVarsense } from '../../parsers';
-import { MemoryWorkspaceProvider, PREFIJOS_AREA, indiceVacio } from './helpers/memoriaWorkspace';
+import { createCoreDocument } from '../../../core/types';
+import { parsearDefinicionesRuntime } from '../../../parsers/cssParser';
+import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument';
+import { buildAnalysisConfig } from '../../../core/configuracion/config';
+import { VariableIndexBuilder } from '../../../core/indices/variableIndexBuilder';
+import { ClassIndexBuilder } from '../../../core/indices/classIndexBuilder';
+import { detectarCarriersMismoArchivo, extraerMapasExportados, extraerNombresImportadosRelativos, esNombrePortadorClase } from '../../../core/indices/classIndexBuilder';
+import { parserCssVarsense } from '../../../parsers';
+import { MemoryWorkspaceProvider, PREFIJOS_AREA, indiceVacio } from '../helpers/memoriaWorkspace';
 
 suite('VarSense editor-agnostic core contracts (parte 3)', () => {
   /* [318A-7V22][M3] Flecha auto-invocada (IIFE) con returns literales

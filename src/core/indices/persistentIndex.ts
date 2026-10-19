@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { ClaseCssDefinida } from './classIndexBuilder';
 import type { CssVariable } from '@/types';
-import type { VarsenseConfigFile } from './config';
+import type { VarsenseConfigFile } from '../configuracion/config';
 
 export const PERSISTENT_INDEX_SCHEMA_VERSION = 1;
 /* Bump al cambiar la semántica de parseo/extracción que alimenta el índice.

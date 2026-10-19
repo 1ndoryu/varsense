@@ -1,13 +1,13 @@
 /* Orquestación del análisis de cada comando (scan, orphan-classes, all) sobre el workspace. */
 import * as fs from 'fs/promises';
 import { CoreFinding, CoreTextDocument } from '@/core/types';
-import { CachedNodeDocumentProvider, NodeDocumentProvider, NodeWorkspaceFileProvider } from '@/core/nodeProviders';
-import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
-import { buildVariableReverseIndex } from '@/core/persistentIndex';
-import { ClassIndexBuilder } from '@/core/classIndexBuilder';
-import { analyzeVarsenseDocument, orphanClassToFinding, parsearLineasSuprimidas } from '@/core/analyzeDocument';
-import { analyzeCrossFileDuplicates, analyzeTokenRules } from '@/core/tokenRules';
-import { VarsenseReportEntry } from '@/core/report';
+import { CachedNodeDocumentProvider, NodeDocumentProvider, NodeWorkspaceFileProvider } from '@/core/proveedores/nodeProviders';
+import { VariableIndexBuilder } from '@/core/indices/variableIndexBuilder';
+import { buildVariableReverseIndex } from '@/core/indices/persistentIndex';
+import { ClassIndexBuilder } from '@/core/indices/classIndexBuilder';
+import { analyzeVarsenseDocument, orphanClassToFinding, parsearLineasSuprimidas } from '@/core/analisis/analyzeDocument';
+import { analyzeCrossFileDuplicates, analyzeTokenRules } from '@/core/analisis/tokenRules';
+import { VarsenseReportEntry } from '@/core/analisis/report';
 import {
     DEFAULT_CSS_PATTERNS,
     DEFAULT_EXCLUDE_PATTERNS,
@@ -17,7 +17,7 @@ import {
     DEFAULT_VARIABLE_PATTERNS,
     DEFAULT_PREFIJOS_PORTADORES,
     buildAnalysisConfig,
-} from '@/core/config';
+} from '@/core/configuracion/config';
 import { parserCssVarsense } from '@/parsers';
 import type { ParsedCliArgs } from '../args';
 import { CliAnalysisResult } from '../tipos';

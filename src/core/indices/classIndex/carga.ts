@@ -1,7 +1,7 @@
 /* [V6] Carga con caché de archivos para el índice de clases: CSS, tokens de consumo y listado. Sin cambio de comportamiento. */
 import { PersistentIndexStore, sha256File } from '../persistentIndex';
-import { extraerUsoVariablesDeTexto } from '../usoVariables';
-import { CancellationToken, DocumentProvider, WorkspaceFile, WorkspaceFileProvider, throwIfCancelled } from '../workspaceProviders';
+import { extraerUsoVariablesDeTexto } from '../../analisis/usoVariables';
+import { CancellationToken, DocumentProvider, WorkspaceFile, WorkspaceFileProvider, throwIfCancelled } from '../../proveedores/workspaceProviders';
 import { extraerTokensDeTexto } from './consumo/consumidores';
 import { extraerFuncionesQueDevuelvenClases } from './consumo/llamadas';
 import { CarrierCallSite, extraerCarriersYLlamadas } from './fuentes/carriers';

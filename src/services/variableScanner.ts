@@ -9,9 +9,9 @@ import { CssVariable, VariableIndex, CacheState, ScoredVariable, ScannerStatisti
 import { debounce } from '@/utils/fileUtils';
 import { obtenerConfigService } from '@/services/configService';
 import { VscodeDocumentProvider, VscodeFileWatcherProvider, VscodeWorkspaceFileProvider } from '@/vscode/vscodeAdapter';
-import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
+import { VariableIndexBuilder } from '@/core/indices/variableIndexBuilder';
 import { logger } from '@/utils/logger';
-import { FileWatcher, FileWatcherProvider, WorkspaceFile } from '@/core/workspaceProviders';
+import { FileWatcher, FileWatcherProvider, WorkspaceFile } from '@/core/proveedores/workspaceProviders';
 import { parserCssVarsense } from '@/parsers';
 
 /*

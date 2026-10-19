@@ -1,5 +1,5 @@
-import { CoreSeverity } from './types';
-import { VarsenseDocumentAnalysisConfig } from './analyzeDocument';
+import { CoreSeverity } from '../types';
+import { VarsenseDocumentAnalysisConfig } from '../analisis/analyzeDocument';
 
 /* [095A-4] La configuracion compartida vive en core para que CLI y LSP usen los mismos
  * defaults sin que el servidor stdio importe ni ejecute el entrypoint de la CLI. */

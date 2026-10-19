@@ -3,10 +3,10 @@
  * La logica de cruce vive en core/classIndexBuilder; este modulo conserva la API publica historica.
  */
 
-import { ClassIndexBuilder, ResultadoClasesHuerfanas } from '@/core/classIndexBuilder';
+import { ClassIndexBuilder, ResultadoClasesHuerfanas } from '@/core/indices/classIndexBuilder';
 import { VscodeDocumentProvider, VscodeWorkspaceFileProvider } from '@/vscode/vscodeAdapter';
 
-export type { ClaseCssDefinida, ResultadoClasesHuerfanas } from '@/core/classIndexBuilder';
+export type { ClaseCssDefinida, ResultadoClasesHuerfanas } from '@/core/indices/classIndexBuilder';
 
 /*
  * Ejecuta el escaneo completo de clases huerfanas usando providers de VS Code.

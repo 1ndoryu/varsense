@@ -1,7 +1,7 @@
 import * as assert from 'assert';
-import { createCoreDocument } from '../../core/types';
-import { ClassIndexBuilder, extraerMapasExportados } from '../../core/classIndexBuilder';
-import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../core/workspaceProviders';
+import { createCoreDocument } from '../../../core/types';
+import { ClassIndexBuilder, extraerMapasExportados } from '../../../core/indices/classIndexBuilder';
+import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../../core/proveedores/workspaceProviders';
 
 /* [11AA-2] Suite standalone (sin importar adaptadores de 'vscode'): sirve para
  * iterar sobre el detector de claseHuerfana con `mocha --ui tdd` en segundos. */

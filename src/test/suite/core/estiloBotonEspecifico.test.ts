@@ -6,11 +6,11 @@
  */
 
 import * as assert from 'assert';
-import { createCoreDocument } from '../../core/types';
-import { analyzeVarsenseDocument } from '../../core/analyzeDocument';
-import { buildAnalysisConfig } from '../../core/config';
-import { DiagnosticType } from '../../types';
-import { parserCssVarsense } from '../../parsers';
+import { createCoreDocument } from '../../../core/types';
+import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument';
+import { buildAnalysisConfig } from '../../../core/configuracion/config';
+import { DiagnosticType } from '../../../types';
+import { parserCssVarsense } from '../../../parsers';
 
 function indiceVacio() {
     return { variables: new Map(), ultimaActualizacion: 0, archivosEscaneados: [] as string[] };

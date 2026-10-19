@@ -1,6 +1,6 @@
 /* [V6] Lectura y validación de argumentos de la CLI. Vive aparte de index.ts para mantener ese módulo bajo el límite de líneas. */
 import * as path from 'path';
-import { TIMEOUT_CLI_POR_DEFECTO_MS } from '@/core/limites';
+import { TIMEOUT_CLI_POR_DEFECTO_MS } from '@/core/analisis/limites';
 
 export type VarsenseCliCommand = 'scan' | 'orphan-classes' | 'all';
 export type VarsenseCliFormat = 'markdown' | 'json';

@@ -3,11 +3,11 @@
 
 import * as vscode from 'vscode';
 import { CoreFinding, CoreRange, CoreSeverity, CoreTextDocument, createCoreDocument } from '@/core/types';
-import { VarsenseDocumentAnalysisConfig } from '@/core/analyzeDocument';
-import { buildAnalysisConfig } from '@/core/config';
+import { VarsenseDocumentAnalysisConfig } from '@/core/analisis/analyzeDocument';
+import { buildAnalysisConfig } from '@/core/configuracion/config';
 import { DiagnosticSeverityValue, ExtensionConfig } from '@/types';
 import { buscarArchivos } from '@/utils/fileUtils';
-import { DocumentProvider, FileWatcher, FileWatcherCallbacks, FileWatcherProvider, WorkspaceFile, WorkspaceFileProvider } from '@/core/workspaceProviders';
+import { DocumentProvider, FileWatcher, FileWatcherCallbacks, FileWatcherProvider, WorkspaceFile, WorkspaceFileProvider } from '@/core/proveedores/workspaceProviders';
 
 export function documentFromVsCode(document: vscode.TextDocument): CoreTextDocument {
   return createCoreDocument({

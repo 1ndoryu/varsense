@@ -1,8 +1,8 @@
 import * as assert from 'assert';
-import { CssVariable } from '../../types';
-import { buildAnalysisConfig } from '../../core/config';
-import { analyzeTokenRules } from '../../core/tokenRules';
-import { createCoreDocument } from '../../core/types';
+import { CssVariable } from '../../../types';
+import { buildAnalysisConfig } from '../../../core/configuracion/config';
+import { analyzeTokenRules } from '../../../core/analisis/tokenRules';
+import { createCoreDocument } from '../../../core/types';
 
 /* [MN-token] Suite standalone (sin 'vscode'): cubre las dos reglas de tokens.
  * token-unused reconoce utilidades Tailwind v4 generadas por `@theme` y respeta

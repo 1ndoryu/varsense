@@ -1,11 +1,11 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
-import { analyzeVarsenseDocument, orphanClassToFinding } from '../../core/analyzeDocument';
-import { NodeDocumentProvider, NodeWorkspaceFileProvider } from '../../core/nodeProviders';
-import { VariableIndexBuilder } from '../../core/variableIndexBuilder';
-import { ClassIndexBuilder } from '../../core/classIndexBuilder';
-import { CoreFinding } from '../../core/types';
+import { analyzeVarsenseDocument, orphanClassToFinding } from '../../../core/analisis/analyzeDocument';
+import { NodeDocumentProvider, NodeWorkspaceFileProvider } from '../../../core/proveedores/nodeProviders';
+import { VariableIndexBuilder } from '../../../core/indices/variableIndexBuilder';
+import { ClassIndexBuilder } from '../../../core/indices/classIndexBuilder';
+import { CoreFinding } from '../../../core/types';
 import {
     analyzeCliTarget,
     buildAnalysisConfig,
@@ -13,9 +13,9 @@ import {
     DEFAULT_EXCLUDE_PATTERNS,
     DEFAULT_REACT_PATTERNS,
     DEFAULT_VARIABLE_PATTERNS,
-} from '../../cli';
-import { parseCliArgs } from '../../cli/args';
-import { parserCssVarsense } from '../../parsers';
+} from '../../../cli';
+import { parseCliArgs } from '../../../cli/args';
+import { parserCssVarsense } from '../../../parsers';
 
 interface ExpectedFinding {
     file: string;

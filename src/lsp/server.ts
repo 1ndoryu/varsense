@@ -14,19 +14,19 @@ import {
     TextDocuments,
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { analyzeVarsenseDocument } from '@/core/analyzeDocument';
+import { analyzeVarsenseDocument } from '@/core/analisis/analyzeDocument';
 import { createCoreDocument } from '@/core/types';
-import { NodeDocumentProvider, NodeWorkspaceFileProvider } from '@/core/nodeProviders';
-import { VariableIndexBuilder } from '@/core/variableIndexBuilder';
+import { NodeDocumentProvider, NodeWorkspaceFileProvider } from '@/core/proveedores/nodeProviders';
+import { VariableIndexBuilder } from '@/core/indices/variableIndexBuilder';
 import {
     buildAnalysisConfig,
     DEFAULT_CSS_PATTERNS,
     DEFAULT_EXCLUDE_PATTERNS,
     DEFAULT_VARIABLE_PATTERNS,
     VarsenseConfigFile,
-} from '@/core/config';
-import { cargarVarsenseConfig } from '@/core/configArchivo';
-import { conTiempoLimite, TAMANO_MAXIMO_ARCHIVO_BYTES, TIMEOUT_LSP_MS } from '@/core/limites';
+} from '@/core/configuracion/config';
+import { cargarVarsenseConfig } from '@/core/configuracion/configArchivo';
+import { conTiempoLimite, TAMANO_MAXIMO_ARCHIVO_BYTES, TIMEOUT_LSP_MS } from '@/core/analisis/limites';
 import { findingToLspDiagnostic } from './diagnostics';
 import { crearCacheIndice } from './cacheIndice';
 import { parserCssVarsense } from '@/parsers';

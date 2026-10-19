@@ -1,9 +1,9 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
-import { createCoreDocument, CoreTextDocument } from './types';
+import { createCoreDocument, CoreTextDocument } from '../types';
 import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
-import { TAMANO_MAXIMO_ARCHIVO_BYTES } from './limites';
+import { TAMANO_MAXIMO_ARCHIVO_BYTES } from '../analisis/limites';
 
 function normalizarRuta(ruta: string): string {
     return ruta.replace(/\\/g, '/');

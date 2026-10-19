@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { cargarVarsenseConfig } from '../../../core/configArchivo';
+import { cargarVarsenseConfig } from '../../../core/configuracion/configArchivo';
 
 suite('Configuración compartida CLI y LSP', () => {
     test('sin varsense.config.json devuelve la configuración vacía', async () => {

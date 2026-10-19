@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { extraerUsoVariablesDeTexto } from '../../core/usoVariables';
+import { extraerUsoVariablesDeTexto } from '../../../core/analisis/usoVariables';
 
 /* [uso-js] Consumo de variables CSS desde JS: `getPropertyValue('--x')` cuenta como uso,
  * igual que `var(--x)`. La definicion en CSS no es uso (la cuenta cssParser).

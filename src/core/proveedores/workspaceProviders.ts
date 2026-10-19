@@ -1,4 +1,4 @@
-import { CoreTextDocument } from './types';
+import { CoreTextDocument } from '../types';
 
 export interface WorkspaceFile {
     uri: string;

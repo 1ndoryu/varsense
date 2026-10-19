@@ -1,7 +1,7 @@
 /* Ejecución de la CLI: parsea argumentos, ejecuta el análisis y escribe la salida.
  * Sin efectos al importar; el arranque como binario vive en main.ts. */
 
-import { conTiempoLimite } from '@/core/limites';
+import { conTiempoLimite } from '@/core/analisis/limites';
 import { parseCliArgs, usage } from './args';
 import { analyzeCliTarget } from './analisis/objetivos';
 import { avisarOmitidos, renderOutput, writeOrPrint } from './salida';

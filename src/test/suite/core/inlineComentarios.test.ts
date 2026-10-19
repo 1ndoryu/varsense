@@ -11,11 +11,11 @@
  */
 
 import * as assert from 'assert';
-import { createCoreDocument } from '../../core/types';
-import { analyzeVarsenseDocument } from '../../core/analyzeDocument';
-import { buildAnalysisConfig } from '../../core/config';
-import { enmascararComentarios } from '../../core/enmascararComentarios';
-import { parserCssVarsense } from '../../parsers';
+import { createCoreDocument } from '../../../core/types';
+import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument';
+import { buildAnalysisConfig } from '../../../core/configuracion/config';
+import { enmascararComentarios } from '../../../core/analisis/enmascararComentarios';
+import { parserCssVarsense } from '../../../parsers';
 
 function indiceVacio() {
     return { variables: new Map(), ultimaActualizacion: 0, archivosEscaneados: [] as string[] };

@@ -2,7 +2,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { CoreFinding } from '@/core/types';
-import { matchesAnyGlob } from '@/core/nodeProviders';
+import { matchesAnyGlob } from '@/core/proveedores/nodeProviders';
 import type { ParsedCliArgs } from '../args';
 
 export function pathKey(filePath: string): string {

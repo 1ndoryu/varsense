@@ -1,17 +1,17 @@
 import * as assert from 'assert';
-import { createCoreDocument, createCoreRange, serializeCoreFindings, CoreFinding } from '../../core/types';
-import { findingToDiagnostic } from '../../vscode/vscodeAdapter';
-import { parsearDocumento } from '../../parsers/cssParser';
-import { analyzeVarsenseDocument } from '../../core/analyzeDocument';
-import { buildAnalysisConfig } from '../../core/config';
-import { VariableIndexBuilder } from '../../core/variableIndexBuilder';
-import { ClassIndexBuilder } from '../../core/classIndexBuilder';
-import { NodeWorkspaceFileProvider } from '../../core/nodeProviders';
+import { createCoreDocument, createCoreRange, serializeCoreFindings, CoreFinding } from '../../../core/types';
+import { findingToDiagnostic } from '../../../vscode/vscodeAdapter';
+import { parsearDocumento } from '../../../parsers/cssParser';
+import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument';
+import { buildAnalysisConfig } from '../../../core/configuracion/config';
+import { VariableIndexBuilder } from '../../../core/indices/variableIndexBuilder';
+import { ClassIndexBuilder } from '../../../core/indices/classIndexBuilder';
+import { NodeWorkspaceFileProvider } from '../../../core/proveedores/nodeProviders';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { parserCssVarsense } from '../../parsers';
-import { MemoryWorkspaceProvider, PREFIJOS_AREA } from './helpers/memoriaWorkspace';
+import { parserCssVarsense } from '../../../parsers';
+import { MemoryWorkspaceProvider, PREFIJOS_AREA } from '../helpers/memoriaWorkspace';
 
 suite('VarSense editor-agnostic core contracts', () => {
   test('creates a document with stable line helpers', () => {

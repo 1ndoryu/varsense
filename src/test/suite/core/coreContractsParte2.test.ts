@@ -1,12 +1,12 @@
 import * as assert from 'assert';
-import { createCoreDocument } from '../../core/types';
-import { analyzeVarsenseDocument } from '../../core/analyzeDocument';
-import { buildAnalysisConfig } from '../../core/config';
-import { analyzeCrossFileDuplicates, analyzeTokenRules } from '../../core/tokenRules';
-import { VariableIndexBuilder } from '../../core/variableIndexBuilder';
-import { ClassIndexBuilder } from '../../core/classIndexBuilder';
-import { parserCssVarsense } from '../../parsers';
-import { MemoryWorkspaceProvider, PREFIJOS_AREA } from './helpers/memoriaWorkspace';
+import { createCoreDocument } from '../../../core/types';
+import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument';
+import { buildAnalysisConfig } from '../../../core/configuracion/config';
+import { analyzeCrossFileDuplicates, analyzeTokenRules } from '../../../core/analisis/tokenRules';
+import { VariableIndexBuilder } from '../../../core/indices/variableIndexBuilder';
+import { ClassIndexBuilder } from '../../../core/indices/classIndexBuilder';
+import { parserCssVarsense } from '../../../parsers';
+import { MemoryWorkspaceProvider, PREFIJOS_AREA } from '../helpers/memoriaWorkspace';
 
 suite('VarSense editor-agnostic core contracts (parte 2)', () => {
   test('sentinel-disable suprime la linea siguiente (convencion CSS/reglas)', async () => {

@@ -44,7 +44,7 @@ desde source queda como **modo de desarrollo explícito**.
   `sentinel.lock.json`. Estas piezas viven en el repo consumidor, no en VarSense.
 - El índice persistente se invalida por **versión de la herramienta, versión
   del parser y hash de la configuración** (`indexIdentity`,
-  `src/core/persistentIndex.ts:97`). No incluye plataforma ni dependencias: el
+  `src/core/indices/persistentIndex.ts:97`). No incluye plataforma ni dependencias: el
   índice se regenera en cada máquina.
 
 ## Retención y rollback

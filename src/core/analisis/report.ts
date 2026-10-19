@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { CoreFinding } from './types';
+import { CoreFinding } from '../types';
 
 export interface VarsenseReportEntry {
     ruta: string;

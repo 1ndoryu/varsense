@@ -1,7 +1,7 @@
 import { CssVariable, VariableIndex } from '@/types';
-import { CancellationToken, DocumentProvider, throwIfCancelled, WorkspaceFile, WorkspaceFileProvider } from './workspaceProviders';
+import { CancellationToken, DocumentProvider, throwIfCancelled, WorkspaceFile, WorkspaceFileProvider } from '../proveedores/workspaceProviders';
 import { PersistentIndexStore, sha256File } from './persistentIndex';
-import type { ParserVarsense } from './puertoParsers';
+import type { ParserVarsense } from '../puertoParsers';
 
 export interface VariableIndexBuildResult {
     indice: VariableIndex;

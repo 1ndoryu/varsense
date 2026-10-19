@@ -1,5 +1,5 @@
 /* Tipos y constantes públicas del resultado de la CLI (contrato del JSON). */
-import { VarsenseReportEntry } from '@/core/report';
+import { VarsenseReportEntry } from '@/core/analisis/report';
 
 export interface CliAnalysisResult {
     entries: VarsenseReportEntry[];

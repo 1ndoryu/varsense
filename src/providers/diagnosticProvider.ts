@@ -12,7 +12,7 @@ import {DiagnosticType} from '@/types';
 import {VariableScanner} from '@/services/variableScanner';
 import {obtenerConfigService} from '@/services/configService';
 import {esLenguajeSoportado, debounce, coincideConPatron} from '@/utils/fileUtils';
-import { analyzeVarsenseDocument } from '@/core/analyzeDocument';
+import { analyzeVarsenseDocument } from '@/core/analisis/analyzeDocument';
 import { CoreFinding } from '@/core/types';
 import { configuracionAnalisisDesdeExtension, documentFromVsCode, findingToDiagnostic } from '@/vscode/vscodeAdapter';
 import { parserCssVarsense } from '@/parsers';

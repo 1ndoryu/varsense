@@ -1,8 +1,8 @@
 /* Render y escritura de la salida (markdown/JSON) y avisos de archivos omitidos. */
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { generarReporteMarkdown } from '@/core/report';
-import { TAMANO_MAXIMO_ARCHIVO_BYTES } from '@/core/limites';
+import { generarReporteMarkdown } from '@/core/analisis/report';
+import { TAMANO_MAXIMO_ARCHIVO_BYTES } from '@/core/analisis/limites';
 import type { ParsedCliArgs } from './args';
 import { CliAnalysisResult, VARSENSE_JSON_SCHEMA_VERSION } from './tipos';
 

@@ -1,5 +1,5 @@
 /* [V6] Partición de classIndexBuilder.ts: tipos del índice de clases. Sin cambio de comportamiento. */
-import { CancellationToken } from '../workspaceProviders';
+import { CancellationToken } from '../../proveedores/workspaceProviders';
 import type { CarrierCallSite } from './fuentes/carriers';
 
 export interface ClaseCssDefinida {

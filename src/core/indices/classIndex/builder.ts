@@ -1,6 +1,6 @@
 /* [V6] Partición de classIndexBuilder.ts: clase ClassIndexBuilder (escaneo de clases huérfanas). Sin cambio de comportamiento. */
 import { PersistentIndexStore } from '../persistentIndex';
-import { CancellationError, CancellationToken, DocumentCacheProvider, DocumentProvider, WorkspaceFileProvider, throwIfCancelled } from '../workspaceProviders';
+import { CancellationError, CancellationToken, DocumentCacheProvider, DocumentProvider, WorkspaceFileProvider, throwIfCancelled } from '../../proveedores/workspaceProviders';
 import { ContextoCarga, buscarArchivosUnicos, cargarDefinicionesCss, cargarTokensConsumo } from './carga';
 import { DEFAULT_CONSUMER_PATTERNS, DEFAULT_CSS_PATTERNS, DEFAULT_MIN_LENGTH } from './constantes';
 import { compilarPatronesExcluidos } from './consumo/htmlYExclusiones';

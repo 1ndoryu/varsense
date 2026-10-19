@@ -9,9 +9,9 @@ export {
     DEFAULT_VARIABLE_PATTERNS,
     buildAnalysisConfig,
     validateVarsenseConfig,
-} from '@/core/config';
+} from '@/core/configuracion/config';
 
-export type { VarsenseConfigFile as VarsenseCliConfigFile } from '@/core/config';
+export type { VarsenseConfigFile as VarsenseCliConfigFile } from '@/core/configuracion/config';
 export type { CliAnalysisResult } from './tipos';
 export { VARSENSE_JSON_SCHEMA_VERSION } from './tipos';
 export { analyzeScanTarget, analyzeOrphanClassesTarget, analyzeAllTarget, analyzeCliTarget } from './analisis/objetivos';

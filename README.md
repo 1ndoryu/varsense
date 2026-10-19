@@ -37,7 +37,7 @@ varsense --version
 
 - `token-duplicate`: el mismo token declarado con valores distintos.
 - `token-unused`: tokens declarados que no se usan en ningun documento.
-- `token-duplicado-cross-archivo`: un token repite el valor de otro declarado en un archivo distinto, con nombre similar (`src/core/tokenRules.ts`).
+- `token-duplicado-cross-archivo`: un token repite el valor de otro declarado en un archivo distinto, con nombre similar (`src/core/analisis/tokenRules.ts`).
 
 La severidad es independiente y configurable; los tokens se resuelven sobre la convencion declarada en `varsense.config.json`, sin imponer paleta, idioma ni nombres de variables.
 
@@ -89,4 +89,4 @@ separado); en `unused`, los tokens consumidos fuera del alcance analizado.
 
 - `src/core/`: indexadores y reglas agnosticos (VariableIndex, ClassIndex, tokenRules) sin imports de VS Code. El adaptador a VS Code vive en `src/vscode/`, fuera del core; `check:core` no admite excepciones.
 - `src/cli/`, `src/lsp/`, `src/extension.ts`: adapters de presentacion sobre el mismo core.
-- `src/test/suite/coreContracts.test.ts`: paridad core/CLI/LSP con fixtures versionadas.
+- `src/test/suite/core/coreContracts.test.ts`: paridad core/CLI/LSP con fixtures versionadas.

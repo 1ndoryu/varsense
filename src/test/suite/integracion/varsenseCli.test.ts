@@ -2,9 +2,9 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { analyzeCliTarget } from '../../cli';
-import { parseCliArgs } from '../../cli/args';
-import { validateVarsenseConfig } from '../../core/config';
+import { analyzeCliTarget } from '../../../cli';
+import { parseCliArgs } from '../../../cli/args';
+import { validateVarsenseConfig } from '../../../core/configuracion/config';
 
 function crearWorkspaceTemporal(prefix: string): string {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));

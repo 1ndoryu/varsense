@@ -4,7 +4,7 @@
 import { CssVariable } from '@/types';
 import { VarsenseDocumentAnalysisConfig } from './analyzeDocument';
 import { extraerUsoVariablesDeTexto } from './usoVariables';
-import { CoreFinding, CoreTextDocument, createCoreRange } from './types';
+import { CoreFinding, CoreTextDocument, createCoreRange } from '../types';
 
 interface IndexedVariable { variable: CssVariable; file: string }
 

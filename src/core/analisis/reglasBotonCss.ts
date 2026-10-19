@@ -1,8 +1,8 @@
 /* [V4] Regla EstiloBotonEspecifico: una clase de botón definida en CSS de
  * componente reimplementa estilos que deben venir de <Button>. Antes vivía
  * solo en la extensión; ahora la comparten extensión, CLI y LSP. */
-import { DiagnosticType } from '../types';
-import { CoreFinding, CoreTextDocument, createCoreRange } from './types';
+import { DiagnosticType } from '../../types';
+import { CoreFinding, CoreTextDocument, createCoreRange } from '../types';
 
 /* Propiedades que indican implementación manual de botón */
 const PROPS_BOTON = /\b(padding|background(?:-color)?|border(?:-radius)?|cursor)\s*:/gi;

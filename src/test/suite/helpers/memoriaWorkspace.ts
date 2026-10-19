@@ -1,6 +1,6 @@
 /* Helpers compartidos por coreContracts y sus partes: evitan duplicarlos entre los tres archivos de test. */
 import { createCoreDocument } from '../../../core/types';
-import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../../core/workspaceProviders';
+import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../../core/proveedores/workspaceProviders';
 
 /* Convencion del area: el core no la asume; los tests que la usan la pasan explicita. */
 export const PREFIJOS_AREA = ['clase'];

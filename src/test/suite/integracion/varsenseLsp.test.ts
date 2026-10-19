@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import { DiagnosticSeverity } from 'vscode-languageserver/node';
-import { createCoreRange } from '../../core/types';
-import { coreSeverityToLspSeverity, findingToLspDiagnostic } from '../../lsp/diagnostics';
+import { createCoreRange } from '../../../core/types';
+import { coreSeverityToLspSeverity, findingToLspDiagnostic } from '../../../lsp/diagnostics';
 
 suite('VarSense LSP diagnostics', () => {
     test('mapea severidades core a severidades LSP', () => {

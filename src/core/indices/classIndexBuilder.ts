@@ -6,4 +6,4 @@ export { esNombrePortadorClase } from './classIndex/plantillas/plantillas';
 export { detectarCarriersMismoArchivo, extraerCarriersYLlamadas } from './classIndex/fuentes/carriers';
 export type { CarrierCallSite } from './classIndex/fuentes/carriers';
 export { ClassIndexBuilder } from './classIndex/builder';
-export { extraerUsoVariablesDeTexto } from './usoVariables';
+export { extraerUsoVariablesDeTexto } from '../analisis/usoVariables';

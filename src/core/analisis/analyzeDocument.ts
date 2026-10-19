@@ -1,6 +1,6 @@
 import { DiagnosticType, VariableIndex } from '@/types';
-import { CoreFinding, CoreSeverity, CoreTextDocument, createCoreRange, positionAtOffset } from './types';
-import type { ParserVarsense } from './puertoParsers';
+import { CoreFinding, CoreSeverity, CoreTextDocument, createCoreRange, positionAtOffset } from '../types';
+import type { ParserVarsense } from '../puertoParsers';
 import { enmascararComentarios } from './enmascararComentarios';
 import { analyzeEstiloBotonEspecifico } from './reglasBotonCss';
 
