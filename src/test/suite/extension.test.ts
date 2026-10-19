@@ -155,7 +155,7 @@ suite('Value Parser Tests', () => {
 
 suite('Color Utils Tests', () => {
     test('Should detect hex colors', () => {
-        const {esColor} = require('../../utils/colorUtils');
+        const {esColor} = require('../../utils/color/colorUtils');
 
         assert.strictEqual(esColor('#fff'), true);
         assert.strictEqual(esColor('#ffffff'), true);
@@ -164,21 +164,21 @@ suite('Color Utils Tests', () => {
     });
 
     test('Should detect rgb/rgba colors', () => {
-        const {esColor} = require('../../utils/colorUtils');
+        const {esColor} = require('../../utils/color/colorUtils');
 
         assert.strictEqual(esColor('rgb(255, 0, 0)'), true);
         assert.strictEqual(esColor('rgba(0, 0, 0, 0.5)'), true);
     });
 
     test('Should detect hsl/hsla colors', () => {
-        const {esColor} = require('../../utils/colorUtils');
+        const {esColor} = require('../../utils/color/colorUtils');
 
         assert.strictEqual(esColor('hsl(120, 100%, 50%)'), true);
         assert.strictEqual(esColor('hsla(120, 100%, 50%, 0.5)'), true);
     });
 
     test('Should detect named colors', () => {
-        const {esColor} = require('../../utils/colorUtils');
+        const {esColor} = require('../../utils/color/colorUtils');
 
         assert.strictEqual(esColor('red'), true);
         assert.strictEqual(esColor('blue'), true);
@@ -187,7 +187,7 @@ suite('Color Utils Tests', () => {
     });
 
     test('Should parse hex color correctly', () => {
-        const {parsearColor} = require('../../utils/colorUtils');
+        const {parsearColor} = require('../../utils/color/colorUtils');
 
         const color = parsearColor('#ff0000');
 
@@ -199,7 +199,7 @@ suite('Color Utils Tests', () => {
     });
 
     test('Should parse short hex color correctly', () => {
-        const {parsearColor} = require('../../utils/colorUtils');
+        const {parsearColor} = require('../../utils/color/colorUtils');
 
         const color = parsearColor('#f00');
 
@@ -210,7 +210,7 @@ suite('Color Utils Tests', () => {
     });
 
     test('Should parse rgb color correctly', () => {
-        const {parsearColor} = require('../../utils/colorUtils');
+        const {parsearColor} = require('../../utils/color/colorUtils');
 
         const color = parsearColor('rgb(128, 64, 32)');
 

@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import { encontrarVariableEnPosicion } from '@/parsers/cssCursor';
 import { VariableScanner } from '@/services/variableScanner';
 import { obtenerResolver } from '@/services/variableResolver';
-import { parsearColor, generarMarkdownColor } from '@/utils/colorUtils';
+import { parsearColor, generarMarkdownColor } from '@/utils/color/colorUtils';
 import { obtenerRutaRelativa } from '@/utils/fileUtils';
 import { documentFromVsCode, rangeToVsCodeRange } from '@/vscode/vscodeAdapter';
 

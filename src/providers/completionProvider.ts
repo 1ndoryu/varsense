@@ -10,7 +10,7 @@ import { obtenerPropiedadEnPosicion } from '@/parsers/cssCursor';
 import { VariableScanner } from '@/services/variableScanner';
 import { obtenerResolver } from '@/services/variableResolver';
 import { obtenerConfigService } from '@/services/configService';
-import { parsearColor } from '@/utils/colorUtils';
+import { parsearColor } from '@/utils/color/colorUtils';
 import { obtenerRutaRelativa } from '@/utils/fileUtils';
 import { documentFromVsCode } from '@/vscode/vscodeAdapter';
 

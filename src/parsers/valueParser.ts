@@ -5,7 +5,7 @@
 
 import { VariableUsage } from '@/types';
 import { CoreTextDocument, createCoreRange } from '@/core/types';
-import { esColor } from '@/utils/colorUtils';
+import { esColor } from '@/utils/color/colorUtils';
 
 /*
  * Regex para detectar uso de variables CSS: var(--nombre) o var(--nombre, fallback)

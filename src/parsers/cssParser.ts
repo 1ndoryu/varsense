@@ -8,7 +8,7 @@ import { CoreRange, CoreTextDocument, createCoreRange, positionAtOffset } from '
 import {extraerVariablesDeValor, esDefinicionVariable, obtenerNombreVariable, esValorHardcodeado, extraerValorLimpio, crearUsosVariable} from './valueParser';
 import {REGEX_ATRIBUTO_ESTILO, clavesDeExpresionEstilo, finExpresionEstilo, nombreCustomProperty} from './estiloInline';
 import {buscarAmbitoInnermost, mapearAmbitosBloques} from './cssAmbitos';
-import {esColor} from '@/utils/colorUtils';
+import {esColor} from '@/utils/color/colorUtils';
 import type {OpcionesParserCss} from '@/core/puertoParsers';
 
 /*
