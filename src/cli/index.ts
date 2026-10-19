@@ -110,7 +110,8 @@ function takeValue(args: string[], index: number, option: string): string {
 export function parseCliArgs(args: string[]): ParsedCliArgs {
     const command = args[0];
     if (command !== 'scan' && command !== 'orphan-classes' && command !== 'all') {
-        throw new Error(usage());
+        // Un comando desconocido no imprime toda la ayuda: basta con indicar cómo verla.
+        throw new Error(`Comando no reconocido: ${command ?? '(ninguno)'}. Ejecuta con --help para ver el uso.`);
     }
 
     const parsed: ParsedCliArgs = {
