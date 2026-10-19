@@ -30,3 +30,6 @@ coverage/
 .vscode-test/
 .vscode/
 build/
+
+# Informe generado por el propio VarSense
+.varsense-report.md
