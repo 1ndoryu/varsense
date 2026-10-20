@@ -43,3 +43,5 @@ Agente/planes/
 target/
 .quality-reports/
 .runtime/
+# Evidencia local de release (quality-setup); igual que en workspace-manager
+.sentinel/
