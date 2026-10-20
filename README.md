@@ -51,7 +51,7 @@ Límites: el tope de 2 MiB por archivo (ver CLI) aplica aquí con un aviso infor
 
 Hoy VarSense se instala compilando desde el checkout: `npm install` es el único paso (el script `prepare` compila `dist/`). Un artifact publicado que se instale sin compilar todavía no existe; su contrato, pendiente de implementar, está en `docs/artifact-contract.md`.
 
-Requiere Node.js >= 20.19 (la suite de tests usa mocha 12). Instalación limpia probada con Node 22.23.
+Requiere Node.js >= 20.19 (la suite de tests usa mocha 12). Instalación limpia probada con Node 22.23 en Linux. Windows no está en la matriz de pruebas: `npm install` y `npm run smoke:lsp` no se han verificado allí.
 
 ```
 npm install                                    # instala y compila dist/ (script prepare)

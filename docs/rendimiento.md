@@ -1,6 +1,8 @@
 # Rendimiento de `varsense all`
 
-Medición de `PERF-1` (2026-10-19) en el VPS 89, con el CLI compilado (`npm run compile`) y sin caché persistente reutilizable (cada ejecución reanaliza).
+Medición del 2026-10-19 en el VPS 89, con el CLI compilado (`npm run compile`) y sin caché persistente reutilizable (cada ejecución reanaliza).
+
+Rutas de las tablas y del perfil: `consumo/`, `fuentes/` y `classIndex/` son relativas a `src/core/indices/classIndex/`; `types.ts` (`positionAtOffset`) es `src/core/types.ts`; `@/` es el alias de `src/`.
 
 | Workspace | Archivos | Total | `variableIndexMs` | `classIndexMs` | `analyzeMs` |
 |---|---|---|---|---|---|

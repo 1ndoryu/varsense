@@ -1,7 +1,6 @@
 # Contrato del artifact publicado de VarSense
 
-> **Estado:** especificación aceptada (Fase 3 de la auditoría, 2026-08-10; tarea `108A-1`). **No implementada:** hoy VarSense se instala compilando desde source (ver README, sección Instalación).
-> **Vigencia:** a partir del release de publicación (Fase 8). Hasta entonces, este documento describe el destino, no el comportamiento actual.
+> **Estado:** el estado actual de la instalación vive en el README, sección Instalación (fuente única). Este documento describe el contrato objetivo: hasta el primer artifact publicado, describe el destino y no el comportamiento actual.
 
 ## Objetivo
 
@@ -45,7 +44,7 @@ desde source queda como **modo de desarrollo explícito**.
   `sentinel.lock.json`. Estas piezas viven en el repo consumidor, no en VarSense.
 - El índice persistente se invalida por **versión de la herramienta, versión
   del parser y hash de la configuración** (`indexIdentity`,
-  `src/core/indices/persistentIndex.ts:97`). No incluye plataforma ni dependencias: el
+  `src/core/indices/persistentIndex.ts`). No incluye plataforma ni dependencias: el
   índice se regenera en cada máquina.
 
 ## Retención y rollback
@@ -58,6 +57,5 @@ desde source queda como **modo de desarrollo explícito**.
 
 ## Referencias
 
-- Auditoría §14 Fase 3 (setup/distribución, gate de rendimiento, rollback).
-- `bench-varsense` del consumidor: `phaseDurationMs` + `metrics` del CLI
-  (108A-1 F3) alimentan el benchmark versionado.
+- Benchmarks de consumidores: `phaseDurationMs` y `metrics` de la salida JSON
+  del CLI son la fuente de medición.
