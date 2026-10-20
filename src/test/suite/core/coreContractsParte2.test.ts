@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import { createCoreDocument } from '../../../core/types';
 import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument';
 import { buildAnalysisConfig } from '../../../core/configuracion/config';
+import { ESTILO_BOTON_CONVENCION } from '../../../configuracion/convencionArea';
 import { analyzeCrossFileDuplicates, analyzeTokenRules } from '../../../core/analisis/tokenRules';
 import { VariableIndexBuilder } from '../../../core/indices/variableIndexBuilder';
 import { ClassIndexBuilder } from '../../../core/indices/classIndexBuilder';
@@ -24,7 +25,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
     const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
 
     assert.strictEqual(hallazgos.length, 0);
   });
@@ -43,7 +44,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
     const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
 
     assert.strictEqual(hallazgos.length, 0);
   });
@@ -63,7 +64,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
     const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
 
     assert.strictEqual(hallazgos.length, 1);
     assert.strictEqual(hallazgos[0].ruleId, 'cssInlineReact');
@@ -95,7 +96,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
       file,
       document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
     }));
-    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
+    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION));
     const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
 
     assert.strictEqual(duplicados.length, 0);
@@ -115,7 +116,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
       file,
       document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
     }));
-    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
+    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION));
     const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
 
     assert.strictEqual(duplicados.length, 1);
@@ -143,7 +144,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
       file,
       document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
     }));
-    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
+    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION));
     const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
 
     assert.strictEqual(duplicados.length, 0);
@@ -165,7 +166,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
       file,
       document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
     }));
-    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
+    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION));
     const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
 
     assert.strictEqual(duplicados.length, 1);
@@ -189,7 +190,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
       file,
       document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
     }));
-    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
+    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION));
     const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
 
     assert.strictEqual(duplicados.length, 0);
@@ -211,7 +212,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
       file,
       document: createCoreDocument({ uri: `file://${file}`, fileName: file, languageId: 'css', content: '' }),
     }));
-    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}));
+    const hallazgos = analyzeTokenRules(result.variablesPorArchivo, objetos, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION));
     const duplicados = hallazgos.filter(hallazgo => hallazgo.ruleId === 'token-duplicate');
 
     assert.strictEqual(duplicados.length, 1);
@@ -237,7 +238,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
     const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
     const inline = hallazgos.filter(hallazgo => hallazgo.ruleId === 'cssInlineReact');
 
     assert.strictEqual(inline.length, 1);
@@ -369,7 +370,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
   /* [149A-1 F3.12] hardcodedDetection mantiene warning por defecto (089A-3):
    * la opcion solo cambia la severidad cuando el proyecto la fija. */
   test('[149A-1] hardcodedDetection mantiene warning por defecto', () => {
-    const config = buildAnalysisConfig({});
+    const config = buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION);
 
     assert.strictEqual(config.hardcoded.severidad, 'warning');
   });
@@ -387,9 +388,9 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
     const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const porDefecto = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
+    const porDefecto = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
     const enError = analyzeVarsenseDocument(
-      documento, indice, buildAnalysisConfig({ hardcodedDetection: { severity: 'error' } }), parserCssVarsense
+      documento, indice, buildAnalysisConfig({ hardcodedDetection: { severity: 'error' } }, ESTILO_BOTON_CONVENCION), parserCssVarsense
     );
     const hardcodedDefecto = porDefecto.filter(hallazgo => hallazgo.ruleId === 'valorHardcoded');
     const hardcodedError = enError.filter(hallazgo => hallazgo.ruleId === 'valorHardcoded');
@@ -417,7 +418,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
     const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
 
     assert.strictEqual(hallazgos.length, 2);
     assert.ok(hallazgos.every(hallazgo => hallazgo.ruleId === 'cssInlineReact'));
@@ -438,7 +439,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
     const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
 
     assert.strictEqual(hallazgos.length, 1);
     assert.strictEqual(hallazgos[0].range.start.line, 1);
@@ -463,9 +464,9 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
     const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const porDefecto = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
+    const porDefecto = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
     const explicita = analyzeVarsenseDocument(
-      documento, indice, buildAnalysisConfig({ todoProseDetection: { enabled: false } }), parserCssVarsense
+      documento, indice, buildAnalysisConfig({ todoProseDetection: { enabled: false } }, ESTILO_BOTON_CONVENCION), parserCssVarsense
     );
 
     assert.strictEqual(porDefecto.length, 0);
@@ -489,7 +490,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
     const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
-    const hallazgos = analyzeCrossFileDuplicates(result.variablesPorArchivo, buildAnalysisConfig({}));
+    const hallazgos = analyzeCrossFileDuplicates(result.variablesPorArchivo, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION));
 
     assert.strictEqual(hallazgos.length, 1);
     assert.strictEqual(hallazgos[0].ruleId, 'token-duplicado-cross-archivo');
@@ -515,7 +516,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
     const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
-    const hallazgos = analyzeCrossFileDuplicates(result.variablesPorArchivo, buildAnalysisConfig({}));
+    const hallazgos = analyzeCrossFileDuplicates(result.variablesPorArchivo, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION));
 
     assert.strictEqual(hallazgos.length, 0);
   });
@@ -536,7 +537,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
     const builder = new VariableIndexBuilder(provider, provider, parserCssVarsense);
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
-    const hallazgos = analyzeCrossFileDuplicates(result.variablesPorArchivo, buildAnalysisConfig({}));
+    const hallazgos = analyzeCrossFileDuplicates(result.variablesPorArchivo, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION));
 
     assert.strictEqual(hallazgos.length, 0);
   });
@@ -558,10 +559,10 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
 
     const result = await builder.build({ patterns: ['**/*.css'], exclude: [] });
     const apagado = analyzeCrossFileDuplicates(
-      result.variablesPorArchivo, buildAnalysisConfig({ tokenDetection: { crossFile: { enabled: false } } })
+      result.variablesPorArchivo, buildAnalysisConfig({ tokenDetection: { crossFile: { enabled: false } } }, ESTILO_BOTON_CONVENCION)
     );
     const enWarning = analyzeCrossFileDuplicates(
-      result.variablesPorArchivo, buildAnalysisConfig({ tokenDetection: { crossFile: { severity: 'warning' } } })
+      result.variablesPorArchivo, buildAnalysisConfig({ tokenDetection: { crossFile: { severity: 'warning' } } }, ESTILO_BOTON_CONVENCION)
     );
 
     assert.strictEqual(apagado.length, 0);

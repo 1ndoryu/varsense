@@ -27,8 +27,8 @@ export interface ClassIndexScanOptions {
     cssPatterns?: string[];
     consumerPatterns?: string[];
     /* Prefijos (ademas de className/contentClass) que marcan un nombre portador de
-     * clases. El core no asume convencion: sin valor, solo cuentan className/contentClass. */
-    prefijosPortadores?: string[];
+     * clases. Obligatorio: lo fija la raíz (convención del área); [] = solo className/contentClass. */
+    prefijosPortadores: string[];
     /* [AG-1] `bg-(--x)` como uso de variable (por defecto true); debe coincidir con tokenDetection.tailwindShorthand. */
     shorthandTailwind?: boolean;
     token?: CancellationToken;

@@ -3,6 +3,7 @@ import { createCoreDocument, createCoreRange, serializeCoreFindings, CoreFinding
 import { parsearDocumento } from '../../../parsers/cssParser';
 import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument';
 import { buildAnalysisConfig } from '../../../core/configuracion/config';
+import { ESTILO_BOTON_CONVENCION } from '../../../configuracion/convencionArea';
 import { VariableIndexBuilder } from '../../../core/indices/variableIndexBuilder';
 import { ClassIndexBuilder } from '../../../core/indices/classIndexBuilder';
 import { NodeWorkspaceFileProvider } from '../../../node/nodeProviders';
@@ -925,7 +926,7 @@ suite('VarSense editor-agnostic core contracts', () => {
     const builder = new VariableIndexBuilder(new MemoryWorkspaceProvider({}), new MemoryWorkspaceProvider({}), parserCssVarsense);
     const indice = (await builder.build({ patterns: [], exclude: [] })).indice;
 
-    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}), parserCssVarsense);
+    const hallazgos = analyzeVarsenseDocument(documento, indice, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
 
     assert.strictEqual(hallazgos.length, 0);
   });

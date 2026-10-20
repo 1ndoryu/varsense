@@ -5,6 +5,7 @@
 import * as vscode from 'vscode';
 import { escanearClasesHuerfanas, ResultadoClasesHuerfanas } from '@/services/classScanner';
 import { DiagnosticType } from '@/types';
+import { PREFIJOS_PORTADORES_CONVENCION } from '../configuracion/convencionArea';
 import { estado } from './estado';
 
 /*
@@ -24,7 +25,7 @@ export async function comandoDetectarClasesHuerfanas(): Promise<void> {
     ]);
     const longitudMinima = config.get<number>('orphanClassDetection.minClassLength', 3);
     const patronesExcluidos = config.get<string[]>('orphanClassDetection.excludeClassPatterns', []);
-    const prefijosPortadores = config.get<string[]>('carrierPrefixes', ['clase']);
+    const prefijosPortadores = config.get<string[]>('carrierPrefixes', [...PREFIJOS_PORTADORES_CONVENCION]);
 
     let resultado: ResultadoClasesHuerfanas | null = null;
 

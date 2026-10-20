@@ -1,6 +1,6 @@
 import { CoreSeverity } from '../types';
 import { LENGUAJES_POR_DEFECTO, VarsenseDocumentAnalysisConfig } from '../analisis/analyzeDocument';
-import { ESTILO_BOTON_POR_DEFECTO } from '../analisis/reglasBotonCss';
+import type { VarsenseEstiloBotonConfig } from '../analisis/reglasBotonCss';
 import { NAMESPACES_TEMA_POR_DEFECTO } from '../analisis/tokenRules';
 import { esSeveridadValida } from './validacion';
 
@@ -84,8 +84,6 @@ export const DEFAULT_CSS_PATTERNS = ['**/*.css', '**/*.scss', '**/*.less'];
 export const DEFAULT_REACT_PATTERNS = ['**/*.tsx', '**/*.jsx'];
 export const DEFAULT_SCRIPT_PATTERNS = ['**/*.ts', '**/*.js'];
 export const DEFAULT_INCLUDE_PATTERNS = ['**/*'];
-/* Convencion del design system del area (NAKOMI): default del CLI, no del core. */
-export const DEFAULT_PREFIJOS_PORTADORES = ['clase'];
 export const DEFAULT_EXCLUDE_PATTERNS = [
     '**/node_modules/**',
     '**/vendor/**',
@@ -112,7 +110,9 @@ function severityOrDefault(value: CoreSeverity | undefined, fallback: CoreSeveri
     return esSeveridadValida(value) ? value : fallback;
 }
 
-export function buildAnalysisConfig(config: VarsenseConfigFile): VarsenseDocumentAnalysisConfig {
+/* [G1] Los defaults de convención (estiloBoton) los inyecta la raíz (CLI, extensión, LSP):
+ * el core no conoce el design system de ningún proyecto. */
+export function buildAnalysisConfig(config: VarsenseConfigFile, estiloBotonPorDefecto: VarsenseEstiloBotonConfig): VarsenseDocumentAnalysisConfig {
     return {
         hardcoded: {
             habilitado: config.hardcodedDetection?.enabled ?? true,
@@ -159,15 +159,15 @@ export function buildAnalysisConfig(config: VarsenseConfigFile): VarsenseDocumen
             script: config.languages?.script ?? LENGUAJES_POR_DEFECTO.script,
         },
         estiloBoton: {
-            habilitado: config.buttonStyleDetection?.enabled ?? ESTILO_BOTON_POR_DEFECTO.habilitado,
-            severidad: severityOrDefault(config.buttonStyleDetection?.severity, ESTILO_BOTON_POR_DEFECTO.severidad),
-            carpeta: config.buttonStyleDetection?.componentFolder ?? ESTILO_BOTON_POR_DEFECTO.carpeta,
-            patronSelector: config.buttonStyleDetection?.selectorPattern ?? ESTILO_BOTON_POR_DEFECTO.patronSelector,
-            patronExcluirArchivo: config.buttonStyleDetection?.excludeFilePattern ?? ESTILO_BOTON_POR_DEFECTO.patronExcluirArchivo,
-            nombreComponente: config.buttonStyleDetection?.componentName ?? ESTILO_BOTON_POR_DEFECTO.nombreComponente,
-            propiedadesComponente: config.buttonStyleDetection?.componentProps ?? ESTILO_BOTON_POR_DEFECTO.propiedadesComponente,
-            propiedadesEstilo: config.buttonStyleDetection?.styleProperties ?? ESTILO_BOTON_POR_DEFECTO.propiedadesEstilo,
-            minimoPropiedadesEstilo: config.buttonStyleDetection?.minStyleProperties ?? ESTILO_BOTON_POR_DEFECTO.minimoPropiedadesEstilo,
+            habilitado: config.buttonStyleDetection?.enabled ?? estiloBotonPorDefecto.habilitado,
+            severidad: severityOrDefault(config.buttonStyleDetection?.severity, estiloBotonPorDefecto.severidad),
+            carpeta: config.buttonStyleDetection?.componentFolder ?? estiloBotonPorDefecto.carpeta,
+            patronSelector: config.buttonStyleDetection?.selectorPattern ?? estiloBotonPorDefecto.patronSelector,
+            patronExcluirArchivo: config.buttonStyleDetection?.excludeFilePattern ?? estiloBotonPorDefecto.patronExcluirArchivo,
+            nombreComponente: config.buttonStyleDetection?.componentName ?? estiloBotonPorDefecto.nombreComponente,
+            propiedadesComponente: config.buttonStyleDetection?.componentProps ?? estiloBotonPorDefecto.propiedadesComponente,
+            propiedadesEstilo: config.buttonStyleDetection?.styleProperties ?? estiloBotonPorDefecto.propiedadesEstilo,
+            minimoPropiedadesEstilo: config.buttonStyleDetection?.minStyleProperties ?? estiloBotonPorDefecto.minimoPropiedadesEstilo,
         },
     };
 }

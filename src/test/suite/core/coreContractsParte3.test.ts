@@ -3,6 +3,7 @@ import { createCoreDocument } from '../../../core/types';
 import { parsearDefinicionesRuntime } from '../../../parsers/cssParser';
 import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument';
 import { buildAnalysisConfig } from '../../../core/configuracion/config';
+import { ESTILO_BOTON_CONVENCION } from '../../../configuracion/convencionArea';
 import { VariableIndexBuilder } from '../../../core/indices/variableIndexBuilder';
 import { ClassIndexBuilder } from '../../../core/indices/classIndexBuilder';
 import { detectarCarriersMismoArchivo, extraerMapasExportados, extraerNombresImportadosRelativos, esNombrePortadorClase } from '../../../core/indices/classIndexBuilder';
@@ -518,7 +519,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
       languageId: 'css',
       content: archivos['/workspace/src/estilos.css'].content,
     });
-    const hallazgos = analyzeVarsenseDocument(documento, construido.indice, buildAnalysisConfig({}), parserCssVarsense);
+    const hallazgos = analyzeVarsenseDocument(documento, construido.indice, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
 
     assert.deepStrictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'variableNoDefinida'), []);
   });
@@ -564,7 +565,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
     });
 
     assert.deepStrictEqual(
-      analyzeVarsenseDocument(documento, construido.indice, buildAnalysisConfig({}), parserCssVarsense)
+      analyzeVarsenseDocument(documento, construido.indice, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense)
         .filter(hallazgo => hallazgo.ruleId === 'variableNoDefinida'),
       []
     );
@@ -585,7 +586,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
       ].join('\n'),
     });
 
-    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}), parserCssVarsense);
+    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
 
     assert.deepStrictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'cssInlineReact'), []);
   });
@@ -604,7 +605,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
       ].join('\n'),
     });
 
-    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}), parserCssVarsense);
+    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
 
     assert.strictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'cssInlineReact').length, 1);
   });
@@ -627,7 +628,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
       ].join('\n'),
     });
 
-    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}), parserCssVarsense);
+    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
 
     assert.deepStrictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'valorHardcoded'), []);
   });
@@ -642,7 +643,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
       content: '.a { color: var(--texto, #ff0000); }',
     });
 
-    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}), parserCssVarsense);
+    const hallazgos = analyzeVarsenseDocument(documento, indiceVacio(), buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
 
     assert.strictEqual(hallazgos.filter(hallazgo => hallazgo.ruleId === 'valorHardcoded').length, 1);
   });

@@ -28,18 +28,6 @@ export interface VarsenseEstiloBotonConfig {
     minimoPropiedadesEstilo: number;
 }
 
-export const ESTILO_BOTON_POR_DEFECTO: VarsenseEstiloBotonConfig = {
-    habilitado: true,
-    severidad: 'warning',
-    carpeta: 'components',
-    patronSelector: 'btn|button',
-    patronExcluirArchivo: '^button',
-    nombreComponente: 'Button',
-    propiedadesComponente: ['variante', 'tamano'],
-    propiedadesEstilo: ['padding', 'background', 'background-color', 'border', 'border-radius', 'cursor'],
-    minimoPropiedadesEstilo: 2,
-};
-
 /* Solo CSS dentro de la carpeta de componentes, salvo el archivo excluido (el propio componente base) */
 function esCssDeComponente(document: CoreTextDocument, config: VarsenseEstiloBotonConfig): boolean {
     const ruta = document.fileName.replace(/\\/g, '/');
@@ -69,7 +57,7 @@ function mensajeEstiloBoton(config: VarsenseEstiloBotonConfig, nombreClase: stri
 
 export function analyzeEstiloBotonEspecifico(
     document: CoreTextDocument,
-    config: VarsenseEstiloBotonConfig = ESTILO_BOTON_POR_DEFECTO
+    config: VarsenseEstiloBotonConfig
 ): CoreFinding[] {
     if (!config.habilitado || !esCssDeComponente(document, config)) {
         return [];

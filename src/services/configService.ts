@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { ExtensionConfig, HardcodedDetectionConfig, InlineDetectionConfig, BannedPropertyConfig, SEVERITY_MAP } from '@/types';
+import { PREFIJOS_PORTADORES_CONVENCION } from '../configuracion/convencionArea';
 
 /*
  * Nombre de la sección de configuración en VS Code
@@ -52,7 +53,7 @@ const DEFAULT_CONFIG: ExtensionConfig = {
         propiedades: ['box-shadow']
     },
     sugerenciasContextuales: {},
-    prefijosPortadores: ['clase'],
+    prefijosPortadores: [...PREFIJOS_PORTADORES_CONVENCION],
     patronesExcluidos: [
         '**/node_modules/**',
         '**/vendor/**',

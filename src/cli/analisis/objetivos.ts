@@ -17,11 +17,11 @@ import {
     DEFAULT_REACT_PATTERNS,
     DEFAULT_SCRIPT_PATTERNS,
     DEFAULT_VARIABLE_PATTERNS,
-    DEFAULT_PREFIJOS_PORTADORES,
     EXTENSIONES_CSS_POR_DEFECTO,
     VarsenseConfigFile,
     buildAnalysisConfig,
 } from '@/core/configuracion/config';
+import { CONVENCION_AREA } from '../../configuracion/convencionArea';
 import { parserCssVarsense } from '@/parsers';
 import type { ParsedCliArgs } from '../args';
 import { CliAnalysisResult } from '../tipos';
@@ -55,7 +55,7 @@ export async function analyzeScanTarget(args: ParsedCliArgs, token?: Cancellatio
     const timer = createPhaseTimer();
     const configFile = await readConfig(args.configPath, args.workspacePath);
     const scopedFiles = await readFilesFromManifest(args);
-    const analysisConfig = buildAnalysisConfig(configFile);
+    const analysisConfig = buildAnalysisConfig(configFile, CONVENCION_AREA.estiloBoton);
     const includePatterns = configFile.includePatterns ?? DEFAULT_INCLUDE_PATTERNS;
     const excludePatterns = configFile.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS;
     const fileProvider = new NodeWorkspaceFileProvider(args.workspacePath);
@@ -178,7 +178,7 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs, token?: Ca
         exclude: excludePatterns,
         minLength: configFile.orphanClassDetection?.minClassLength ?? 3,
         excludedClassPatterns: configFile.orphanClassDetection?.excludeClassPatterns ?? [],
-        prefijosPortadores: configFile.prefijosPortadores ?? DEFAULT_PREFIJOS_PORTADORES,
+        prefijosPortadores: configFile.prefijosPortadores ?? CONVENCION_AREA.prefijosPortadores,
         shorthandTailwind: configFile.tokenDetection?.tailwindShorthand ?? true,
         token,
     });
@@ -220,7 +220,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs, token?: Cancellation
         exclude: excludePatterns,
         minLength: configFile.orphanClassDetection?.minClassLength ?? 3,
         excludedClassPatterns: configFile.orphanClassDetection?.excludeClassPatterns ?? [],
-        prefijosPortadores: configFile.prefijosPortadores ?? DEFAULT_PREFIJOS_PORTADORES,
+        prefijosPortadores: configFile.prefijosPortadores ?? CONVENCION_AREA.prefijosPortadores,
         shorthandTailwind: configFile.tokenDetection?.tailwindShorthand ?? true,
         token,
     });
@@ -244,7 +244,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs, token?: Cancellation
         await variableBuilder.addFileToIndex(file, variableResult.indice.variables, variableResult.variablesPorArchivo, token);
     }
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
-    const analysisConfig = buildAnalysisConfig(configFile);
+    const analysisConfig = buildAnalysisConfig(configFile, CONVENCION_AREA.estiloBoton);
     /* [028A-8 tramo 4] Con índice persistente + alcance scoped, los usos de
      * variables se resuelven desde el índice inverso (sin abrir todos los
      * documentos): token-unused consulta el mapa y el análisis documental solo

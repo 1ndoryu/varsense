@@ -11,6 +11,7 @@ import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument'
 import { buildAnalysisConfig, validateVarsenseConfig } from '../../../core/configuracion/config';
 import { DiagnosticType } from '../../../types';
 import { parserCssVarsense } from '../../../parsers';
+import { ESTILO_BOTON_CONVENCION } from '../../../configuracion/convencionArea';
 
 function indiceVacio() {
     return { variables: new Map(), ultimaActualizacion: 0, archivosEscaneados: [] as string[] };
@@ -23,7 +24,7 @@ function analizar(fileName: string, content: string) {
         languageId: 'css',
         content,
     });
-    return analyzeVarsenseDocument(documento, indiceVacio() as never, buildAnalysisConfig({}), parserCssVarsense)
+    return analyzeVarsenseDocument(documento, indiceVacio() as never, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense)
         .filter(hallazgo => hallazgo.ruleId === DiagnosticType.EstiloBotonEspecifico);
 }
 
@@ -59,7 +60,7 @@ suite('VarSense estiloBotonEspecifico (core)', () => {
     test('buttonStyleDetection cambia carpeta, selector y severidad', () => {
         const config = buildAnalysisConfig({
             buttonStyleDetection: { componentFolder: 'ui', selectorPattern: 'cta', severity: 'error' },
-        });
+        }, ESTILO_BOTON_CONVENCION);
         const documento = createCoreDocument({
             uri: 'file:///workspace/src/ui/Tarjeta.css',
             fileName: '/workspace/src/ui/Tarjeta.css',
@@ -73,7 +74,7 @@ suite('VarSense estiloBotonEspecifico (core)', () => {
     });
 
     test('buttonStyleDetection.enabled false desactiva la regla', () => {
-        const config = buildAnalysisConfig({ buttonStyleDetection: { enabled: false } });
+        const config = buildAnalysisConfig({ buttonStyleDetection: { enabled: false } }, ESTILO_BOTON_CONVENCION);
         const documento = createCoreDocument({
             uri: 'file:///workspace/src/components/Tarjeta.css',
             fileName: '/workspace/src/components/Tarjeta.css',
@@ -107,7 +108,7 @@ suite('VarSense estiloBotonEspecifico (core)', () => {
                 styleProperties: ['color', 'outline'],
                 minStyleProperties: 2,
             },
-        });
+        }, ESTILO_BOTON_CONVENCION);
         const documento = createCoreDocument({
             uri: 'file:///workspace/src/components/Tarjeta.css',
             fileName: '/workspace/src/components/Tarjeta.css',
@@ -121,7 +122,7 @@ suite('VarSense estiloBotonEspecifico (core)', () => {
     });
 
     test('minStyleProperties sube el umbral y deja pasar la clase de antes', () => {
-        const config = buildAnalysisConfig({ buttonStyleDetection: { minStyleProperties: 3 } });
+        const config = buildAnalysisConfig({ buttonStyleDetection: { minStyleProperties: 3 } }, ESTILO_BOTON_CONVENCION);
         const documento = createCoreDocument({
             uri: 'file:///workspace/src/components/Tarjeta.css',
             fileName: '/workspace/src/components/Tarjeta.css',

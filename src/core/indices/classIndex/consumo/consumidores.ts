@@ -1,5 +1,5 @@
 /* [V6] Partición de classIndexBuilder.ts: tokens de consumidores (JSX, HTML y strings). Sin cambio de comportamiento. */
-import { REGEX_CLASS_FACTORY, REGEX_CLASS_LIST, REGEX_CREATE_ELEMENT_CLASS, REGEX_EL_FACTORY, REGEX_EXTERNAL_LINK_CLASS, REGEX_SET_ATTRIBUTE_CLASS, regexesPortadoras, PREFIJOS_PORTADORES_POR_DEFECTO } from '../constantes';
+import { REGEX_CLASS_FACTORY, REGEX_CLASS_LIST, REGEX_CREATE_ELEMENT_CLASS, REGEX_EL_FACTORY, REGEX_EXTERNAL_LINK_CLASS, REGEX_SET_ATTRIBUTE_CLASS, regexesPortadoras } from '../constantes';
 import { detectarCarriersMismoArchivo, escanearAsignacionesCompuestas, escanearPushs, escanearReturns } from '../fuentes/carriers';
 import { recopilarDeclaraciones } from '../fuentes/declaraciones';
 import { escanearDeclaraciones, extraerNombresImportadosRelativos, finObjetoLiteral } from '../fuentes/mapasJs';
@@ -173,7 +173,8 @@ export function isCodeMatch(source: string, matchIndex: number): boolean {
     return !isInsideString(source, matchIndex);
 }
 
-export function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes?: Set<string>, referenciasMapa?: Set<string>, llamadasClaseFuera?: Set<string>, prefijos: readonly string[] = PREFIJOS_PORTADORES_POR_DEFECTO): void {
+/* [G1] Los prefijos portadores son obligatorios: los pasa la raíz (convención del área). */
+export function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes: Set<string> | undefined, referenciasMapa: Set<string> | undefined, llamadasClaseFuera: Set<string> | undefined, prefijos: readonly string[]): void {
     const source = removeComments(texto);
     const re = regexesPortadoras(prefijos);
     let match: RegExpExecArray | null;

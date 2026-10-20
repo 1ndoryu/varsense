@@ -1,5 +1,6 @@
 import * as assert from 'assert';
-import { regexesPortadoras, PREFIJOS_PORTADORES_POR_DEFECTO } from '../../../core/indices/classIndex/constantes';
+import { regexesPortadoras } from '../../../core/indices/classIndex/constantes';
+import { PREFIJOS_PORTADORES_CONVENCION } from '../../../configuracion/convencionArea';
 import { extraerTokensDeTexto } from '../../../core/indices/classIndex/consumo/consumidores';
 
 /* Devuelve los grupos capturados de la primera coincidencia de una regex global */
@@ -12,7 +13,7 @@ function primeraCaptura(regex: RegExp, texto: string): string | undefined {
 
 suite('prefijosPortadores configurables', () => {
   test('el default ["clase"] reconoce las mismas props que antes', () => {
-    const re = regexesPortadoras(PREFIJOS_PORTADORES_POR_DEFECTO);
+    const re = regexesPortadoras(PREFIJOS_PORTADORES_CONVENCION);
     assert.strictEqual(primeraCaptura(re.attr, 'className="a b"'), 'a b');
     assert.strictEqual(primeraCaptura(re.attr, 'class="x"'), 'x');
     assert.strictEqual(primeraCaptura(re.attr, 'claseAdicional="extra"'), 'extra');

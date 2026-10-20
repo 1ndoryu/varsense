@@ -14,9 +14,6 @@ export const DEFAULT_CONSUMER_PATTERNS = [
     '**/*.css'
 ];
 export const DEFAULT_MIN_LENGTH = 3;
-/* Igual que DEFAULT_PREFIJOS_PORTADORES de configuración: sin config, el
- * índice reconoce las props clase/Clase* como portadoras de clases. */
-export const PREFIJOS_PORTADORES_POR_DEFECTO: readonly string[] = ['clase'];
 export const REGEX_CLASS_FACTORY = /createContainer\s*\(\s*['"]([^'"]+)['"]/g;
 export const REGEX_EXTERNAL_LINK_CLASS = /createExternalLink\s*\([^,]+,[^,]+,\s*['"]([^'"]+)['"]/g;
 /* [J-8] createElement(tag, 'clase') posicional: Glory-Laminal pasa la clase
@@ -96,7 +93,7 @@ const cacheRegexesPortadoras = new Map<string, RegexesPortadoras>();
 
 /* Devuelve las regex de props portadoras para una lista de prefijos.
  * Las regex son globales con estado (lastIndex): quien las use debe resetearlo. */
-export function regexesPortadoras(prefijos: readonly string[] = PREFIJOS_PORTADORES_POR_DEFECTO): RegexesPortadoras {
+export function regexesPortadoras(prefijos: readonly string[]): RegexesPortadoras {
     const clave = prefijos.join(',');
     let regexes = cacheRegexesPortadoras.get(clave);
     if (!regexes) {

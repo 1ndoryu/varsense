@@ -16,6 +16,7 @@ import {
 } from '../../../cli';
 import { parseCliArgs } from '../../../cli/args';
 import { parserCssVarsense } from '../../../parsers';
+import { ESTILO_BOTON_CONVENCION, PREFIJOS_PORTADORES_CONVENCION } from '../../../configuracion/convencionArea';
 
 interface ExpectedFinding {
     file: string;
@@ -92,7 +93,7 @@ async function analyzeScanWithCore(rootPath: string): Promise<EntryWithFindings[
         exclude: DEFAULT_EXCLUDE_PATTERNS,
     });
     const files = await fileProvider.findFiles([...DEFAULT_CSS_PATTERNS, ...DEFAULT_REACT_PATTERNS], DEFAULT_EXCLUDE_PATTERNS);
-    const config = buildAnalysisConfig({});
+    const config = buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION);
     const entries: EntryWithFindings[] = [];
 
     for (const file of files) {
@@ -114,6 +115,7 @@ async function analyzeOrphansWithCore(rootPath: string): Promise<EntryWithFindin
         exclude: DEFAULT_EXCLUDE_PATTERNS,
         minLength: 3,
         excludedClassPatterns: [],
+        prefijosPortadores: [...PREFIJOS_PORTADORES_CONVENCION],
     });
 
     return result.clasesHuerfanas.map(orphanClass => ({

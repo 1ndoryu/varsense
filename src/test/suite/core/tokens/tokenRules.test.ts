@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import { CssVariable } from '../../../../types';
 import { buildAnalysisConfig, validateVarsenseConfig } from '../../../../core/configuracion/config';
+import { ESTILO_BOTON_CONVENCION } from '../../../../configuracion/convencionArea';
 import { analyzeTokenRules } from '../../../../core/analisis/tokenRules';
 import { createCoreDocument } from '../../../../core/types';
 
@@ -23,7 +24,7 @@ function tokensSinUso(
   contenido: string,
   excludeTokens?: string[],
 ): string[] {
-  const config = buildAnalysisConfig({ tokenDetection: { unused: { excludeTokens } } });
+  const config = buildAnalysisConfig({ tokenDetection: { unused: { excludeTokens } } }, ESTILO_BOTON_CONVENCION);
   const variables = new Map([['index.css', nombres.map(n => variable(n))]]);
   return analyzeTokenRules(variables, [documento(contenido)], config)
     .filter(f => f.ruleId === 'token-unused')
@@ -66,7 +67,7 @@ suite('VarSense themeNamespaces configurable', () => {
   const css = '@theme inline {\n  --brand-x: red;\n}\n<p class="text-x"></p>';
 
   function sinUsoCon(themeNamespaces: unknown) {
-    const config = buildAnalysisConfig({ tokenDetection: { themeNamespaces } } as never);
+    const config = buildAnalysisConfig({ tokenDetection: { themeNamespaces } } as never, ESTILO_BOTON_CONVENCION);
     const variables = new Map([['index.css', [variable('--brand-x')]]]);
     return analyzeTokenRules(variables, [documento(css)], config).filter(f => f.ruleId === 'token-unused').length;
   }
@@ -96,7 +97,7 @@ suite('VarSense tailwindShorthand configurable', () => {
   const tsx = '<p class="bg-(--brand-x)"></p>';
 
   function sinUsoCon(tailwindShorthand: unknown) {
-    const config = buildAnalysisConfig({ tokenDetection: { tailwindShorthand } } as never);
+    const config = buildAnalysisConfig({ tokenDetection: { tailwindShorthand } } as never, ESTILO_BOTON_CONVENCION);
     const variables = new Map([['index.css', [variable('--brand-x')]]]);
     return analyzeTokenRules(variables, [documento(tsx)], config).filter(f => f.ruleId === 'token-unused').length;
   }
@@ -128,7 +129,7 @@ function duplicadosMarcados(
   pares: Array<[nombre: string, valor: string]>,
   excludeTokens?: string[],
 ): string[] {
-  const config = buildAnalysisConfig({ tokenDetection: { duplicate: { excludeTokens } } });
+  const config = buildAnalysisConfig({ tokenDetection: { duplicate: { excludeTokens } } }, ESTILO_BOTON_CONVENCION);
   const variables = new Map([['index.css', pares.map(([nombre, valor]) => variable(nombre, 'index.css', valor))]]);
   return analyzeTokenRules(variables, [], config)
     .filter(f => f.ruleId === 'token-duplicate')

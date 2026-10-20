@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import { createCoreDocument } from '../../../core/types';
 import { ClassIndexBuilder, extraerMapasExportados } from '../../../core/indices/classIndexBuilder';
 import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '../../../core/proveedores/workspaceProviders';
+import { PREFIJOS_PORTADORES_CONVENCION } from '../../../configuracion/convencionArea';
 
 /* [11AA-2] Suite standalone (sin importar adaptadores de 'vscode'): sirve para
  * iterar sobre el detector de claseHuerfana con `mocha --ui tdd` en segundos. */
@@ -61,7 +62,7 @@ suite('VarSense escalares exportados como fuente de clases', () => {
     });
     const builder = new ClassIndexBuilder(provider, provider);
 
-    const result = await builder.scan({ exclude: [], minLength: 3 });
+    const result = await builder.scan({ exclude: [], minLength: 3, prefijosPortadores: [...PREFIJOS_PORTADORES_CONVENCION] });
 
     assert.strictEqual(result.totalClasesHuerfanas, 1);
     assert.strictEqual(result.clasesHuerfanas[0].nombre, 'panelOculto');

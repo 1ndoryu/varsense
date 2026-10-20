@@ -5,6 +5,7 @@
 
 import { ClassIndexBuilder, ResultadoClasesHuerfanas } from '@/core/indices/classIndexBuilder';
 import { VscodeDocumentProvider, VscodeWorkspaceFileProvider } from '@/vscode/vscodeAdapter';
+import { CONVENCION_AREA } from '../configuracion/convencionArea';
 
 export type { ClaseCssDefinida, ResultadoClasesHuerfanas } from '@/core/indices/classIndexBuilder';
 
@@ -16,7 +17,8 @@ export async function escanearClasesHuerfanas(
     longitudMinima: number = 3,
     patronesExcluidosClase: string[] = [],
     onProgress?: (fase: string, actual: number, total: number) => void,
-    prefijosPortadores: string[] = []
+    /* Sin valor, la raíz aplica la convención del área (nunca "ningún portador" en silencio). */
+    prefijosPortadores: string[] = [...CONVENCION_AREA.prefijosPortadores]
 ): Promise<ResultadoClasesHuerfanas> {
     const builder = new ClassIndexBuilder(
         new VscodeWorkspaceFileProvider(),

@@ -25,6 +25,7 @@ import {
     DEFAULT_VARIABLE_PATTERNS,
     VarsenseConfigFile,
 } from '@/core/configuracion/config';
+import { CONVENCION_AREA } from '../configuracion/convencionArea';
 import { cargarVarsenseConfig } from '@/node/configArchivo';
 import { conTiempoLimite, FuenteCancelacion, TAMANO_MAXIMO_ARCHIVO_BYTES, TIMEOUT_LSP_MS } from '@/core/analisis/limites';
 import { CancellationError, CancellationToken, throwIfCancelled } from '@/core/proveedores/workspaceProviders';
@@ -133,7 +134,7 @@ async function diagnosticosDelDocumento(document: TextDocument, rootPath: string
     const findings = analyzeVarsenseDocument(
         coreDocumentFromLsp(document),
         indice,
-        buildAnalysisConfig(config), parserCssVarsense
+        buildAnalysisConfig(config, CONVENCION_AREA.estiloBoton), parserCssVarsense
     );
 
     if (findings.length > MAX_DIAGNOSTICOS) {

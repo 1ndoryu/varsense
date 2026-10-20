@@ -9,6 +9,7 @@ import * as assert from 'assert';
 import { createCoreDocument } from '../../../core/types';
 import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument';
 import { buildAnalysisConfig, validateVarsenseConfig } from '../../../core/configuracion/config';
+import { ESTILO_BOTON_CONVENCION } from '../../../configuracion/convencionArea';
 import { DiagnosticType } from '../../../types';
 import { parserCssVarsense } from '../../../parsers';
 
@@ -31,16 +32,16 @@ function estiloInline(languageId: string, config: ReturnType<typeof buildAnalysi
 
 suite('VarSense languages (core)', () => {
     test('por defecto React se analiza como antes', () => {
-        assert.strictEqual(estiloInline('typescriptreact', buildAnalysisConfig({})).length, 1);
+        assert.strictEqual(estiloInline('typescriptreact', buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION)).length, 1);
     });
 
     test('una lista react vacía desactiva el análisis de JSX', () => {
-        const config = buildAnalysisConfig({ languages: { react: [] } });
+        const config = buildAnalysisConfig({ languages: { react: [] } }, ESTILO_BOTON_CONVENCION);
         assert.strictEqual(estiloInline('typescriptreact', config).length, 0);
     });
 
     test('la lista react configurada admite un identificador propio', () => {
-        const config = buildAnalysisConfig({ languages: { react: ['tsx-propio'] } });
+        const config = buildAnalysisConfig({ languages: { react: ['tsx-propio'] } }, ESTILO_BOTON_CONVENCION);
         assert.strictEqual(estiloInline('tsx-propio', config).length, 1);
         assert.strictEqual(estiloInline('typescriptreact', config).length, 0);
     });

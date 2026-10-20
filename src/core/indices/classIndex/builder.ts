@@ -2,7 +2,7 @@
 import { PersistentIndexStore } from '../persistentIndex';
 import { CancellationError, CancellationToken, DocumentCacheProvider, DocumentProvider, WorkspaceFileProvider, throwIfCancelled } from '../../proveedores/workspaceProviders';
 import { ContextoCarga, buscarArchivosUnicos, cargarDefinicionesCss, cargarTokensConsumo } from './carga';
-import { DEFAULT_CONSUMER_PATTERNS, DEFAULT_CSS_PATTERNS, DEFAULT_MIN_LENGTH, PREFIJOS_PORTADORES_POR_DEFECTO } from './constantes';
+import { DEFAULT_CONSUMER_PATTERNS, DEFAULT_CSS_PATTERNS, DEFAULT_MIN_LENGTH } from './constantes';
 import { compilarPatronesExcluidos } from './consumo/htmlYExclusiones';
 import { CarrierCallSite } from './fuentes/carriers';
 import { MAX_TOKENS } from './fuentes/cssClases';
@@ -55,7 +55,7 @@ export class ClassIndexBuilder {
         const cssPatterns = options.cssPatterns ?? DEFAULT_CSS_PATTERNS;
         const consumerPatterns = options.consumerPatterns ?? DEFAULT_CONSUMER_PATTERNS;
         const minLength = options.minLength ?? DEFAULT_MIN_LENGTH;
-        const prefijos = options.prefijosPortadores ?? PREFIJOS_PORTADORES_POR_DEFECTO;
+        const prefijos = options.prefijosPortadores;
         this.contexto.shorthandTailwind = options.shorthandTailwind ?? true;
         if (this.firmaPrefijosConsumo !== prefijos.join(',')) {
             this.consumerFileCache.clear();

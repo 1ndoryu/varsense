@@ -14,6 +14,7 @@ import * as assert from 'assert';
 import { createCoreDocument } from '../../../core/types';
 import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument';
 import { buildAnalysisConfig } from '../../../core/configuracion/config';
+import { ESTILO_BOTON_CONVENCION } from '../../../configuracion/convencionArea';
 import { enmascararComentarios } from '../../../core/analisis/enmascararComentarios';
 import { parserCssVarsense } from '../../../parsers';
 
@@ -28,7 +29,7 @@ function analizar(fileName: string, languageId: string, content: string) {
         languageId,
         content,
     });
-    return analyzeVarsenseDocument(documento, indiceVacio() as never, buildAnalysisConfig({}), parserCssVarsense);
+    return analyzeVarsenseDocument(documento, indiceVacio() as never, buildAnalysisConfig({}, ESTILO_BOTON_CONVENCION), parserCssVarsense);
 }
 
 function inlineReact(fileName: string, content: string) {
