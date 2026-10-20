@@ -128,6 +128,27 @@ export class VariableIndexBuilder {
         }
     }
 
+    /* [318A-7V24] Completa el índice ANTES de analizar; lo comparten la CLI (scan, all) y la LSP
+     * para que los mismos archivos den el mismo diagnóstico en ambos.
+     * 1) definiciones runtime de los scripts candidatos;
+     * 2) CSS candidatos con scope (:host, #id, .clase) que variableFiles no cubre.
+     * Sin esto, var(--sidebar-ancho) se reporta como variableNoDefinida. */
+    public async completarIndice(
+        resultado: VariableIndexBuildResult,
+        candidatos: WorkspaceFile[],
+        extensionesCss: string[],
+        token?: CancellationToken
+    ): Promise<void> {
+        await this.agregarDefinicionesRuntime(candidatos, resultado.indice.variables, resultado.variablesPorArchivo, token);
+        for (const file of candidatos) {
+            const esCss = extensionesCss.some(extension => file.fsPath.endsWith(extension));
+            if (!esCss || resultado.variablesPorArchivo.has(file.fsPath)) {
+                continue;
+            }
+            await this.addFileToIndex(file, resultado.indice.variables, resultado.variablesPorArchivo, token);
+        }
+    }
+
     public removeFileFromIndex(
         fsPath: string,
         indice: Map<string, CssVariable>,

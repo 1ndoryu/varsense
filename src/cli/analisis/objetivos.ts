@@ -1,8 +1,8 @@
 /* Orquestación del análisis de cada comando (scan, orphan-classes, all) sobre el workspace. */
 import { pathToFileURL } from 'url';
 import { CoreFinding, CoreTextDocument } from '@/core/types';
-import { CachedNodeDocumentProvider, NodeWorkspaceFileProvider } from '@/node/nodeProviders';
-import type { CancellationToken, DocumentProvider, WorkspaceFile } from '@/core/proveedores/workspaceProviders';
+import { CachedNodeDocumentProvider, isIncluded, NodeWorkspaceFileProvider } from '@/node/nodeProviders';
+import type { CancellationToken, DocumentProvider } from '@/core/proveedores/workspaceProviders';
 import { throwIfCancelled } from '@/core/proveedores/workspaceProviders';
 import { VariableIndexBuilder } from '@/core/indices/variableIndexBuilder';
 import { buildVariableReverseIndex } from '@/core/indices/persistentIndex';
@@ -19,7 +19,6 @@ import {
     DEFAULT_SCRIPT_PATTERNS,
     DEFAULT_VARIABLE_PATTERNS,
     EXTENSIONES_CSS_POR_DEFECTO,
-    VarsenseConfigFile,
     buildAnalysisConfig,
 } from '@/core/configuracion/config';
 import { CONVENCION_AREA } from '../../configuracion/convencionArea';
@@ -27,14 +26,9 @@ import { parserCssVarsense } from '@/parsers';
 import type { ParsedCliArgs } from '../args';
 import { CliAnalysisResult } from '../tipos';
 import { readConfig } from '../configuracion';
-import { isFindingScoped, isIncluded, isScopedFile, readFilesFromManifest } from './rutas';
+import { isFindingScoped, isScopedFile, readFilesFromManifest } from './rutas';
 import { buildMetrics, createPhaseTimer } from './metricas';
 import { cacheStats, createIndexStore } from './indiceCache';
-
-/* [VQ5] Decide qué archivos alimentan el índice de variables: extensiones CSS configurables (por defecto `.css`). */
-function esArchivoCss(ruta: string, configFile: VarsenseConfigFile): boolean {
-    return (configFile.languages?.cssExtensions ?? EXTENSIONES_CSS_POR_DEFECTO).some(extension => ruta.endsWith(extension));
-}
 
 function groupFindingsByFile(findings: Array<{ ruta: string; finding: CoreFinding }>): VarsenseReportEntry[] {
     const entries = new Map<string, CoreFinding[]>();
@@ -48,31 +42,6 @@ function groupFindingsByFile(findings: Array<{ ruta: string; finding: CoreFindin
     return Array.from(entries.entries())
         .map(([ruta, fileFindings]) => ({ ruta, findings: fileFindings }))
         .sort((first, second) => first.ruta.localeCompare(second.ruta));
-}
-
-/* [318A-7V24] Completa el índice de variables ANTES de analizar (lo usan scan y all):
- * 1) definiciones runtime setProperty('--x') de los scripts incluidos;
- * 2) CSS incluidos con scope (:host, #id, .clase) que variableFiles no
- * cubre. Sin esto, var(--sidebar-ancho)/var(--lateral-ancho) y las 12
- * variables setProperty de GH se reportan como variableNoDefinida. */
-async function completarIndiceVariables(
-    variableBuilder: VariableIndexBuilder,
-    variableResult: Awaited<ReturnType<VariableIndexBuilder['build']>>,
-    includedCandidates: WorkspaceFile[],
-    configFile: VarsenseConfigFile,
-    token?: CancellationToken
-): Promise<void> {
-    await variableBuilder.agregarDefinicionesRuntime(
-        includedCandidates,
-        variableResult.indice.variables,
-        variableResult.variablesPorArchivo
-    );
-    for (const file of includedCandidates) {
-        if (!esArchivoCss(file.fsPath, configFile) || variableResult.variablesPorArchivo.has(file.fsPath)) {
-            continue;
-        }
-        await variableBuilder.addFileToIndex(file, variableResult.indice.variables, variableResult.variablesPorArchivo, token);
-    }
 }
 
 /* El token (si llega) se consulta entre archivos: un análisis cancelado por timeout se detiene sin terminar el resto. */
@@ -109,7 +78,7 @@ export async function analyzeScanTarget(args: ParsedCliArgs, token?: Cancellatio
     /* --files-from limita findings reportados; los índices globales se mantienen para exactitud. */
     const includedCandidates = candidates.filter(file => isIncluded(file.fsPath, args.workspacePath, includePatterns) && isScopedFile(file.fsPath, scopedFiles));
     timer.mark('discoveryMs');
-    await completarIndiceVariables(variableBuilder, variableResult, includedCandidates, configFile, token);
+    await variableBuilder.completarIndice(variableResult, includedCandidates, configFile.languages?.cssExtensions ?? EXTENSIONES_CSS_POR_DEFECTO, token);
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
 
     for (const file of includedCandidates) {
@@ -241,7 +210,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs, token?: Cancellation
     /* --files-from limita findings reportados; los índices globales se mantienen para exactitud. */
     const includedCandidates = candidates.filter(file => isIncluded(file.fsPath, args.workspacePath, includePatterns));
     timer.mark('discoveryMs');
-    await completarIndiceVariables(variableBuilder, variableResult, includedCandidates, configFile, token);
+    await variableBuilder.completarIndice(variableResult, includedCandidates, configFile.languages?.cssExtensions ?? EXTENSIONES_CSS_POR_DEFECTO, token);
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
     const analysisConfig = buildAnalysisConfig(configFile, CONVENCION_AREA.estiloBoton);
     /* [028A-8 tramo 4] Con índice persistente + alcance scoped, los usos de

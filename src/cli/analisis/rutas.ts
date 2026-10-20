@@ -2,7 +2,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { CoreFinding } from '@/core/types';
-import { matchesAnyGlob } from '@/node/nodeProviders';
 import type { ParsedCliArgs } from '../args';
 
 export function pathKey(filePath: string): string {
@@ -78,9 +77,4 @@ export function isFindingScoped(finding: CoreFinding, scopeKeys: Set<string> | u
     }
     const file = finding.metadata?.file;
     return typeof file === 'string' && isScopedFile(file, scopeKeys);
-}
-
-export function isIncluded(filePath: string, workspacePath: string, includePatterns: string[]): boolean {
-    const relativePath = path.relative(workspacePath, filePath).replace(/\\/g, '/');
-    return matchesAnyGlob(relativePath, includePatterns);
 }

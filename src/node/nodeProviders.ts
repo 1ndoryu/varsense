@@ -76,6 +76,12 @@ export function matchesAnyGlob(relativePath: string, patterns: string[]): boolea
     return patterns.some(pattern => matchesGlob(relativePath, pattern));
 }
 
+/* Compartido por CLI y LSP: el mismo filtro de includePatterns con rutas relativas al workspace. */
+export function isIncluded(filePath: string, workspacePath: string, includePatterns: string[]): boolean {
+    const relativePath = path.relative(workspacePath, filePath).replace(/\\/g, '/');
+    return matchesAnyGlob(relativePath, includePatterns);
+}
+
 export function languageIdForFile(filePath: string): string {
     switch (path.extname(filePath).toLowerCase()) {
         case '.css': return 'css';

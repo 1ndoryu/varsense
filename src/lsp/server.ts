@@ -16,13 +16,17 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { analyzeVarsenseDocument } from '@/core/analisis/analyzeDocument';
 import { createCoreDocument } from '@/core/types';
-import { NodeDocumentProvider, NodeWorkspaceFileProvider } from '@/node/nodeProviders';
+import { isIncluded, NodeDocumentProvider, NodeWorkspaceFileProvider } from '@/node/nodeProviders';
 import { VariableIndexBuilder } from '@/core/indices/variableIndexBuilder';
 import {
     buildAnalysisConfig,
     DEFAULT_CSS_PATTERNS,
     DEFAULT_EXCLUDE_PATTERNS,
+    DEFAULT_INCLUDE_PATTERNS,
+    DEFAULT_REACT_PATTERNS,
+    DEFAULT_SCRIPT_PATTERNS,
     DEFAULT_VARIABLE_PATTERNS,
+    EXTENSIONES_CSS_POR_DEFECTO,
     VarsenseConfigFile,
 } from '@/core/configuracion/config';
 import { CONVENCION_AREA } from '../configuracion/convencionArea';
@@ -108,14 +112,19 @@ interface ContextoAnalisis {
 /* Mismo varsense.config.json y mismos patrones que la CLI: el LSP no decide por su cuenta. */
 async function construirContexto(rootPath: string): Promise<ContextoAnalisis> {
     const config = await cargarVarsenseConfig(path.resolve(rootPath, 'varsense.config.json'));
-    const builder = new VariableIndexBuilder(
-        new NodeWorkspaceFileProvider(rootPath),
-        new NodeDocumentProvider(), parserCssVarsense
-    );
+    const exclude = config.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS;
+    const fileProvider = new NodeWorkspaceFileProvider(rootPath);
+    const builder = new VariableIndexBuilder(fileProvider, new NodeDocumentProvider(), parserCssVarsense);
     const resultado = await builder.build({
         patterns: config.scanAllFiles ? DEFAULT_CSS_PATTERNS : (config.variableFiles ?? DEFAULT_VARIABLE_PATTERNS),
-        exclude: config.excludePatterns ?? DEFAULT_EXCLUDE_PATTERNS,
+        exclude,
     });
+
+    // Mismos candidatos que la CLI (scan/all) para que runtime y CSS con scope entren en el índice.
+    const includePatterns = config.includePatterns ?? DEFAULT_INCLUDE_PATTERNS;
+    const candidatos = (await fileProvider.findFiles([...DEFAULT_CSS_PATTERNS, ...DEFAULT_REACT_PATTERNS, ...DEFAULT_SCRIPT_PATTERNS], exclude))
+        .filter(file => isIncluded(file.fsPath, rootPath, includePatterns));
+    await builder.completarIndice(resultado, candidatos, config.languages?.cssExtensions ?? EXTENSIONES_CSS_POR_DEFECTO);
 
     return { config, indice: resultado.indice };
 }
