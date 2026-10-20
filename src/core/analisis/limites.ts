@@ -55,3 +55,13 @@ export function conTiempoLimite<T>(
 
     return Promise.race([promesa, limite]).finally(() => clearTimeout(timer));
 }
+
+/* [O1] Topes de las cachés en memoria. Al superarlos se expulsa la entrada menos usada: solo cuesta recalcular. */
+/* Archivos con definiciones CSS o tokens de consumo cacheados por ClassIndexBuilder. */
+export const MAX_ENTRADAS_CACHE_ARCHIVOS = 2000;
+/* Documentos abiertos por el proveedor de documentos Node dentro de una ejecución. */
+export const MAX_ENTRADAS_CACHE_DOCUMENTOS = 500;
+/* Resoluciones de variables CSS del servicio del LSP. */
+export const MAX_ENTRADAS_CACHE_RESOLUCION = 200;
+/* Raíces de workspace con índice de contexto en el LSP. */
+export const MAX_RAICES_CACHE_INDICE = 8;

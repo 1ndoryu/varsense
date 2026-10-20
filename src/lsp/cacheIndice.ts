@@ -1,4 +1,6 @@
 /* Caché del índice por raíz: las validaciones seguidas comparten un único cálculo. */
+import { CacheAcotada } from '@/core/cacheAcotada';
+import { MAX_RAICES_CACHE_INDICE } from '@/core/analisis/limites';
 
 export interface OpcionesCacheIndice<T> {
     construir: (raiz: string) => Promise<T>;
@@ -13,7 +15,7 @@ export interface CacheIndice<T> {
 }
 
 export function crearCacheIndice<T>({ construir, ttlMs, ahora = Date.now }: OpcionesCacheIndice<T>): CacheIndice<T> {
-    const entradas = new Map<string, { promesa: Promise<T>; creada: number }>();
+    const entradas = new CacheAcotada<string, { promesa: Promise<T>; creada: number }>(MAX_RAICES_CACHE_INDICE);
 
     return {
         obtener(raiz) {

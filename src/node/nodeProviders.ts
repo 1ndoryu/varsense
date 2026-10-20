@@ -3,7 +3,8 @@ import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { createCoreDocument, CoreTextDocument } from '@/core/types';
 import { DocumentProvider, WorkspaceFile, WorkspaceFileProvider } from '@/core/proveedores/workspaceProviders';
-import { TAMANO_MAXIMO_ARCHIVO_BYTES } from '@/core/analisis/limites';
+import { MAX_ENTRADAS_CACHE_DOCUMENTOS, TAMANO_MAXIMO_ARCHIVO_BYTES } from '@/core/analisis/limites';
+import { CacheAcotada } from '@/core/cacheAcotada';
 
 function normalizarRuta(ruta: string): string {
     return ruta.replace(/\\/g, '/');
@@ -222,7 +223,7 @@ export class NodeDocumentProvider implements DocumentProvider {
  * El cache no detecta cambios por sí solo: un watcher/adaptador debe invalidar
  * el fsPath antes de volver a analizarlo. */
 export class CachedNodeDocumentProvider extends NodeDocumentProvider {
-    private readonly cache = new Map<string, Promise<CoreTextDocument>>();
+    private readonly cache = new CacheAcotada<string, Promise<CoreTextDocument>>(MAX_ENTRADAS_CACHE_DOCUMENTOS);
 
     public override openTextDocument(file: WorkspaceFile): Promise<CoreTextDocument> {
         const cached = this.cache.get(file.fsPath);

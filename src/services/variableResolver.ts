@@ -8,24 +8,23 @@ import { VariableScanner } from '@/services/variableScanner';
 import { extraerVariablesDeValor } from '@/parsers/valueParser';
 import { esColor, parsearColor } from '@/utils/color/colorUtils';
 import { logger } from '@/utils/logger';
+import { CacheAcotada } from '@/core/cacheAcotada';
+import { MAX_ENTRADAS_CACHE_RESOLUCION } from '@/core/analisis/limites';
 
 /*
  * Límite máximo de resolución recursiva para evitar bucles infinitos
  */
 const MAX_RESOLUCION_PROFUNDIDAD = 10;
 
-/* [124A-AUDIT1] Límite de caché para evitar crecimiento ilimitado en sesiones largas */
-const MAX_CACHE_ENTRIES = 200;
-
 /*
  * Clase para resolver variables CSS
  */
 export class VariableResolver {
     private static _instancia: VariableResolver;
-    private _cacheResolucion: Map<string, ResolvedVariable>;
-    
+    private _cacheResolucion: CacheAcotada<string, ResolvedVariable>;
+
     private constructor() {
-        this._cacheResolucion = new Map();
+        this._cacheResolucion = new CacheAcotada(MAX_ENTRADAS_CACHE_RESOLUCION);
         
         /* Limpiar caché cuando cambien las variables */
         VariableScanner.obtenerInstancia().onVariablesChange(() => {
@@ -56,15 +55,7 @@ export class VariableResolver {
         
         const resultado = this.resolverRecursivo(nombreVariable, [], 0);
         
-        /* [124A-AUDIT1] Evicción LRU simple: borrar entrada más antigua si excede límite */
-        if (this._cacheResolucion.size >= MAX_CACHE_ENTRIES) {
-            const primeraKey = this._cacheResolucion.keys().next().value;
-            if (primeraKey) {
-                this._cacheResolucion.delete(primeraKey);
-            }
-        }
-        
-        /* Cachear resultado */
+        /* Cachear resultado: CacheAcotada expulsa la menos usada al superar el tope (O1) */
         this._cacheResolucion.set(nombreVariable, resultado);
         
         return resultado;
