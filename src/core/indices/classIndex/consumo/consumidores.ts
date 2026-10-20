@@ -1,5 +1,5 @@
 /* [V6] Partición de classIndexBuilder.ts: tokens de consumidores (JSX, HTML y strings). Sin cambio de comportamiento. */
-import { REGEX_ATRIBUTO_CLASE, REGEX_CLASS_ATTR, REGEX_CLASS_FACTORY, REGEX_CLASS_JSX_EXPR, REGEX_CLASS_LIST, REGEX_CLASS_OBJECT, REGEX_CLASS_OBJECT_VAR, REGEX_CLASS_TEMPLATE_INICIO, REGEX_CREATE_ELEMENT_CLASS, REGEX_EL_FACTORY, REGEX_EXTERNAL_LINK_CLASS, REGEX_SET_ATTRIBUTE_CLASS } from '../constantes';
+import { REGEX_CLASS_FACTORY, REGEX_CLASS_LIST, REGEX_CREATE_ELEMENT_CLASS, REGEX_EL_FACTORY, REGEX_EXTERNAL_LINK_CLASS, REGEX_SET_ATTRIBUTE_CLASS, regexesPortadoras, PREFIJOS_PORTADORES_POR_DEFECTO } from '../constantes';
 import { detectarCarriersMismoArchivo, escanearAsignacionesCompuestas, escanearPushs, escanearReturns } from '../fuentes/carriers';
 import { recopilarDeclaraciones } from '../fuentes/declaraciones';
 import { escanearDeclaraciones, extraerNombresImportadosRelativos, finObjetoLiteral } from '../fuentes/mapasJs';
@@ -173,8 +173,9 @@ export function isCodeMatch(source: string, matchIndex: number): boolean {
     return !isInsideString(source, matchIndex);
 }
 
-export function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes?: Set<string>, referenciasMapa?: Set<string>, llamadasClaseFuera?: Set<string>, prefijos: readonly string[] = []): void {
+export function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyPrefixes?: Set<string>, referenciasMapa?: Set<string>, llamadasClaseFuera?: Set<string>, prefijos: readonly string[] = PREFIJOS_PORTADORES_POR_DEFECTO): void {
     const source = removeComments(texto);
+    const re = regexesPortadoras(prefijos);
     let match: RegExpExecArray | null;
     /* [J-8] La indirección requiere conocer las declaraciones antes de
      * resolver los usos (className={ident}). Se recopila una vez por archivo. */
@@ -184,8 +185,8 @@ export function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyP
      * desconocido al registrar referencias para la fase 2. */
     const importsPropios = extraerNombresImportadosRelativos(source);
 
-    REGEX_CLASS_ATTR.lastIndex = 0;
-    while ((match = REGEX_CLASS_ATTR.exec(source)) !== null) {
+    re.attr.lastIndex = 0;
+    while ((match = re.attr.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
         for (const clase of match[1].split(/\s+/)) {
             if (clase.length > 1) {
@@ -194,8 +195,8 @@ export function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyP
         }
     }
 
-    REGEX_CLASS_TEMPLATE_INICIO.lastIndex = 0;
-    while ((match = REGEX_CLASS_TEMPLATE_INICIO.exec(source)) !== null) {
+    re.templateInicio.lastIndex = 0;
+    while ((match = re.templateInicio.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
         /* [318A-7V18] El match termina en el backtick de apertura; el cierre
          * se halla con el escáner balanceado (soporta templates anidados y
@@ -217,8 +218,8 @@ export function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyP
 
     /* [J-8] className={cond ? 'a' : 'b'} y className={'a b'}: expresiones
      * JSX con literales o identificadores indirectos. */
-    REGEX_CLASS_JSX_EXPR.lastIndex = 0;
-    while ((match = REGEX_CLASS_JSX_EXPR.exec(source)) !== null) {
+    re.jsxExpr.lastIndex = 0;
+    while ((match = re.jsxExpr.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
         resolverExpresionClase(match[1], variables, tokens, familyPrefixes, importsPropios, referenciasMapa);
         resolverLlamadaMapper(match[1], source, tokens, importsPropios, referenciasMapa, llamadasClaseFuera);
@@ -233,8 +234,8 @@ export function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyP
      * las plantillas COMPLETAS que contenga, con el mismo tratamiento que la
      * plantilla de clase directa (contextoAttr: su contenido es una cadena de
      * clases por construccion). */
-    REGEX_ATRIBUTO_CLASE.lastIndex = 0;
-    while ((match = REGEX_ATRIBUTO_CLASE.exec(source)) !== null) {
+    re.atributoClase.lastIndex = 0;
+    while ((match = re.atributoClase.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
         const aperturaAtributo = match.index + match[0].length - 1;
         const cierreAtributo = finObjetoLiteral(source, aperturaAtributo);
@@ -248,8 +249,8 @@ export function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyP
         }
     }
 
-    REGEX_CLASS_OBJECT.lastIndex = 0;
-    while ((match = REGEX_CLASS_OBJECT.exec(source)) !== null) {
+    re.object.lastIndex = 0;
+    while ((match = re.object.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
         const previous = previousCodeCharacter(source, match.index);
         if (previous !== '{' && previous !== ',') {continue;}
@@ -261,8 +262,8 @@ export function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyP
     /* [318A-7V21] RC-4: `className: clases.join(' ')` (vanilla DOM factory)
      * resuelve el identificador por indirección; los push del carrier ya
      * quedaron fusionados al set en recopilarDeclaraciones. */
-    REGEX_CLASS_OBJECT_VAR.lastIndex = 0;
-    while ((match = REGEX_CLASS_OBJECT_VAR.exec(source)) !== null) {
+    re.objectVar.lastIndex = 0;
+    while ((match = re.objectVar.exec(source)) !== null) {
         if (!isCodeMatch(source, match.index)) {continue;}
         const previous = previousCodeCharacter(source, match.index);
         if (previous !== '{' && previous !== ',') {continue;}

@@ -14,56 +14,9 @@ export const DEFAULT_CONSUMER_PATTERNS = [
     '**/*.css'
 ];
 export const DEFAULT_MIN_LENGTH = 3;
-/* [318A-7V2] Props que portan clases en los design systems del área:
- * className/class más cualquier prop con nombre clase/Clase al inicio
- * (claseAdicional, claseExtra, claseContenido, claseOverlay, claseContenedor,
- * clase). Verificado repo-wide: en todos los consumidores estas props se
- * concatenan al className del componente; ninguna prop *clase es dato.
- * El patrón se reutiliza en attr/template/jsx-expr para que los tres
- * formularios de valor cubran las mismas props. */
-/* Los tres patrones comparten la alternancia de props portadoras:
- * className/class, cualquier prop cuyo nombre empiece por clase/Clase y
- * [299A-13 F2] cualquier prop que termine en ClassName (panelClassName en
- * ChatBell.tsx:90 / NotificationBell.tsx:71 de NAKOMI: el valor se reenvía
- * tal cual al className del dropdown). Los formularios objeto (clase: x)
- * cubren la misma alternancia. */
-export const REGEX_CLASS_ATTR = /(?:className|class|[Cc]lase[\w$]*|[\w$]*ClassName)\s*=\s*["']([^"']+)["']/g;
-/* [318A-7V18] Apertura de template literal en atributo de clase:
- * className/class/*clase={...`template`...}. El scanner balanceado
- * (finTemplateLiteral/finExpresion) sustituye al regex plano [J-8]
- * porque el regex no puede con templates anidados
- * (claseAdicional={`a ${x ? `b${y}` : ''}`} en SelectorNivel/ModalExperimentos)
- * ni con post-procesado tras el cierre (className={`a ${x}`.trim()} en
- * AccionesItem). */
-export const REGEX_CLASS_TEMPLATE_INICIO = /(?:className|class|[Cc]lase[\w$]*|[\w$]*ClassName)\s*=\s*\{\s*`/g;
-/* [J-8] JSX/TSX className={expr} con ternarios y literales: cubre
- * className={cond ? 'a' : 'b'} y className={'a b'}. Los identificadores
- * puros se resuelven por indirección de variables (ver recopilarDeclaraciones).
- * [318A-7V2] Ídem para props *clase (claseAdicional={cond ? 'a' : 'b'}). */
-export const REGEX_CLASS_JSX_EXPR = /(?:className|class|[Cc]lase[\w$]*|[\w$]*ClassName)\s*=\s*\{([^{}]*)\}/g;
-/* [15A-25] Apertura de la expresion de un atributo de clase, para delimitarla
- * con el escaner balanceado (finObjetoLiteral) en vez de con `[^{}]*`, que se
- * corta en la interpolacion de un template. */
-export const REGEX_ATRIBUTO_CLASE = /(?:className|class|[Cc]lase[\w$]*|[\w$]*ClassName)\s*=\s*\{/g;
-/* Vanilla TS/DOM factories commonly pass classes as object attributes:
- * createEl('div', { className: 'panel panel--active' }). Keep this parser
- * framework-agnostic while covering the project's createEl contract.
- * [318A-7V3] Misma familia de props portadoras que las atribuciones
- * (verificada repo-wide): { clase: 'badgePremium' }, { claseAdicional: x } —
- * el consumidor concatena el valor al className (FilaUsuario/ResumenAdmin
- * de PT). Las props de datos (estado, tipo, texto) no casan con el patrón.
- * [318A-7V21] La alternancia admite también claves camelCase que TERMINAN
- * en Class/clase (imageClass, iconClass): el nombre es la convención del
- * carrier (AGAPE AgapeLanding.tsx:20/27/34 imageClass: 'activity-image-*'
- * interpolado en className={`activity-image ${item.imageClass}`}). Solo
- * casan claves finales: classification/classList no terminan en Class y
- * quedan fuera por diseño (son dato/método, no carrier). */
-export const REGEX_CLASS_OBJECT = /(?:['"]?(?:className|class|[Cc]lase[\w$]*|[\w$]*[Cc]lass|[\w$]*ClassName)['"]?)\s*:\s*(?:['"]([^'"]+)['"]|[`]([^`]+)[`])/g;
-/* [318A-7V21] RC-4: propiedad objeto con VALOR VARIABLE (`className:
- * clases.join(' ')` en notifications-popover.ts:83). La vía literal de arriba
- * no casa; aquí se captura el identificador (con su `.join(...)` opcional) y
- * se resuelve por indirección contra el mapa de declaraciones + pushs. */
-export const REGEX_CLASS_OBJECT_VAR = /(?:['"]?(?:className|class|[Cc]lase[\w$]*|[\w$]*[Cc]lass|[\w$]*ClassName)['"]?)\s*:\s*([A-Za-z_$][\w$]*)(?:\s*\.\s*join\s*\([^)]*\))?\s*(?=[,}])/g;
+/* Igual que DEFAULT_PREFIJOS_PORTADORES de configuración: sin config, el
+ * índice reconoce las props clase/Clase* como portadoras de clases. */
+export const PREFIJOS_PORTADORES_POR_DEFECTO: readonly string[] = ['clase'];
 export const REGEX_CLASS_FACTORY = /createContainer\s*\(\s*['"]([^'"]+)['"]/g;
 export const REGEX_EXTERNAL_LINK_CLASS = /createExternalLink\s*\([^,]+,[^,]+,\s*['"]([^'"]+)['"]/g;
 /* [J-8] createElement(tag, 'clase') posicional: Glory-Laminal pasa la clase
@@ -86,3 +39,69 @@ export const REGEX_CLASS_LIST = /classList\.(?:add|toggle|remove|contains|replac
 /* [318A-7V23] Apertura de setAttribute('class', ...): el 2º argumento se
  * extrae balanceado (ver loop en extraerTokensDeTexto). */
 export const REGEX_SET_ATTRIBUTE_CLASS = /\bsetAttribute\s*\(\s*['"]class['"]\s*,/g;
+
+/* Escapa un texto para usarlo literal dentro de una regex */
+function escaparRegex(texto: string): string {
+    return texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/* Un prefijo casa con la inicial en minúscula o mayúscula (clase -> clase|Clase)
+ * seguido de cualquier identificador: clase, claseAdicional, Clase... */
+function variantePrefijo(prefijo: string): string {
+    const inicial = prefijo.charAt(0);
+    const resto = escaparRegex(prefijo.slice(1));
+    return `[${inicial.toLowerCase()}${inicial.toUpperCase()}]${resto}[\\w$]*`;
+}
+
+/* Alternancia de props portadoras: className/class, cada prefijo configurado y
+ * cualquier prop que termine en ClassName. `extra` añade alternativas de sufijo
+ * (los formularios objeto también admiten claves que terminan en Class). */
+function alternanciaPortadores(prefijos: readonly string[], extra: string[] = []): string {
+    const variantes = prefijos.filter(prefijo => prefijo !== '').map(variantePrefijo);
+    return ['className', 'class', ...variantes, ...extra, '[\\w$]*ClassName'].join('|');
+}
+
+/* Las expresiones de atributos JSX/TSX y de formularios objeto dependen de los
+ * prefijos portadores configurados; cada conjunto se construye una vez por lista. */
+export interface RegexesPortadoras {
+    attr: RegExp;
+    templateInicio: RegExp;
+    jsxExpr: RegExp;
+    atributoClase: RegExp;
+    object: RegExp;
+    objectVar: RegExp;
+}
+
+function construirRegexesPortadoras(prefijos: readonly string[]): RegexesPortadoras {
+    const atributo = alternanciaPortadores(prefijos);
+    /* Los formularios objeto admiten además claves que terminan en Class (imageClass) */
+    const clavesObjeto = `['"]?(?:${alternanciaPortadores(prefijos, ['[\\w$]*[Cc]lass'])})['"]?`;
+    return {
+        /* className/class/prop portadora = "valor" */
+        attr: new RegExp(`(?:${atributo})\\s*=\\s*["']([^"']+)["']`, 'g'),
+        /* Apertura de template literal en atributo de clase: className={`...`} */
+        templateInicio: new RegExp(`(?:${atributo})\\s*=\\s*\\{\\s*\``, 'g'),
+        /* className={expr} con ternarios y literales (sin llaves anidadas) */
+        jsxExpr: new RegExp(`(?:${atributo})\\s*=\\s*\\{([^{}]*)\\}`, 'g'),
+        /* Apertura de la expresión, para delimitarla con el escáner balanceado */
+        atributoClase: new RegExp(`(?:${atributo})\\s*=\\s*\\{`, 'g'),
+        /* Propiedad objeto con valor literal: { clase: 'a b' } o { clase: `a ${b}` } */
+        object: new RegExp(`(?:${clavesObjeto})\\s*:\\s*(?:['"]([^'"]+)['"]|[\`]([^\`]+)[\`])`, 'g'),
+        /* Propiedad objeto con valor variable: { className: clases.join(' ') } */
+        objectVar: new RegExp(`(?:${clavesObjeto})\\s*:\\s*([A-Za-z_$][\\w$]*)(?:\\s*\\.\\s*join\\s*\\([^)]*\\))?\\s*(?=[,}])`, 'g'),
+    };
+}
+
+const cacheRegexesPortadoras = new Map<string, RegexesPortadoras>();
+
+/* Devuelve las regex de props portadoras para una lista de prefijos.
+ * Las regex son globales con estado (lastIndex): quien las use debe resetearlo. */
+export function regexesPortadoras(prefijos: readonly string[] = PREFIJOS_PORTADORES_POR_DEFECTO): RegexesPortadoras {
+    const clave = prefijos.join(',');
+    let regexes = cacheRegexesPortadoras.get(clave);
+    if (!regexes) {
+        regexes = construirRegexesPortadoras(prefijos);
+        cacheRegexesPortadoras.set(clave, regexes);
+    }
+    return regexes;
+}

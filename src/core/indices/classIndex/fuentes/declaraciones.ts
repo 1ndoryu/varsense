@@ -6,8 +6,9 @@ import { addClassTokens, addQuotedClassTokens, normalizarValorLiteral, previousC
 import { esNombrePortadorClase, extraerReturnsDeIIFE, resolverTemplatesDeVariables } from '../plantillas/plantillas';
 import { escanearAsignacionesCompuestas, escanearPushs } from './carriers';
 import { escanearDeclaraciones, extraerValoresDeMapaClase } from './mapasJs';
+import { PREFIJOS_PORTADORES_POR_DEFECTO } from '../constantes';
 
-export function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>, prefijos: readonly string[] = []): Map<string, Set<string>> {
+export function recopilarDeclaraciones(source: string, familyPrefixes?: Set<string>, prefijos: readonly string[] = PREFIJOS_PORTADORES_POR_DEFECTO): Map<string, Set<string>> {
     const variables = new Map<string, Set<string>>();
 
     for (const declaracion of escanearDeclaraciones(source)) {
