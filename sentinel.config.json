@@ -5,7 +5,7 @@
     "primaryBranch": "main"
   },
   "runtime": {
-    "minimumVersion": "0.7.27",
+    "minimumVersion": "0.7.28",
     "protocolVersion": 1,
     "lockFile": "sentinel.lock.json"
   },
