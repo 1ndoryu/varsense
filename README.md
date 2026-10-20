@@ -54,19 +54,22 @@ Hoy VarSense se instala compilando desde el checkout: `npm install` es el único
 Requiere Node.js >= 20.19 (la suite de tests usa mocha 12). Instalación limpia probada con Node 22.23.
 
 ```
-npm install          # instala y compila dist/ (script prepare)
-npm run check:core   # falla si src/core importa vscode o un built-in de Node (fs, path, crypto…)
-npm run smoke:lsp    # levanta el server stdio y verifica publishDiagnostics
+npm install                                    # instala y compila dist/ (script prepare)
+npm run cli -- all --workspace . --format json # ejecuta la CLI desde dist/
+npm run check:core                             # falla si src/core importa vscode o un built-in de Node (fs, path, crypto…)
+npm run smoke:lsp                              # levanta el server stdio y verifica publishDiagnostics
 ```
+
+Este es el único camino de instalación del CLI y del LSP. Los pasos siguientes son opcionales y no forman parte de él.
 
 Otros scripts: `npm run compile:tests` (compila `dist/` y los tests), `npm run test:unit` (tests sin VS Code, con mocha; `npm test` ejecuta los de VS Code y descarga VS Code la primera vez), `npm run lint` (ESLint sobre `src`), `npm run check:zed` (cargo check del adaptador Zed, requiere el target `wasm32-wasip2`), `npm run smoke:persistent-index` y `npm run smoke:tramo4` (comprobaciones de índice persistente y del tramo 4).
 En Linux, `npm test` necesita un servidor gráfico: `xvfb-run -a npm test` (igual que el CI, `.github/workflows/ci.yml`).
 
 Tras cambiar código, `npm run compile` regenera `dist/`. Los scripts `cli` y `lsp` no compilan: ejecutan `dist/` tal cual.
-Para el comando `varsense` desde el checkout: `npm link` (necesario para tener `varsense` en el PATH), o sin enlazar, `node dist/cli/index.js <comando>`. Si tras `npm link` `varsense` no se encuentra, el directorio de binarios globales de npm (`npm prefix -g` + `/bin`, o `\bin` en Windows) no está en el PATH: añádelo o usa la ruta directa.
+Opcional: para escribir `varsense` en lugar de `npm run cli --`, ejecuta `npm link`. Si tras enlazar `varsense` no se encuentra, el directorio de binarios globales de npm (`npm prefix -g` + `/bin`, o `\bin` en Windows) no está en el PATH: añádelo o sigue usando `npm run cli --`.
 Durante `npm install` pueden aparecer avisos `npm warn install-scripts` y avisos de dependencias obsoletas (`deprecated`); no impiden la instalación.
 
-Para instalar una extensión ya empaquetada en `.vsix`, sin compilar nada: `code --install-extension <ruta>.vsix`. El `.vsix` lo genera el mantenedor con `npm run package` (`vsce package`); no forma parte de la instalación del CLI.
+Extensión de VS Code (aparte del CLI): para instalar un `.vsix` ya empaquetado, `code --install-extension <ruta>.vsix`. El `.vsix` lo genera el mantenedor con `npm run package` (`vsce package`).
 
 ## Configuracion
 
