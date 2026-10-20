@@ -1,10 +1,10 @@
 /* [O2] El tope de hallazgos conserva el conteo real, recorta en orden de ruta y se activa desde la CLI. */
 
 import * as assert from 'assert';
-import { limitarHallazgos } from '../../../core/analisis/limitarHallazgos';
-import { VarsenseReportEntry } from '../../../core/analisis/report';
-import { CoreFinding } from '../../../core/types';
-import { parseCliArgs } from '../../../cli/args';
+import { limitarHallazgos } from '../../../../core/analisis/limitarHallazgos';
+import { VarsenseReportEntry } from '../../../../core/analisis/report';
+import { CoreFinding } from '../../../../core/types';
+import { parseCliArgs } from '../../../../cli/args';
 
 function hallazgo(severity: CoreFinding['severity']): CoreFinding {
     return { ruleId: 'regla', severity, message: 'm', range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } } } as CoreFinding;
