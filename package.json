@@ -350,12 +350,13 @@
         "smoke:lsp": "node scripts/smoke-lsp-stdio.mjs",
         "smoke:persistent-index": "node scripts/smoke-persistent-index.mjs",
         "smoke:tramo4": "node scripts/smoke-tramo4.mjs",
-        "pretest": "npm run compile && npm run compile:tests && npm run lint && npm run check:core && npm run smoke:lsp && npm run test:unit",
+        "smoke:cli": "node scripts/smoke-cli.mjs",
         "lint": "eslint src --ext ts",
         "lint:fix": "eslint src --ext ts --fix",
         "test:unit": "node scripts/test-unit.mjs",
-    "quality:check": "npm run compile:tests && npm run lint && npm run check:core && npm run smoke:lsp && npm run test:unit",
-        "test": "node ./dist/test/runTest.js",
+        "test:vscode": "node ./dist/test/runTest.js",
+        "test": "npm run compile:tests && npm run test:vscode",
+        "quality:check": "npm run compile:tests && npm run lint && npm run check:core && npm run smoke:lsp && npm run smoke:cli && npm run smoke:persistent-index && npm run test:unit && npm run test:vscode && npm run check:zed",
         "package": "vsce package"
     },
     "devDependencies": {
