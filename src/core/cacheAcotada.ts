@@ -1,3 +1,5 @@
+import { MAX_ENTRADAS_CACHE_ARCHIVOS } from './analisis/limites';
+
 /* [O1] Caché con tope de entradas que se comporta como un Map. Al superar el tope expulsa la
  * entrada usada menos recientemente (LRU): acota la memoria de sesiones largas (LSP) sin cambiar
  * el resultado, porque una entrada expulsada se recalcula al volver a pedirla. */
@@ -26,4 +28,9 @@ export class CacheAcotada<K, V> extends Map<K, V> {
         }
         return this;
     }
+}
+
+/* Caché por archivo con el tope común de archivos; lo usan los índices de clases. */
+export function crearCacheArchivos<V>(): CacheAcotada<string, V> {
+    return new CacheAcotada<string, V>(MAX_ENTRADAS_CACHE_ARCHIVOS);
 }

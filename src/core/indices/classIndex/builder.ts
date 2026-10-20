@@ -6,19 +6,18 @@ import { DEFAULT_CONSUMER_PATTERNS, DEFAULT_CSS_PATTERNS, DEFAULT_MIN_LENGTH } f
 import { compilarPatronesExcluidos } from './consumo/htmlYExclusiones';
 import { CarrierCallSite } from './fuentes/carriers';
 import { MAX_TOKENS } from './fuentes/cssClases';
-import { CacheAcotada } from '../../cacheAcotada';
-import { MAX_ENTRADAS_CACHE_ARCHIVOS } from '../../analisis/limites';
+import { crearCacheArchivos } from '../../cacheAcotada';
 import { ClaseCssDefinida, ClassIndexScanOptions, ClassScanProgress, EntradaConsumo, ResultadoClasesHuerfanas } from './tipos';
 
 /* [085A-2] Escanea clases huerfanas desde providers core, sin vscode.workspace.
  * Gotcha: los adaptadores deciden como abrir archivos; aqui solo se cruzan tokens y selectores. */
 export class ClassIndexBuilder {
-    private readonly cssFileCache = new CacheAcotada<string, ClaseCssDefinida[]>(MAX_ENTRADAS_CACHE_ARCHIVOS);
+    private readonly cssFileCache = crearCacheArchivos<ClaseCssDefinida[]>();
     /* [318A-7V24] carriers propios + call-sites con literales por archivo: el
      * cruce cross-file (unión global) se computa en scan() en memoria. */
     /* Firma (prefijos unidos por coma) con la que se lleno consumerFileCache: si cambia, se vacia. */
     private firmaPrefijosConsumo = '';
-    private readonly consumerFileCache = new CacheAcotada<string, EntradaConsumo>(MAX_ENTRADAS_CACHE_ARCHIVOS);
+    private readonly consumerFileCache = crearCacheArchivos<EntradaConsumo>();
     private readonly contexto: ContextoCarga;
 
     constructor(
