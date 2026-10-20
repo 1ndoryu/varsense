@@ -50,21 +50,6 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - Nuevos `CONTRIBUTING.md` y `SECURITY.md`; `docs/mapa-modulos.md` (capas y configuración de la raíz); contrato del artifact con la fuente única de estado.
 - Nombres de otros proyectos fuera de código, tests y docs (G2).
 
-## [2.2.9] - 2026-10-01 (`[321A-1]`): declara los alias
-  deliberados del design system. Un tema tipo shadcn reparte el mismo valor
-  entre varios roles (--card y --popover valen lo mismo que --background)
-  para poder re-tematizar cada rol por separado, asi que la repeticion es la
-  estructura del tema, no un descuido. La regla no puede adivinarlo; ahora lo
-  declara el proyecto. El token excluido no participa en la agrupacion ni como
-  canonico ni como duplicado. Acepta el nombre con o sin prefijo `--`.
-  Evidencia: fixture con dos alias + un par testigo -> sin la clave 3
-  `token-duplicate`, con la clave 1 (solo el testigo); RESTAURANTE 41 -> 0
-  sin tocar las demas reglas (token-unused 16, cssInlineReact 1,
-  propiedadProhibida 7, claseHuerfana 6, valorHardcoded 1). 4 tests nuevos en
-  `src/test/suite/tokenRules.test.ts` (renombrado desde `tokenRulesTema`:
-  ya cubre las dos reglas de tokens). Suite standalone 9/9, `eslint` 0
-  errores, `check:core` OK.
-
 ## [2.2.9] - 2026-10-01
 
 ### Corregido
