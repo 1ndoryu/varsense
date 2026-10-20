@@ -1,4 +1,5 @@
 /* [V6] Partición de classIndexBuilder.ts: constantes y expresiones regulares del índice. Sin cambio de comportamiento. */
+import { CacheAcotada } from '../../cacheAcotada';
 
 export const DEFAULT_CSS_PATTERNS = ['**/*.css'];
 /* [318A-7V3] Los CSS también consumen clases: un selector compuesto en otro
@@ -89,7 +90,10 @@ function construirRegexesPortadoras(prefijos: readonly string[]): RegexesPortado
     };
 }
 
-const cacheRegexesPortadoras = new Map<string, RegexesPortadoras>();
+/* Tope de listas de prefijos distintas cacheadas: en la práctica hay una o dos por configuración;
+ * el tope evita que una sesión LSP con configuraciones cambiantes crezca sin límite. */
+const MAX_LISTAS_PREFIJOS = 32;
+const cacheRegexesPortadoras = new CacheAcotada<string, RegexesPortadoras>(MAX_LISTAS_PREFIJOS);
 
 /* Devuelve las regex de props portadoras para una lista de prefijos.
  * Las regex son globales con estado (lastIndex): quien las use debe resetearlo. */
