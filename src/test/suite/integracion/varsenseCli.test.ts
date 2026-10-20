@@ -18,6 +18,23 @@ function escribir(root: string, relativePath: string, content: string): void {
     fs.writeFileSync(filePath, content, 'utf8');
 }
 
+/* [AUD-2] Todo error de uso (exit 2) indica cómo ver la ayuda, con el mismo texto. */
+suite('VarSense CLI errores de uso', () => {
+  const errores: [string[], RegExp][] = [
+    [['nope'], /Comando no reconocido: nope\. Ejecuta con --help para ver el uso\./],
+    [['scan', '--bogus'], /Opción no reconocida: --bogus\. Ejecuta con --help para ver el uso\./],
+    [['scan', '--workspace'], /Falta valor para --workspace\. Ejecuta con --help para ver el uso\./],
+    [['scan', '--format', 'xml'], /--format debe ser markdown o json\. Ejecuta con --help para ver el uso\./],
+    [['scan', '--timeout', '-1'], /--timeout debe ser .*\. Ejecuta con --help para ver el uso\./],
+  ];
+
+  for (const [args, esperado] of errores) {
+    test(`'${args.join(' ')}' indica --help`, () => {
+      assert.throws(() => parseCliArgs(args), esperado);
+    });
+  }
+});
+
 suite('VarSense CLI editor-agnostic', () => {
     test('parsea argumentos de scan', () => {
         const args = parseCliArgs(['scan', '--workspace', '.', '--format', 'json']);

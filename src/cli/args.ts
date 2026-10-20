@@ -48,10 +48,15 @@ export function usage(): string {
     ].join('\n');
 }
 
+/* Todo error de uso indica cómo ver la ayuda, sin volcarla entera. */
+function errorUso(mensaje: string): Error {
+    return new Error(`${mensaje}. Ejecuta con --help para ver el uso.`);
+}
+
 function takeValue(args: string[], index: number, option: string): string {
     const value = args[index + 1];
     if (!value || value.startsWith('--')) {
-        throw new Error(`Falta valor para ${option}`);
+        throw errorUso(`Falta valor para ${option}`);
     }
     return value;
 }
@@ -59,8 +64,7 @@ function takeValue(args: string[], index: number, option: string): string {
 export function parseCliArgs(args: string[]): ParsedCliArgs {
     const command = args[0];
     if (command !== 'scan' && command !== 'orphan-classes' && command !== 'all') {
-        // Un comando desconocido no imprime toda la ayuda: basta con indicar cómo verla.
-        throw new Error(`Comando no reconocido: ${command ?? '(ninguno)'}. Ejecuta con --help para ver el uso.`);
+        throw errorUso(`Comando no reconocido: ${command ?? '(ninguno)'}`);
     }
 
     const parsed: ParsedCliArgs = {
@@ -81,7 +85,7 @@ export function parseCliArgs(args: string[]): ParsedCliArgs {
             case '--format': {
                 const value = takeValue(args, index, arg);
                 if (value !== 'markdown' && value !== 'json') {
-                    throw new Error('--format debe ser markdown o json');
+                    throw errorUso('--format debe ser markdown o json');
                 }
                 parsed.format = value;
                 index++;
@@ -106,7 +110,7 @@ export function parseCliArgs(args: string[]): ParsedCliArgs {
             case '--max-hallazgos': {
                 const limite = Number(takeValue(args, index, arg));
                 if (!Number.isInteger(limite) || limite < 0) {
-                    throw new Error('--max-hallazgos debe ser un entero >= 0 (0 no limita)');
+                    throw errorUso('--max-hallazgos debe ser un entero >= 0 (0 no limita)');
                 }
                 parsed.maxHallazgos = limite;
                 index++;
@@ -115,7 +119,7 @@ export function parseCliArgs(args: string[]): ParsedCliArgs {
             case '--timeout': {
                 const segundos = Number(takeValue(args, index, arg));
                 if (!Number.isInteger(segundos) || segundos < 0) {
-                    throw new Error('--timeout debe ser un entero de segundos >= 0 (0 desactiva el límite)');
+                    throw errorUso('--timeout debe ser un entero de segundos >= 0 (0 desactiva el límite)');
                 }
                 parsed.timeoutMs = segundos * 1000;
                 index++;
@@ -127,8 +131,7 @@ export function parseCliArgs(args: string[]): ParsedCliArgs {
                 parsed.ayuda = true;
                 return parsed;
             default:
-                // Mismo formato que el comando desconocido: el error indica cómo ver la ayuda, sin volcarla entera.
-                throw new Error(`Opcion no reconocida: ${arg}. Ejecuta con --help para ver el uso.`);
+                throw errorUso(`Opción no reconocida: ${arg}`);
         }
     }
 
