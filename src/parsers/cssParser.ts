@@ -1,31 +1,17 @@
 /*
  * Parser de archivos CSS
  * Analiza documentos CSS para extraer declaraciones, variables y usos
+ * La lógica vive en reglasYDeclaracionesCss, deteccionValoresCss y definicionesVariablesCss
  */
 
-import {CssVariable, CssDeclaration, CssRule, ParseResult, HardcodedValue, BannedPropertyUsage} from '@/types';
-import { CoreRange, CoreTextDocument, createCoreRange, positionAtOffset } from '@/core/types';
-import {extraerVariablesDeValor, esDefinicionVariable, obtenerNombreVariable, esValorHardcodeado, extraerValorLimpio, crearUsosVariable} from './valueParser';
-import {REGEX_ATRIBUTO_ESTILO, clavesDeExpresionEstilo, finExpresionEstilo, nombreCustomProperty} from './estiloInline';
-import {buscarAmbitoInnermost, mapearAmbitosBloques} from './cssAmbitos';
+import {CssVariable, ParseResult} from '@/types';
+import {CoreTextDocument} from '@/core/types';
+import {obtenerNombreVariable} from './valueParser';
 import {esColor} from '@/utils/color/colorUtils';
 import type {OpcionesParserCss} from '@/core/puertoParsers';
-
-/*
- * Regex para encontrar bloques de reglas CSS
- * Captura selector y contenido entre llaves
- */
-const RULE_REGEX = /([^{}]+)\{([^{}]*)\}/g;
-
-/*
- * Regex para encontrar declaraciones CSS (propiedad: valor)
- */
-const DECLARATION_REGEX = /([a-zA-Z-]+)\s*:\s*([^;]+);?/g;
-
-/*
- * Regex para detectar comentarios CSS
- */
-const COMMENT_REGEX = /\/\*[\s\S]*?\*\//g;
+import {eliminarComentarios, parsearReglas} from './reglasYDeclaracionesCss';
+import {detectarFallbacksHardcodeados, detectarHardcodeados, detectarPropiedadesProhibidas} from './deteccionValoresCss';
+import {parsearSoloDefinicionesCss, parsearDefinicionesRuntimeCss} from './definicionesVariablesCss';
 
 /* [085A-1] Opciones inyectables para que el parser no importe configService ni vscode.
  * La forma vive en el puerto del core: el adapter la implementa, no la define. */
@@ -41,7 +27,7 @@ export class CssParser {
 
     constructor(documento: CoreTextDocument, opciones: CssParserOptions = {}) {
         this._documento = documento;
-        this._textoSinComentarios = this.eliminarComentarios(documento.getText());
+        this._textoSinComentarios = eliminarComentarios(documento.getText());
         this._opciones = opciones;
     }
 
@@ -59,7 +45,7 @@ export class CssParser {
 
         try {
             /* Parsear reglas CSS */
-            const reglas = this.parsearReglas();
+            const reglas = parsearReglas(this._documento, this._textoSinComentarios);
 
             for (const regla of reglas) {
                 for (const declaracion of regla.declaraciones) {
@@ -82,48 +68,17 @@ export class CssParser {
                     /* Recolectar usos de variables */
                     resultado.usosVariables.push(...declaracion.variablesUsadas);
 
-                    /* [15A-25] Verificar fallbacks hardcodeados con los MISMOS
-                     * dos filtros que una declaracion directa (ver
-                     * detectarHardcodeados): la puerta de propiedad y la lista de
-                     * valores permitidos. Antes iba a pelo, y por eso el mismo
-                     * valor salia exento en `color: transparent` y reportado en
-                     * `border-top: 3px solid var(--colorInsert, transparent)`, y
-                     * `height: 120px` (layout, fuera de `properties`) se colaba
-                     * solo cuando venia como respaldo de un var(). En KAMPLES eran
-                     * 17 hallazgos, todos de esta forma y ninguno accionable: el
-                     * remedio que la regla prescribe —usar una variable— ya esta
-                     * aplicado en la propia declaracion. */
-                    if (!(this._opciones.debeVerificarPropiedad?.(declaracion.propiedad) ?? true)) {
-                        continue;
-                    }
-                    for (const uso of declaracion.variablesUsadas) {
-                        if (!uso.fallback) {
-                            continue;
-                        }
-                        if (this._opciones.esValorPermitido?.(uso.fallback)) {
-                            continue;
-                        }
-                        if (esValorHardcodeado(uso.fallback)) {
-                            resultado.valoresHardcoded.push({
-                                propiedad: declaracion.propiedad,
-                                valor: uso.fallback,
-                                archivo: this._documento.fileName,
-                                linea: uso.linea,
-                                columna: uso.columna,
-                                rango: uso.rango,
-                                sugerencias: []
-                            });
-                        }
-                    }
+                    /* Fallbacks hardcodeados de var(): mismos filtros que una declaración directa */
+                    detectarFallbacksHardcodeados(this._documento, this._opciones, declaracion, resultado.valoresHardcoded);
                 }
             }
 
             /* Detectar valores hardcodeados en propiedades configuradas */
-            const hardcoded = this.detectarHardcodeados(reglas);
+            const hardcoded = detectarHardcodeados(this._documento, this._opciones, reglas);
             resultado.valoresHardcoded.push(...hardcoded);
 
             /* Detectar propiedades prohibidas (ej: box-shadow) */
-            const prohibidas = this.detectarPropiedadesProhibidas(reglas);
+            const prohibidas = detectarPropiedadesProhibidas(this._documento, this._opciones, reglas);
             resultado.propiedadesProhibidas.push(...prohibidas);
         } catch (error) {
             resultado.errores.push({
@@ -141,315 +96,15 @@ export class CssParser {
      * Versión optimizada para escaneo inicial
      */
     public parsearSoloDefiniciones(): CssVariable[] {
-        const variables: CssVariable[] = [];
-        /* [FIX-fantasma] Buscar definiciones sobre el texto sin comentarios
-         * (offsets preservados por relleno con espacios): `.boton--primario:hover`
-         * en prosa casa `--primario` + `:` y el valor se extendia hasta el `;`
-         * siguiente fuera del comentario -> token-unused fantasma (caso TASKS
-         * --primario en modalCreacionRapida.css:92 y accionesItem.css:29). */
-        const texto = this._textoSinComentarios;
-        const ambitos = mapearAmbitosBloques(texto);
-
-        /* Regex optimizada para buscar solo definiciones de variables */
-        const varDefRegex = /(--[\w-]+)\s*:\s*([^;{}]+);/g;
-        let match: RegExpExecArray | null;
-
-        while ((match = varDefRegex.exec(texto)) !== null) {
-            const posicion = positionAtOffset(this._documento, match.index);
-            const valorLimpio = extraerValorLimpio(match[2]);
-
-            variables.push({
-                nombre: match[1],
-                valor: valorLimpio,
-                archivo: this._documento.fileName,
-                linea: posicion.line,
-                columna: posicion.character,
-                esColor: esColor(valorLimpio),
-                frecuenciaUso: 0,
-                /* [229A-1] Ambito de cascada: dos definiciones con el mismo
-                 * valor en ambitos distintos son shadowing intencional. */
-                ambito: buscarAmbitoInnermost(ambitos, match.index)
-            });
-        }
-
-        return variables;
+        return parsearSoloDefinicionesCss(this._documento, this._textoSinComentarios);
     }
 
     /*
-     * [318A-7V24] Parsea definiciones de variables en runtime: llamadas
-     * `algo.setProperty('--x', valor)` en TS/JS. El primer argumento literal
-     * '--x' define la variable aunque ningún CSS la declare (patrón habitual
-     * en GH: panelDerechoAncho.ts, panelEntrada.ts, barraLateral.ts...).
-     * Solo literales quoted (incluye backtick sin interpolación: el nombre
-     * queda cerrado por el backtick antes de cualquier ${...}); si el nombre
-     * es dinámico no se puede indexar y se ignora. El valor runtime es
-     * desconocido: se registra como '' (no color) para que la definición
-     * exista en el índice.
-     *
-     * [15A-25] Cubre ademas las claves de un `style={{...}}` de JSX, que es la
-     * otra forma de definir tokens en runtime y la dominante en KAMPLES: los
-     * `--top`, `--notaTop`, `--tecladoAncho` de las hojas se declaran asi en el
-     * TSX. Sin indexarlas, cada `var()` que las consume salia como
-     * `variableNoDefinida`. Se indexa la clave aunque el objeto mezcle
-     * propiedades reales: la custom property existe en runtime igual, y el
-     * estilo inline mixto lo reporta `cssInlineReact` por su cuenta.
+     * [318A-7V24] Parsea definiciones de variables en runtime (setProperty y
+     * style JSX); la lógica está en definicionesVariablesCss
      */
     public parsearDefinicionesRuntime(): CssVariable[] {
-        const variables: CssVariable[] = [];
-        /* [FIX-fantasma] Igual que en parsearSoloDefiniciones: un
-         * `.setProperty('--x', ...)` mencionado en un comentario de bloque no
-         * define nada (caso --fantasma). No se tocan comentarios de linea `//`
-         * (riesgo con `https://` en strings): limitacion documentada.
-         * `eliminarComentarios` sustituye cada comentario por espacios de la
-         * misma longitud, de modo que los offsets siguen siendo validos. */
-        const texto = this._textoSinComentarios;
-        const runtimeDefRegex = /\.setProperty\s*\(\s*(['"`])--([\w-]+)\1/g;
-        let match: RegExpExecArray | null;
-
-        const registrar = (nombre: string, offset: number): void => {
-            const posicion = positionAtOffset(this._documento, offset);
-            variables.push({
-                nombre,
-                valor: '',
-                archivo: this._documento.fileName,
-                linea: posicion.line,
-                columna: posicion.character,
-                esColor: false,
-                frecuenciaUso: 0
-            });
-        };
-
-        while ((match = runtimeDefRegex.exec(texto)) !== null) {
-            registrar(`--${match[2]}`, match.index);
-        }
-
-        REGEX_ATRIBUTO_ESTILO.lastIndex = 0;
-        while ((match = REGEX_ATRIBUTO_ESTILO.exec(texto)) !== null) {
-            const inicioLlave = match.index + match[0].length - 1;
-            const fin = finExpresionEstilo(texto, inicioLlave);
-            for (const clave of clavesDeExpresionEstilo(texto, inicioLlave, fin)) {
-                const nombre = nombreCustomProperty(clave);
-                if (nombre) {
-                    registrar(nombre, clave.offset);
-                }
-            }
-        }
-
-        return variables;
-    }
-
-    /*
-     * Parsea las reglas CSS del documento
-     */
-    private parsearReglas(): CssRule[] {
-        const reglas: CssRule[] = [];
-        const texto = this._textoSinComentarios;
-        let match: RegExpExecArray | null;
-
-        RULE_REGEX.lastIndex = 0;
-
-        while ((match = RULE_REGEX.exec(texto)) !== null) {
-            const selector = match[1].trim();
-            const contenido = match[2];
-            const inicioSelector = this.obtenerOffsetOriginal(match.index);
-
-            const regla: CssRule = {
-                selector,
-                rangoSelector: this.crearRangoDesdeOffset(inicioSelector, selector.length),
-                declaraciones: this.parsearDeclaraciones(contenido, match.index + match[1].length + 1)
-            };
-
-            reglas.push(regla);
-        }
-
-        return reglas;
-    }
-
-    /*
-     * Parsea las declaraciones dentro de un bloque CSS
-     */
-    private parsearDeclaraciones(contenido: string, offsetBase: number): CssDeclaration[] {
-        const declaraciones: CssDeclaration[] = [];
-        let match: RegExpExecArray | null;
-
-        DECLARATION_REGEX.lastIndex = 0;
-
-        while ((match = DECLARATION_REGEX.exec(contenido)) !== null) {
-            const propiedad = match[1].trim();
-            const offsetPropiedad = this.obtenerOffsetOriginal(offsetBase + match.index);
-            const valorRaw = match[2];
-            const indiceValorEnMatch = match[0].indexOf(valorRaw);
-            const espaciosInicioValor = valorRaw.search(/\S|$/);
-            const valor = extraerValorLimpio(valorRaw);
-
-            /* Offset real del inicio del valor dentro del documento */
-            const offsetValor = offsetBase + match.index + indiceValorEnMatch + espaciosInicioValor;
-            const posPropiedad = positionAtOffset(this._documento, offsetPropiedad);
-            let rangoValor = this.crearRangoDesdeOffset(offsetValor, valor.length);
-
-            /*
-             * Corrección de precisión: si el valor no es multilínea, forzar el rango
-             * a la misma línea de la propiedad para evitar subrayado desplazado.
-             */
-            if (!valor.includes('\n') && rangoValor.start.line !== posPropiedad.line) {
-                const textoLinea = this._documento.lineAt(posPropiedad.line).text;
-                const desdeColumna = Math.max(0, posPropiedad.character + propiedad.length);
-                const indiceEnLinea = textoLinea.indexOf(valor, desdeColumna);
-
-                if (indiceEnLinea >= 0) {
-                    rangoValor = createCoreRange(
-                        posPropiedad.line,
-                        indiceEnLinea,
-                        posPropiedad.line,
-                        indiceEnLinea + valor.length
-                    );
-                }
-            }
-
-            /* Extraer variables usadas en el valor */
-            const variablesMatch = extraerVariablesDeValor(valor);
-            const posValor = positionAtOffset(this._documento, offsetValor);
-
-            const variablesUsadas = crearUsosVariable(variablesMatch, this._documento, posValor.line, posValor.character, valor);
-
-            declaraciones.push({
-                propiedad,
-                valor,
-                rangoPropiedad: this.crearRangoDesdeOffset(offsetPropiedad, propiedad.length),
-                rangoValor,
-                variablesUsadas,
-                esDefinicionVariable: esDefinicionVariable(propiedad)
-            });
-        }
-
-        return declaraciones;
-    }
-
-    /*
-     * Detecta valores hardcodeados según la configuración
-     */
-    private detectarHardcodeados(reglas: CssRule[]): HardcodedValue[] {
-        const hardcodeados: HardcodedValue[] = [];
-
-        if (!this._opciones.debeVerificarPropiedad || !this._opciones.esValorPermitido) {
-            return hardcodeados;
-        }
-
-        for (const regla of reglas) {
-            for (const declaracion of regla.declaraciones) {
-                /* Saltar definiciones de variables */
-                if (declaracion.esDefinicionVariable) {
-                    continue;
-                }
-
-                /* Verificar si la propiedad debe ser chequeada */
-                if (!this._opciones.debeVerificarPropiedad(declaracion.propiedad)) {
-                    continue;
-                }
-
-                /* Verificar si el valor es permitido */
-                if (this._opciones.esValorPermitido(declaracion.valor)) {
-                    continue;
-                }
-
-                /* Verificar si es hardcodeado */
-                if (esValorHardcodeado(declaracion.valor)) {
-                    hardcodeados.push({
-                        propiedad: declaracion.propiedad,
-                        valor: declaracion.valor,
-                        archivo: this._documento.fileName,
-                        linea: declaracion.rangoValor.start.line,
-                        columna: declaracion.rangoValor.start.character,
-                        rango: declaracion.rangoValor,
-                        sugerencias: []
-                    });
-                }
-            }
-        }
-
-        return hardcodeados;
-    }
-
-    /*
-     * Detecta propiedades CSS prohibidas según la configuración
-     * Ejemplo: box-shadow está prohibido en proyectos que no usan sombras
-     */
-    private detectarPropiedadesProhibidas(reglas: CssRule[]): BannedPropertyUsage[] {
-        const detectadas: BannedPropertyUsage[] = [];
-        const configProhibidas = this._opciones.propiedadesProhibidas;
-
-        if (!configProhibidas?.habilitado || configProhibidas.propiedades.length === 0) {
-            return detectadas;
-        }
-
-        const propiedadesSet = new Set(configProhibidas.propiedades.map(p => p.toLowerCase()));
-
-        for (const regla of reglas) {
-            for (const declaracion of regla.declaraciones) {
-                if (declaracion.esDefinicionVariable) {
-                    continue;
-                }
-
-                if (propiedadesSet.has(declaracion.propiedad.toLowerCase())) {
-                    detectadas.push({
-                        propiedad: declaracion.propiedad,
-                        valor: declaracion.valor,
-                        archivo: this._documento.fileName,
-                        linea: declaracion.rangoPropiedad.start.line,
-                        columna: declaracion.rangoPropiedad.start.character,
-                        rango: {
-                            start: declaracion.rangoPropiedad.start,
-                            end: declaracion.rangoValor.end
-                        }
-                    });
-                }
-            }
-        }
-
-        return detectadas;
-    }
-
-    /*
-     * Elimina comentarios del CSS y construye mapa de offsets
-     */
-    private eliminarComentarios(texto: string): string {
-        let resultado = '';
-        let ultimoFin = 0;
-        let match: RegExpExecArray | null;
-
-        COMMENT_REGEX.lastIndex = 0;
-
-        while ((match = COMMENT_REGEX.exec(texto)) !== null) {
-            /* Agregar texto antes del comentario */
-            resultado += texto.slice(ultimoFin, match.index);
-
-            /* Reemplazar comentario con espacios para mantener posiciones */
-            resultado += ' '.repeat(match[0].length);
-
-            ultimoFin = match.index + match[0].length;
-        }
-
-        resultado += texto.slice(ultimoFin);
-
-        return resultado;
-    }
-
-    /*
-     * Obtiene el offset original (con comentarios) desde offset sin comentarios
-     */
-    private obtenerOffsetOriginal(offsetSinComentarios: number): number {
-        /* En esta implementación simplificada, los offsets se mantienen
-           porque reemplazamos comentarios con espacios */
-        return offsetSinComentarios;
-    }
-
-    /*
-     * Crea un CoreRange desde offset y longitud
-     */
-    private crearRangoDesdeOffset(offset: number, longitud: number): CoreRange {
-        const inicio = positionAtOffset(this._documento, offset);
-        const fin = positionAtOffset(this._documento, offset + longitud);
-        return { start: inicio, end: fin };
+        return parsearDefinicionesRuntimeCss(this._documento, this._textoSinComentarios);
     }
 }
 
