@@ -1,9 +1,9 @@
 /* [318A-7V24] completarIndice añade definiciones runtime y CSS con scope fuera de variableFiles; CLI y LSP usan el mismo método. */
 
 import * as assert from 'assert';
-import { VariableIndexBuilder } from '../../../core/indices/variableIndexBuilder';
-import { parserCssVarsense } from '../../../parsers';
-import { MemoryWorkspaceProvider } from '../helpers/memoriaWorkspace';
+import { VariableIndexBuilder } from '../../../../core/indices/variableIndexBuilder';
+import { parserCssVarsense } from '../../../../parsers';
+import { MemoryWorkspaceProvider } from '../../helpers/memoriaWorkspace';
 
 const ARCHIVOS = {
     '/workspace/src/vars.css': { languageId: 'css', content: ':root { --raiz: #fff; }' },
