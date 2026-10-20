@@ -1,6 +1,7 @@
 /* [V6] Partición de classIndexBuilder.ts: mapas de clases exportados y parseo de declaraciones JS. Sin cambio de comportamiento. */
 import { isCodeMatch } from '../consumo/consumidores';
 import { finTemplateLiteral } from '../plantillas/plantillas';
+import { memoPorFuente } from './memoFuente';
 
 /* [318A-7V17] Any variable declaration whose value is a class literal
  * (string, template, ternary, array/object of literals). Resolves
@@ -19,17 +20,17 @@ import { finTemplateLiteral } from '../plantillas/plantillas';
  * INTERNA `clases` arranca a profundidad 1 y corta en su propio ';' sin ser
  * tragada. Antes, el salto tras el corte ocultaba las declaraciones anidadas
  * y su familia de clases (boton--, 20 FPs en Boton.tsx de un proyecto real). */
-/* Estado de brackets y comillas en cada posición de la última fuente pedida.
- * escanearDeclaraciones llama a estadoScanning una vez por declaración sobre
- * la misma fuente: sin memo, cada llamada recorría la fuente desde 0. */
-let fuenteEstados: string | null = null;
-let profundidadesMemo = new Int32Array(0);
-let enCadenaMemo = new Uint8Array(0);
+/* Estado de brackets y comillas en cada posición de la fuente. escanearDeclaraciones
+ * llama a estadoScanning una vez por declaración sobre la misma fuente: sin memo, cada
+ * llamada recorría la fuente desde 0. Caché por fuente, no de una sola entrada. */
+interface EstadosFuente {
+    profundidades: Int32Array;
+    enCadena: Uint8Array;
+}
 
-function calcularEstados(source: string): void {
-    if (source === fuenteEstados) {
-        return;
-    }
+const estadosMemo = new Map<string, EstadosFuente>();
+
+function calcularEstados(source: string): EstadosFuente {
     const profundidades = new Int32Array(source.length + 1);
     const enCadena = new Uint8Array(source.length + 1);
     let profundidad = 0;
@@ -51,16 +52,14 @@ function calcularEstados(source: string): void {
     }
     profundidades[source.length] = profundidad;
     enCadena[source.length] = quote ? 1 : 0;
-    fuenteEstados = source;
-    profundidadesMemo = profundidades;
-    enCadenaMemo = enCadena;
+    return { profundidades, enCadena };
 }
 
 export function estadoScanning(source: string, indice: number): { profundidad: number; enString: boolean } {
-    calcularEstados(source);
+    const { profundidades, enCadena } = memoPorFuente(estadosMemo, source, calcularEstados);
     /* Más allá del final no cambia nada: el estado es el del último carácter */
     const posicion = Math.max(0, Math.min(indice, source.length));
-    return { profundidad: profundidadesMemo[posicion], enString: enCadenaMemo[posicion] === 1 };
+    return { profundidad: profundidades[posicion], enString: enCadena[posicion] === 1 };
 }
 
 export function escanearDeclaraciones(source: string): Array<{ nombre: string; valor: string; indice: number }> {

@@ -3,6 +3,7 @@ import { REGEX_CLASS_FACTORY, REGEX_CLASS_LIST, REGEX_CREATE_ELEMENT_CLASS, REGE
 import { detectarCarriersMismoArchivo, escanearAsignacionesCompuestas, escanearPushs, escanearReturns } from '../fuentes/carriers';
 import { recopilarDeclaraciones } from '../fuentes/declaraciones';
 import { escanearDeclaraciones, extraerNombresImportadosRelativos, finObjetoLiteral } from '../fuentes/mapasJs';
+import { memoPorFuente } from '../fuentes/memoFuente';
 import { descomponerTemplate, esNombrePortadorClase, finTemplateLiteral } from '../plantillas/plantillas';
 import { addTemplateClassTokens, resolverSwitchTemplate } from '../plantillas/resolucionTemplate';
 import { agregarClasesExactas, resolverExpresionClase, resolverExpresionClaseExacta } from './expresiones';
@@ -133,16 +134,17 @@ export function removeComments(texto: string): string {
     return result;
 }
 
-/* Estado de cadena en cada posición de la última fuente consultada. Se calcula una
- * sola vez por archivo: recorrer la fuente desde el principio en cada match era
- * O(matches × longitud) y dominaba el escaneo (classIndexMs). */
-let fuenteMemo: string | null = null;
-let mapaMemo = new Uint8Array(0);
+/* Estado de cadena en cada posición de la fuente. Se calcula una sola vez por archivo:
+ * recorrer la fuente desde el principio en cada match era O(matches × longitud) y
+ * dominaba el escaneo (classIndexMs). La caché es por fuente, no de una sola entrada,
+ * para que alternar entre archivos no la invalide. */
+const mapasCadenas = new Map<string, Uint8Array>();
 
 function mapaCadenas(source: string): Uint8Array {
-    if (source === fuenteMemo) {
-        return mapaMemo;
-    }
+    return memoPorFuente(mapasCadenas, source, calcularMapaCadenas);
+}
+
+function calcularMapaCadenas(source: string): Uint8Array {
     const mapa = new Uint8Array(source.length + 1);
     let quote = '';
     let escaped = false;
@@ -158,8 +160,6 @@ function mapaCadenas(source: string): Uint8Array {
         }
     }
     mapa[source.length] = quote ? 1 : 0;
-    fuenteMemo = source;
-    mapaMemo = mapa;
     return mapa;
 }
 
