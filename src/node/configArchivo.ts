@@ -21,5 +21,5 @@ export async function cargarVarsenseConfig(
         return {};
     }
 
-    return interpretarVarsenseConfig(raw);
+    return interpretarVarsenseConfig(raw, rutaConfig);
 }

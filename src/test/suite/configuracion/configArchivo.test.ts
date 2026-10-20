@@ -28,4 +28,25 @@ suite('Configuración compartida CLI y LSP', () => {
         const config = await cargarVarsenseConfig(ruta);
         assert.deepStrictEqual(config.prefijosPortadores, ['clase', 'tw']);
     });
+
+    /* [C2] El error debe nombrar el fichero real (no el prefijo fijo) y la clave que falla. */
+    test('un error de clave desconocida nombra el fichero y la clave', async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'varsense-config-'));
+        const ruta = path.join(root, 'mi-config.json');
+        fs.writeFileSync(ruta, JSON.stringify({ claveInventada: true }));
+
+        await assert.rejects(cargarVarsenseConfig(ruta), (error: Error) =>
+            error.message === `${ruta}: clave desconocida 'claveInventada'`
+        );
+    });
+
+    test('un JSON mal formado nombra el fichero', async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'varsense-config-'));
+        const ruta = path.join(root, 'varsense.config.json');
+        fs.writeFileSync(ruta, '{ "prefijosPortadores": [');
+
+        await assert.rejects(cargarVarsenseConfig(ruta), (error: Error) =>
+            error.message.startsWith(`${ruta}: JSON no válido:`)
+        );
+    });
 });
