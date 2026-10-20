@@ -6,14 +6,19 @@ on:
   pull_request:
 
 jobs:
-  test:
+  quality:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20.19 es el mínimo declarado en package.json (engines) y en el README.
+        node: ['20.19', '22']
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
@@ -21,5 +26,6 @@ jobs:
           targets: wasm32-wasip2
 
       - run: npm ci
-      - run: xvfb-run -a npm test
-      - run: npm run check:zed
+
+      # Gate único: el mismo comando que se ejecuta en local (CONTRIBUTING.md).
+      - run: xvfb-run -a npm run quality:check
