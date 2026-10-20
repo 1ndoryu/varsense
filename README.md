@@ -52,10 +52,11 @@ Límites: el tope de 2 MiB por archivo (ver CLI) aplica aquí con un aviso infor
 
 Hoy VarSense se instala compilando desde el checkout: `npm install` es el único paso (el script `prepare` compila `dist/`). Un artifact publicado que se instale sin compilar todavía no existe; su contrato, pendiente de implementar, está en `docs/artifact-contract.md`.
 
-Requiere Node.js >= 20.19 (la suite de tests usa mocha 12). Instalación limpia probada con Node 22.23 en Linux. Windows no está en la matriz de pruebas: `npm install` y `npm run smoke:lsp` no se han verificado allí.
+Requiere Node.js >= 20.19 (la suite de tests usa mocha 12). Instalación limpia probada en Linux con Node 22.23 y, en un clon limpio de la 89 (2026-10-20), con Node 24.22: `npm install`, `npm run check:core` y `npm run test:unit` en verde. Windows no está en la matriz de pruebas: `npm install` y `npm run smoke:lsp` no se han verificado allí.
 
 ```
 npm install                                    # instala y compila dist/ (script prepare)
+npm run test:unit                              # tests sin VS Code (mocha); comprueba que la instalación funciona
 npm run -s cli -- all --workspace . --format json # ejecuta la CLI desde dist/ (-s: stdout solo JSON)
 npm run check:core                             # falla si src/core importa vscode o un built-in de Node (fs, path, crypto…)
 npm run smoke:lsp                              # levanta el server stdio y verifica publishDiagnostics
@@ -63,7 +64,9 @@ npm run smoke:lsp                              # levanta el server stdio y verif
 
 Este es el único camino de instalación del CLI y del LSP. Los pasos siguientes son opcionales y no forman parte de él.
 
-Otros scripts: `npm run compile:tests` (compila `dist/` y los tests), `npm run test:unit` (tests sin VS Code, con mocha), `npm run test:vscode` (tests dentro de VS Code; la primera vez descarga VS Code; en Linux sin escritorio necesita un servidor X en `DISPLAY`, p. ej. `DISPLAY=:99 TMPDIR=/var/tmp npm run quality:check`), `npm test` (compila los tests y ejecuta `test:vscode`), `npm run lint` (ESLint sobre `src`), `npm run check:zed` (cargo check del adaptador Zed, requiere el target `wasm32-wasip2`), `npm run smoke:cli`, `npm run smoke:persistent-index` y `npm run smoke:tramo4`.
+`quality-tools.json` fija la versión de Sentinel que usa su `doctor` externo al repo. Ningún script de este repo lo lee, así que `npm run quality:check` no necesita `../.quality-tools/` ni ningún clon de Sentinel.
+
+Otros scripts: `npm run compile:tests` (compila `dist/` y los tests), `npm run test:unit` (tests sin VS Code, con mocha), `npm run test:vscode` (tests dentro de VS Code; la primera vez descarga VS Code; en Linux sin escritorio necesita un servidor X en `DISPLAY`, p. ej. `xvfb-run -a npm run test:vscode`), `npm test` (compila los tests y ejecuta `test:vscode`), `npm run lint` (ESLint sobre `src`), `npm run check:zed` (cargo check del adaptador Zed, requiere el target `wasm32-wasip2`), `npm run smoke:cli`, `npm run smoke:persistent-index` y `npm run smoke:tramo4`.
 Gate completo, igual que el CI: `xvfb-run -a npm run quality:check` (en Linux; `xvfb-run` aporta el servidor gráfico que necesitan los tests de VS Code). Ver [CONTRIBUTING](CONTRIBUTING.md).
 
 Tras cambiar código, `npm run compile` regenera `dist/`. Los scripts `cli` y `lsp` no compilan: ejecutan `dist/` tal cual.
