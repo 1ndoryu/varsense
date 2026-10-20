@@ -32,12 +32,14 @@ Método: `tsc` (sin minificar) en la 89, `node -r` con un hook que resuelve `@/`
 
 Dentro de `classIndex` domina `consumo/` (~63 %). Los puntos calientes son:
 
-- `consumo/consumidores.ts` `extraerTokensDeTexto` (línea 187): regex propias, 84 ms en A y 219 ms en B.
-- `consumo/llamadas.ts` `cuerpoDeFuncionEn` (línea 83): 80–108 ms de autoconsumo, más 23–27 ms de regex.
-- `consumo/consumidores.ts` `removeComments` y `enmascararComentarios`: 24–50 ms cada uno.
-- `fuentes/carriers.ts` (`escanearPushs`, `escanearAsignacionesCompuestas`) y `fuentes/mapasJs.ts` (`escanearDeclaraciones`): 20–40 ms cada uno.
+Las rutas son completas desde la raíz del paquete. Las líneas son las del momento de la medición (2026-10-19); entre paréntesis, la línea del código actual.
 
-Fuera de `classIndex`: `types.ts` `positionAtOffset` (regex `\r\n|\r|\n`, 168 ms en B) lo usan los parsers CSS y `analyzeDocument`, no `classIndex`; por eso no entra en `classIndexMs`. Sobre ese punto ya se midió una alternativa sin ganancia (ver arriba).
+- `src/core/indices/classIndex/consumo/consumidores.ts` `extraerTokensDeTexto` (línea 187; hoy 177): regex propias, 84 ms en A y 219 ms en B.
+- `src/core/indices/classIndex/consumo/llamadas.ts` `cuerpoDeFuncionEn` (línea 83; hoy 50): 80–108 ms de autoconsumo, más 23–27 ms de regex.
+- `src/core/indices/classIndex/consumo/consumidores.ts` `removeComments` (hoy línea 13) y `src/core/analisis/enmascararComentarios.ts` `enmascararComentarios` (hoy línea 53): 24–50 ms cada uno.
+- `src/core/indices/classIndex/fuentes/carriers.ts` (`escanearPushs`, `escanearAsignacionesCompuestas`) y `src/core/indices/classIndex/fuentes/mapasJs.ts` (`escanearDeclaraciones`): 20–40 ms cada uno.
+
+Fuera de `classIndex`: `positionAtOffset` de `src/core/types.ts` (línea 95; regex `\r\n|\r|\n`, 168 ms en B) lo usan los parsers CSS y `analyzeDocument`, no `classIndex`; por eso no entra en `classIndexMs`. Sobre ese punto ya se midió una alternativa sin ganancia (ver arriba).
 
 Del tiempo total de proceso, ~300–450 ms son `(idle)` (espera de E/S al listar y leer archivos), no CPU.
 
