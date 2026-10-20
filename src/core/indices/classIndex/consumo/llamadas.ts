@@ -2,6 +2,7 @@
 import { escanearDefinicionesFunciones } from '../fuentes/carriers';
 import { extraerLiterales } from '../plantillas/plantillas';
 import { isCodeMatch } from './consumidores';
+import { dividirTernario } from './expresiones';
 import { addClassTokens } from './tokens';
 
 /* [318A-7V23] Divide los argumentos top-level de una llamada a partir del
@@ -157,11 +158,26 @@ export function resolverLlamadaMapper(body: string, source: string, tokens: Set<
     const reReturn = /\breturn\b/g;
     while (reReturn.exec(cuerpo) !== null) {
         const resto = cuerpo.slice(reReturn.lastIndex);
-        const literales = extraerLiterales(resto);
-        if (literales.length > 0) {
-            addClassTokens(literales[0], tokens);
-        }
         const finStatement = resto.indexOf(';');
+        const expresion = finStatement < 0 ? resto : resto.slice(0, finStatement);
+        const ramas = dividirTernario(expresion.trim());
+        if (ramas) {
+            /* [ternario] `return estado === 'error' ? 'a' : 'b'`: la clase sale de
+             * cada rama. El primer literal del return era el de la condicion y la
+             * rama real (`'a'`) se perdia, dando por huerfana una clase que el
+             * componente si pinta (PanelTaller.tsx claseEstado, 19AA-13). */
+            for (const rama of ramas) {
+                const literalesRama = extraerLiterales(rama);
+                if (literalesRama.length > 0) {
+                    addClassTokens(literalesRama[0], tokens);
+                }
+            }
+        } else {
+            const literales = extraerLiterales(resto);
+            if (literales.length > 0) {
+                addClassTokens(literales[0], tokens);
+            }
+        }
         if (finStatement < 0) {
             break;
         }

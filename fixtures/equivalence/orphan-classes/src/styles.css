@@ -5,3 +5,11 @@
 .huerfana {
   color: var(--colorPrimary);
 }
+
+.ternarioError {
+  color: var(--colorPrimary);
+}
+
+.ternarioOk {
+  color: var(--colorPrimary);
+}
