@@ -1,14 +1,14 @@
 import * as assert from 'assert';
-import { CssVariable } from '../../../types';
-import { buildAnalysisConfig, validateVarsenseConfig } from '../../../core/configuracion/config';
-import { analyzeTokenRules } from '../../../core/analisis/tokenRules';
-import { createCoreDocument } from '../../../core/types';
+import { CssVariable } from '../../../../types';
+import { buildAnalysisConfig, validateVarsenseConfig } from '../../../../core/configuracion/config';
+import { analyzeTokenRules } from '../../../../core/analisis/tokenRules';
+import { createCoreDocument } from '../../../../core/types';
 
 /* [MN-token] Suite standalone (sin 'vscode'): cubre las dos reglas de tokens.
  * token-unused reconoce utilidades Tailwind v4 generadas por `@theme` y respeta
  * `tokenDetection.unused.excludeTokens`; token-duplicate respeta
  * `tokenDetection.duplicate.excludeTokens` (alias deliberados del design system).
- * Se corre con `npx mocha --ui tdd dist/test/suite/tokenRules.test.js`. */
+ * Se corre con `npx mocha --ui tdd dist/test/unit/suite/core/tokens/tokenRules.test.js`. */
 
 function variable(nombre: string, archivo = 'index.css', valor = 'red'): CssVariable {
   return { nombre, valor, archivo, linea: 1, columna: 1 } as CssVariable;

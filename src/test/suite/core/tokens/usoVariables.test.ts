@@ -1,9 +1,9 @@
 import * as assert from 'assert';
-import { extraerUsoVariablesDeTexto } from '../../../core/analisis/usoVariables';
+import { extraerUsoVariablesDeTexto } from '../../../../core/analisis/usoVariables';
 
 /* [uso-js] Consumo de variables CSS desde JS: `getPropertyValue('--x')` cuenta como uso,
  * igual que `var(--x)`. La definicion en CSS no es uso (la cuenta cssParser).
- * Suite standalone (sin 'vscode'): se corre con `npx mocha --ui tdd dist/test/suite/usoVariables.test.js`. */
+ * Suite standalone (sin 'vscode'): se corre con `npx mocha --ui tdd dist/test/unit/suite/core/tokens/usoVariables.test.js`. */
 
 suite('extraerUsoVariablesDeTexto', () => {
   test('reconoce getPropertyValue con comilla simple', () => {
