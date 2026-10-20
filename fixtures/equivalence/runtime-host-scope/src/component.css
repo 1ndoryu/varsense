@@ -1,0 +1,7 @@
+/* Usa las tres fuentes; solo --ausente debe quedar sin definir (control positivo). */
+.card {
+  color: var(--runtime);
+  width: var(--local);
+  background: var(--raiz);
+  border-color: var(--ausente);
+}

@@ -1,0 +1,4 @@
+/* Definición con scope fuera de variableFiles: debe entrar en el índice de la LSP igual que en la CLI. */
+:host {
+  --local: 2px;
+}

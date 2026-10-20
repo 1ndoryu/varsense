@@ -348,6 +348,7 @@
         "check:core": "node scripts/check-core-no-vscode.mjs",
         "check:zed": "cargo check --manifest-path integrations/zed/Cargo.toml --target wasm32-wasip2",
         "smoke:lsp": "node scripts/smoke-lsp-stdio.mjs",
+        "smoke:lsp-paridad": "node scripts/smoke-lsp-paridad.mjs",
         "smoke:persistent-index": "node scripts/smoke-persistent-index.mjs",
         "smoke:tramo4": "node scripts/smoke-tramo4.mjs",
         "smoke:cli": "node scripts/smoke-cli.mjs",
@@ -356,7 +357,7 @@
         "test:unit": "node scripts/test-unit.mjs",
         "test:vscode": "node ./dist/test/runTest.js",
         "test": "npm run compile:tests && npm run test:vscode",
-        "quality:check": "npm run compile:tests && npm run lint && npm run check:core && npm run smoke:lsp && npm run smoke:cli && npm run smoke:persistent-index && npm run test:unit && npm run test:vscode && npm run check:zed",
+        "quality:check": "npm run compile:tests && npm run lint && npm run check:core && npm run smoke:lsp && npm run smoke:lsp-paridad && npm run smoke:cli && npm run smoke:persistent-index && npm run test:unit && npm run test:vscode && npm run check:zed",
         "package": "vsce package"
     },
     "devDependencies": {
