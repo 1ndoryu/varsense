@@ -94,6 +94,8 @@ La misma regla acepta la forma del mensaje y las propiedades estructurales: `com
 
 `tokenDetection.themeNamespaces` define los namespaces de tema de Tailwind v4 que reconoce `token-unused`: una lista de `{ "namespace": "--prefijo-", "utilities": ["clase", ...] }`. Sin configurar usa `--color-`, `--radius-` y `--font-` (los de Tailwind v4). El namespace debe tener la forma `--prefijo-`.
 
+`tokenDetection.tailwindShorthand` (por defecto `true`) decide si el shorthand de Tailwind v4 `bg-(--x)` cuenta como uso de la variable `--x` en `token-unused`. Con `false` solo cuentan `var(--x)` y `getPropertyValue('--x')`.
+
 `languages` indica qué identificadores de lenguaje analiza cada familia de regla: `css`, `react` (inline styles en JSX) y `script` (inline styles en TS/JS), más `cssExtensions` (extensiones que alimentan el índice de variables; por defecto `.css`). Una lista vacía desactiva esa familia en ese proyecto. Los defaults son los del core (`LENGUAJES_POR_DEFECTO`).
 
 ## Arquitectura
