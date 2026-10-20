@@ -16,6 +16,8 @@ export interface ContextoCarga {
     persistentStore?: PersistentIndexStore;
     cssFileCache: Map<string, ClaseCssDefinida[]>;
     consumerFileCache: Map<string, EntradaConsumo>;
+    /* [AG-1] Fija si `bg-(--x)` cuenta como uso de variable; lo fija cada scan (ver ClassIndexBuilder). */
+    shorthandTailwind?: boolean;
 }
 
 /* [028A-8] Carga las definiciones CSS de un archivo reutilizando el índice
@@ -45,7 +47,7 @@ export async function cargarDefinicionesCss(ctx: ContextoCarga, file: WorkspaceF
             /* [028A-8 tramo 4] Los usos de variables se capturan junto a las
              * definiciones de clase: ambos salen del mismo texto CSS y el
              * hash ya validó el contenido. */
-            variableUsages: extraerUsoVariablesDeTexto(texto),
+            variableUsages: extraerUsoVariablesDeTexto(texto, { shorthandTailwind: ctx.shorthandTailwind }),
         });
         if (store) {store.stats.reparsed++;}
     }
@@ -128,7 +130,7 @@ export async function cargarTokensConsumo(ctx: ContextoCarga, file: WorkspaceFil
             hash,
             consumerTokens: [...fileTokens],
             /* [usos] Tailwind (`bg-(--x)`) y `var(--x)` en TSX/JS también cuentan para token-unused. */
-            variableUsages: extraerUsoVariablesDeTexto(texto),
+            variableUsages: extraerUsoVariablesDeTexto(texto, { shorthandTailwind: ctx.shorthandTailwind }),
             consumerFamilyPrefixes: [...fileFamilyPrefixes],
             consumerCarriers: Object.fromEntries([...carriers].map(([fn, poss]) => [fn, [...poss]])),
             consumerCarrierCalls: llamadas,

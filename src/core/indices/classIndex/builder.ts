@@ -56,6 +56,7 @@ export class ClassIndexBuilder {
         const consumerPatterns = options.consumerPatterns ?? DEFAULT_CONSUMER_PATTERNS;
         const minLength = options.minLength ?? DEFAULT_MIN_LENGTH;
         const prefijos = options.prefijosPortadores ?? PREFIJOS_PORTADORES_POR_DEFECTO;
+        this.contexto.shorthandTailwind = options.shorthandTailwind ?? true;
         if (this.firmaPrefijosConsumo !== prefijos.join(',')) {
             this.consumerFileCache.clear();
             this.firmaPrefijosConsumo = prefijos.join(',');

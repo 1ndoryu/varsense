@@ -91,6 +91,32 @@ suite('VarSense themeNamespaces configurable', () => {
   });
 });
 
+/* [AG-1] `bg-(--x)` (shorthand Tailwind v4) cuenta como uso salvo `tailwindShorthand: false`. */
+suite('VarSense tailwindShorthand configurable', () => {
+  const tsx = '<p class="bg-(--brand-x)"></p>';
+
+  function sinUsoCon(tailwindShorthand: unknown) {
+    const config = buildAnalysisConfig({ tokenDetection: { tailwindShorthand } } as never);
+    const variables = new Map([['index.css', [variable('--brand-x')]]]);
+    return analyzeTokenRules(variables, [documento(tsx)], config).filter(f => f.ruleId === 'token-unused').length;
+  }
+
+  test('por defecto el shorthand cuenta como uso', () => {
+    assert.strictEqual(sinUsoCon(undefined), 0);
+  });
+
+  test('con tailwindShorthand: false el token queda sin uso', () => {
+    assert.strictEqual(sinUsoCon(false), 1);
+  });
+
+  test('tailwindShorthand con tipo no booleano se rechaza al cargar', () => {
+    assert.throws(
+      () => validateVarsenseConfig({ tokenDetection: { tailwindShorthand: 'no' } }),
+      /'tokenDetection.tailwindShorthand' debe ser boolean/
+    );
+  });
+});
+
 /* [321A-1] token-duplicate: un tema tipo shadcn declara varios roles sobre el
  * mismo valor a proposito (--card y --popover valen lo mismo que --background)
  * para poder re-tematizar cada rol por separado: repetir el valor ES la

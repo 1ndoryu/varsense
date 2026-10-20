@@ -38,6 +38,8 @@ export interface VarsenseDocumentAnalysisConfig {
         crossFile: { habilitado: boolean; severidad: CoreSeverity };
         /* [AG-1] Namespaces de tema que generan utilidades (Tailwind `@theme`). */
         temaNamespaces: VarsenseTemaNamespace[];
+        /* [AG-1] `bg-(--x)` cuenta como uso de variable; ausente = activo (comportamiento por defecto). */
+        shorthandTailwind?: boolean;
     };
     estiloBoton: VarsenseEstiloBotonConfig;
     lenguajes: VarsenseLenguajesConfig;

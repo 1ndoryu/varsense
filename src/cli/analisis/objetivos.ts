@@ -175,6 +175,7 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
         minLength: configFile.orphanClassDetection?.minClassLength ?? 3,
         excludedClassPatterns: configFile.orphanClassDetection?.excludeClassPatterns ?? [],
         prefijosPortadores: configFile.prefijosPortadores ?? DEFAULT_PREFIJOS_PORTADORES,
+        shorthandTailwind: configFile.tokenDetection?.tailwindShorthand ?? true,
     });
 
     const clasesHuerfanas = await filtrarClasesSuprimidas(result.clasesHuerfanas, documentProvider);
@@ -215,6 +216,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
         minLength: configFile.orphanClassDetection?.minClassLength ?? 3,
         excludedClassPatterns: configFile.orphanClassDetection?.excludeClassPatterns ?? [],
         prefijosPortadores: configFile.prefijosPortadores ?? DEFAULT_PREFIJOS_PORTADORES,
+        shorthandTailwind: configFile.tokenDetection?.tailwindShorthand ?? true,
     });
     timer.mark('classIndexMs');
     const includePatterns = configFile.includePatterns ?? DEFAULT_INCLUDE_PATTERNS;

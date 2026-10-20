@@ -44,6 +44,8 @@ export interface VarsenseConfigFile {
         crossFile?: { enabled?: boolean; severity?: CoreSeverity };
         /* [AG-1] Reemplaza (no mezcla) los namespaces de tema por defecto de Tailwind v4. */
         themeNamespaces?: Array<{ namespace: string; utilities: string[] }>;
+        /* [AG-1] Reconoce `bg-(--x)` (shorthand de Tailwind v4) como uso de variable; `false` lo desactiva. */
+        tailwindShorthand?: boolean;
     };
     /* [VQ5] Identificadores de lenguaje por familia y extensiones CSS del índice de variables (defaults del core). */
     languages?: {
@@ -116,7 +118,7 @@ const NESTED_KEYS: Record<string, Set<string>> = {
     todoProseDetection: new Set(['enabled', 'severity']),
     /* [MN-token] 'crossFile' estaba tipada y mapeada pero ausente aquí: un
      * varsense.config.json con esa sección era rechazado por clave desconocida. */
-    tokenDetection: new Set(['duplicate', 'unused', 'crossFile', 'themeNamespaces']),
+    tokenDetection: new Set(['duplicate', 'unused', 'crossFile', 'themeNamespaces', 'tailwindShorthand']),
     buttonStyleDetection: new Set([
         'enabled', 'severity', 'componentFolder', 'selectorPattern', 'excludeFilePattern',
         'componentName', 'componentProps', 'styleProperties', 'minStyleProperties',
@@ -233,6 +235,9 @@ export function validateVarsenseConfig(value: unknown): asserts value is Varsens
     if (tokens?.themeNamespaces !== undefined) {
         validarThemeNamespaces(tokens.themeNamespaces);
     }
+    if (tokens?.tailwindShorthand !== undefined && typeof tokens.tailwindShorthand !== 'boolean') {
+        throw new Error("varsense.config.json: 'tokenDetection.tailwindShorthand' debe ser boolean");
+    }
 
     const lenguajes = config.languages as Record<string, unknown> | undefined;
     for (const key of ['css', 'react', 'script', 'cssExtensions'] as const) {
@@ -338,6 +343,7 @@ export function buildAnalysisConfig(config: VarsenseConfigFile): VarsenseDocumen
                 namespace: item.namespace,
                 prefijos: item.utilities,
             })) ?? NAMESPACES_TEMA_POR_DEFECTO,
+            shorthandTailwind: config.tokenDetection?.tailwindShorthand ?? true,
         },
         lenguajes: {
             css: config.languages?.css ?? LENGUAJES_POR_DEFECTO.css,

@@ -27,4 +27,13 @@ suite('extraerUsoVariablesDeTexto', () => {
   test('una definicion CSS no cuenta como uso', () => {
     assert.deepStrictEqual(extraerUsoVariablesDeTexto('  --col1-ancho: 10px;'), []);
   });
+
+  test('reconoce el shorthand bg-(--x) por defecto', () => {
+    assert.deepStrictEqual(extraerUsoVariablesDeTexto('<p class="bg-(--x)">'), ['--x']);
+  });
+
+  test('con shorthandTailwind: false ignora bg-(--x) pero sigue con var()', () => {
+    assert.deepStrictEqual(extraerUsoVariablesDeTexto('<p class="bg-(--x)">', { shorthandTailwind: false }), []);
+    assert.deepStrictEqual(extraerUsoVariablesDeTexto('color: var(--y);', { shorthandTailwind: false }), ['--y']);
+  });
 });

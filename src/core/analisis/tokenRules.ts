@@ -302,7 +302,7 @@ export function analyzeTokenRules(
                  * variable; evita regex dinámica (escapado frágil). */
                 if (!usedNames) {
                     usedNames = new Set<string>();
-                    for (const nombre of extraerUsoVariablesDeTexto(allText!)) {
+                    for (const nombre of extraerUsoVariablesDeTexto(allText!, { shorthandTailwind: config.tokens.shorthandTailwind })) {
                         usedNames.add(nombre);
                     }
                 }
