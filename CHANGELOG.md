@@ -22,7 +22,7 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.h
   estructura del tema, no un descuido. El token excluido no participa en la
   agrupacion ni como canonico ni como duplicado. Acepta el nombre con o sin
   prefijo `--`. Evidencia: RESTAURANTE token-duplicate 41 -> 0 sin tocar las
-  demas reglas; 4 tests en `src/test/suite/tokenRules.test.ts`.
+  demas reglas; 4 tests en `src/test/suite/core/tokens/tokenRules.test.ts`.
 
 ### Cambiado
 - Instalación en una vía: `npm install` compila `dist/` con `prepare`; `engines` es `node >=20.19`.

@@ -50,9 +50,9 @@ Límites: el tope de 2 MiB por archivo (ver CLI) aplica aquí con un aviso infor
 
 ## Instalacion
 
-Hoy VarSense se instala compilando desde el checkout: `npm install` es el único paso (el script `prepare` compila `dist/`). Un artifact publicado que se instale sin compilar todavía no existe; su contrato, pendiente de implementar, está en `docs/artifact-contract.md`.
+Hoy VarSense se instala compilando desde el checkout: `npm install` es el único paso. Instala también las devDependencies (TypeScript, mocha, tipos de VS Code), que hacen falta para compilar; el script `prepare` genera `dist/`. Un artifact publicado que se instale sin compilar todavía no existe; su contrato, pendiente de implementar, está en `docs/artifact-contract.md`.
 
-Requiere Node.js >= 20.19 (la suite de tests usa mocha 12). Instalación limpia probada en Linux con Node 22.23 y, en un clon limpio de la 89 (2026-10-20), con Node 24.22: `npm install`, `npm run check:core` y `npm run test:unit` en verde. Windows no está en la matriz de pruebas: `npm install` y `npm run smoke:lsp` no se han verificado allí.
+Requiere Node.js >= 20.19 (la suite de tests usa mocha 12). Instalación limpia probada en Linux con Node 22.23 y, en un clon limpio del VPS de taller (dev89, 2026-10-20), con Node 24.22: `npm install`, `npm run check:core` y `npm run test:unit` en verde. Windows no está en la matriz de pruebas: `npm install` y `npm run smoke:lsp` no se han verificado allí.
 
 ```
 npm install                                    # instala y compila dist/ (script prepare)
@@ -94,6 +94,8 @@ correspondiente ignora. Sirve para lo que la regla no puede deducir sola: en
 `duplicate`, los roles de un tema que comparten valor a proposito (`--card` y
 `--popover` valen lo mismo que `--background` para poder re-tematizarse por
 separado); en `unused`, los tokens consumidos fuera del alcance analizado.
+
+`todoProseDetection` se acepta y se ignora por compatibilidad: esa regla vive en Sentinel Core. Un `varsense.config.json` antiguo que la declare no falla por ella.
 
 `buttonStyleDetection` configura la regla `estiloBotonEspecifico` (CSS de componente con clase tipo botón): `enabled`, `severity`, `componentFolder` (nombre de carpeta, sin `/`), `selectorPattern` y `excludeFilePattern` (expresiones regulares sin flags, sin distinguir mayúsculas; una regex inválida falla al cargar). Los valores por defecto son la convención del área (`components`, `btn|button`, `^button`). La extensión de VS Code no lee este bloque: aplica esos mismos defaults.
 

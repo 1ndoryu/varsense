@@ -11,7 +11,7 @@ Rutas de las tablas y del perfil: `consumo/`, `fuentes/` y `classIndex/` son rel
 | Proyecto A | 399 | ~880–930 ms | 130–170 | 650–870 | 40–50 |
 | Proyecto B | 1040 | ~1400–2000 ms | 100–200 | 1090–1320 | 130–690 |
 
-`classIndexMs` es la fase dominante (70–75 % del total). Las cifras varían entre ejecuciones por carga de la 89.
+`classIndexMs` es la fase dominante (70–75 % del total). Las cifras varían entre ejecuciones por carga del VPS de taller (dev89).
 
 ## Perfil de CPU (Proyecto B, `--cpu-prof`)
 
