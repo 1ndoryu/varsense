@@ -31,7 +31,7 @@ import {
 } from '@/core/configuracion/config';
 import { CONVENCION_AREA } from '../configuracion/convencionArea';
 import { cargarVarsenseConfig } from '@/node/configArchivo';
-import { conTiempoLimite, FuenteCancelacion, TAMANO_MAXIMO_ARCHIVO_BYTES, TIMEOUT_LSP_MS } from '@/core/analisis/limites';
+import { conTiempoLimite, FuenteCancelacion, TAMANO_MAXIMO_ARCHIVO_BYTES, TIMEOUT_INDICE_LSP_MS, TIMEOUT_LSP_MS } from '@/core/analisis/limites';
 import { CancellationError, CancellationToken, throwIfCancelled } from '@/core/proveedores/workspaceProviders';
 import { findingToLspDiagnostic } from './diagnostics';
 import { crearCacheIndice } from './cacheIndice';
@@ -131,14 +131,9 @@ async function construirContexto(rootPath: string): Promise<ContextoAnalisis> {
 
 const cacheContexto = crearCacheIndice({ construir: construirContexto, ttlMs: TTL_INDICE_MS });
 
-async function diagnosticosDelDocumento(document: TextDocument, rootPath: string, token: CancellationToken): Promise<Diagnostic[]> {
-    // Medir en bytes UTF-8: el mismo criterio que el límite de la CLI sobre el archivo en disco.
-    if (Buffer.byteLength(document.getText(), 'utf8') > TAMANO_MAXIMO_ARCHIVO_BYTES) {
-        return [archivoGrandeDiagnostic()];
-    }
-
-    const { config, indice } = await cacheContexto.obtener(rootPath);
-    // La caché puede tardar: si el análisis ya no hace falta, no se llega a recorrer el documento.
+/* El contexto llega ya resuelto: el índice se espera fuera del presupuesto de este documento. */
+async function diagnosticosDelDocumento(document: TextDocument, contexto: ContextoAnalisis, token: CancellationToken): Promise<Diagnostic[]> {
+    const { config, indice } = contexto;
     throwIfCancelled(token);
     const findings = analyzeVarsenseDocument(
         coreDocumentFromLsp(document),
@@ -157,6 +152,11 @@ async function validateTextDocument(document: TextDocument): Promise<void> {
     const version = document.version;
     const fileName = fsPathFromUri(document.uri);
     const rootPath = workspaceRoot ?? path.dirname(fileName);
+    // Medir en bytes UTF-8: el mismo criterio que el límite de la CLI sobre el archivo en disco. Se descarta antes de tocar el índice.
+    if (Buffer.byteLength(document.getText(), 'utf8') > TAMANO_MAXIMO_ARCHIVO_BYTES) {
+        connection.sendDiagnostics({ uri: document.uri, diagnostics: [archivoGrandeDiagnostic()] });
+        return;
+    }
     // Un análisis lento puede acabar después de una edición más reciente: su resultado ya no describe el texto.
     const esObsoleto = () => documents.get(document.uri)?.version !== version;
 
@@ -166,8 +166,10 @@ async function validateTextDocument(document: TextDocument): Promise<void> {
     enCurso.set(document.uri, fuente);
 
     try {
+        // Primero el índice (límite propio) y después el análisis del documento (TIMEOUT_LSP_MS).
+        const contexto = await conTiempoLimite(() => cacheContexto.obtener(rootPath), TIMEOUT_INDICE_LSP_MS);
         const diagnostics = await conTiempoLimite(
-            token => diagnosticosDelDocumento(document, rootPath, token),
+            token => diagnosticosDelDocumento(document, contexto, token),
             TIMEOUT_LSP_MS,
             fuente
         );
