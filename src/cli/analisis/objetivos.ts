@@ -171,7 +171,7 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs, token?: Ca
 
     const output: CliAnalysisResult = {
         entries,
-        totalArchivos: result.archivosAnalizadosCss + result.archivosAnalizadosConsumo,
+        totalArchivos: result.rutasAnalizadas.length,
         omitidosPorTamano: fileProvider.omitidosPorTamano,
         hasErrors: entries.some(entry => entry.findings.some(finding => finding.severity === 'error')),
         durationMs: Date.now() - startedAt,
@@ -264,7 +264,8 @@ export async function analyzeAllTarget(args: ParsedCliArgs, token?: Cancellation
     timer.mark('groupMs');
     const result: CliAnalysisResult = {
         entries,
-        totalArchivos: includedCandidates.length + classResult.archivosAnalizadosCss + classResult.archivosAnalizadosConsumo,
+        /* [AUD-7] Único conteo: un archivo que es candidato y también lo lee el índice cuenta una vez. */
+        totalArchivos: new Set([...includedCandidates.map(file => file.fsPath), ...classResult.rutasAnalizadas]).size,
         omitidosPorTamano: fileProvider.omitidosPorTamano,
         hasErrors: entries.some(entry => entry.findings.some(finding => finding.severity === 'error')),
         durationMs: Date.now() - startedAt,

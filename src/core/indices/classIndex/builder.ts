@@ -63,7 +63,7 @@ export class ClassIndexBuilder {
             this.firmaPrefijosConsumo = prefijos.join(',');
         }
 
-        const { clasesMap, totalArchivos: archivosCss } = await this.scanCssDefinitions(
+        const { clasesMap, totalArchivos: archivosCss, rutas: rutasCss } = await this.scanCssDefinitions(
             cssPatterns,
             options.exclude,
             (actual, total) => onProgress?.('Escaneando CSS', actual, total),
@@ -72,7 +72,7 @@ export class ClassIndexBuilder {
 
         throwIfCancelled(options.token);
         onProgress?.('Extrayendo tokens de consumidores', 0, 1);
-        const { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, filesMapasExportados, filesReferenciasMapa, filesFuncionesClase, filesLlamadasClase, totalArchivos: archivosConsumo } = await this.extractConsumerTokens(
+        const { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, filesMapasExportados, filesReferenciasMapa, filesFuncionesClase, filesLlamadasClase, totalArchivos: archivosConsumo, rutas: rutasConsumo } = await this.extractConsumerTokens(
             consumerPatterns,
             options.exclude,
             prefijos,
@@ -258,6 +258,7 @@ export class ClassIndexBuilder {
             clasesHuerfanas,
             archivosAnalizadosCss: archivosCss,
             archivosAnalizadosConsumo: archivosConsumo,
+            rutasAnalizadas: [...new Set([...rutasCss, ...rutasConsumo])],
             tiempoMs: Date.now() - inicio
         };
     }
@@ -267,7 +268,7 @@ export class ClassIndexBuilder {
         exclude: string[],
         onProgress?: (actual: number, total: number) => void,
         token?: CancellationToken
-    ): Promise<{ clasesMap: Map<string, ClaseCssDefinida[]>; totalArchivos: number }> {
+    ): Promise<{ clasesMap: Map<string, ClaseCssDefinida[]>; totalArchivos: number; rutas: string[] }> {
         const files = await this.fileProvider.findFiles(patterns, exclude);
         const clasesMap = new Map<string, ClaseCssDefinida[]>();
         const currentFiles = new Set(files.map(file => file.fsPath));
@@ -306,7 +307,7 @@ export class ClassIndexBuilder {
             onProgress?.(index + 1, files.length);
         }
 
-        return { clasesMap, totalArchivos: files.length };
+        return { clasesMap, totalArchivos: files.length, rutas: files.map(file => file.fsPath) };
     }
 
     private async extractConsumerTokens(
@@ -324,6 +325,7 @@ export class ClassIndexBuilder {
         filesFuncionesClase: Map<string, Map<string, Set<string>>>;
         filesLlamadasClase: Map<string, Set<string>>;
         totalArchivos: number;
+        rutas: string[];
     }> {
         const files = await buscarArchivosUnicos(this.contexto, patterns, exclude, token);
         const filesTokens = new Map<string, Set<string>>();
@@ -372,6 +374,6 @@ export class ClassIndexBuilder {
             }
         }
 
-        return { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, filesMapasExportados, filesReferenciasMapa, filesFuncionesClase, filesLlamadasClase, totalArchivos: files.size };
+        return { filesTokens, filesFamilyPrefixes, filesCarriers, filesLlamadas, filesMapasExportados, filesReferenciasMapa, filesFuncionesClase, filesLlamadasClase, totalArchivos: files.size, rutas: [...files.keys()] };
     }
 }

@@ -17,6 +17,8 @@ export interface ResultadoClasesHuerfanas {
     clasesHuerfanas: ClaseCssDefinida[];
     archivosAnalizadosCss: number;
     archivosAnalizadosConsumo: number;
+    /* [AUD-7] Rutas únicas (CSS y consumidores) leídas por el índice: un mismo archivo cuenta una vez. */
+    rutasAnalizadas: string[];
     tiempoMs: number;
 }
 

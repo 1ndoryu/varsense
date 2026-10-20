@@ -203,6 +203,22 @@ suite('VarSense CLI editor-agnostic', () => {
         }
     });
 
+    /* [AUD-7] Un archivo que es candidato y además lo lee el índice cuenta una sola vez. */
+    test('all y orphan-classes cuentan cada archivo una vez en totalArchivos', async () => {
+        const root = crearWorkspaceTemporal('varsense-cli-conteo-');
+        escribir(root, 'src/variables.css', ':root { --colorPrimary: #fff; }\n.usada { color: red; }');
+        escribir(root, 'src/App.tsx', 'export function App() { return <div className="usada" />; }');
+
+        try {
+            const all = await analyzeCliTarget(parseCliArgs(['all', '--workspace', root, '--format', 'json']));
+            assert.strictEqual(all.totalArchivos, 2);
+            const huerfanas = await analyzeCliTarget(parseCliArgs(['orphan-classes', '--workspace', root, '--format', 'json']));
+            assert.strictEqual(huerfanas.totalArchivos, 2);
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
     test('all detecta tokens duplicados y no usados con el snapshot compartido', async () => {
         const root = crearWorkspaceTemporal('varsense-cli-tokens-');
         escribir(root, 'src/variables.css', ':root { --colorA: #fff; --colorB: #fff; --sinUso: 2px; }');
