@@ -14,26 +14,40 @@ export interface CacheIndice<T> {
     invalidar(): void;
 }
 
+interface Entrada<T> {
+    promesa: Promise<T>;
+    /* Instante en que termina la construcción. Mientras corre, la entrada no caduca: el TTL cuenta desde el final. */
+    terminada?: number;
+}
+
 export function crearCacheIndice<T>({ construir, ttlMs, ahora = Date.now }: OpcionesCacheIndice<T>): CacheIndice<T> {
-    const entradas = new CacheAcotada<string, { promesa: Promise<T>; creada: number }>(MAX_RAICES_CACHE_INDICE);
+    const entradas = new CacheAcotada<string, Entrada<T>>(MAX_RAICES_CACHE_INDICE);
 
     return {
         obtener(raiz) {
             const existente = entradas.get(raiz);
-            if (existente && ahora() - existente.creada < ttlMs) {
+            if (existente && (existente.terminada === undefined || ahora() - existente.terminada < ttlMs)) {
                 return existente.promesa;
             }
 
-            const promesa = construir(raiz);
-            entradas.set(raiz, { promesa, creada: ahora() });
-            // Un fallo no se cachea: la siguiente validación vuelve a intentarlo.
-            promesa.catch(() => {
-                if (entradas.get(raiz)?.promesa === promesa) {
-                    entradas.delete(raiz);
-                }
-            });
+            const entrada: Entrada<T> = {
+                promesa: construir(raiz).then(
+                    valor => {
+                        entrada.terminada = ahora();
+                        return valor;
+                    },
+                    error => {
+                        // Un fallo no se cachea: la siguiente validación vuelve a intentarlo.
+                        if (entradas.get(raiz) === entrada) {
+                            entradas.delete(raiz);
+                        }
+                        throw error;
+                    }
+                ),
+            };
+            entradas.set(raiz, entrada);
 
-            return promesa;
+            return entrada.promesa;
         },
         invalidar() {
             entradas.clear();
