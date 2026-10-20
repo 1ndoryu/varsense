@@ -1,6 +1,6 @@
 # Rendimiento de `varsense all`
 
-Medición del 2026-10-19 en el VPS 89, con el CLI compilado (`npm run compile`) y sin caché persistente reutilizable (cada ejecución reanaliza).
+Medición del 2026-10-19 en un VPS Linux de pruebas, con el CLI compilado (`npm run compile`) y sin caché persistente reutilizable (cada ejecución reanaliza).
 
 Proyectos medidos y anonimizados: A y B.
 
@@ -11,7 +11,7 @@ Rutas de las tablas y del perfil: `consumo/`, `fuentes/` y `classIndex/` son rel
 | Proyecto A | 399 | ~880–930 ms | 130–170 | 650–870 | 40–50 |
 | Proyecto B | 1040 | ~1400–2000 ms | 100–200 | 1090–1320 | 130–690 |
 
-`classIndexMs` es la fase dominante (70–75 % del total). Las cifras varían entre ejecuciones por carga del VPS de taller (dev89).
+`classIndexMs` es la fase dominante (70–75 % del total). Las cifras varían entre ejecuciones por carga del VPS de pruebas.
 
 ## Perfil de CPU (Proyecto B, `--cpu-prof`)
 
@@ -23,7 +23,7 @@ Autoconsumo principal: el propio binario minificado (~265 ms), recolección de b
 
 ## Atribución de `classIndexMs` (PERF-1, 2026-10-19)
 
-Método: `tsc` (sin minificar) en la 89, `node -r` con un hook que resuelve `@/` a `dist/`, `--cpu-prof` sobre `dist/cli/main.js all`, sin caché. Cada sample se atribuye al archivo fuente de quien lo ejecuta; una regex nativa cuenta para la función JS que la llama. Dos ejecuciones por workspace (run 2 mostrada):
+Método: `tsc` (sin minificar) en el VPS de pruebas, `node -r` con un hook que resuelve `@/` a `dist/`, `--cpu-prof` sobre `dist/cli/main.js all`, sin caché. Cada sample se atribuye al archivo fuente de quien lo ejecuta; una regex nativa cuenta para la función JS que la llama. Dos ejecuciones por workspace (run 2 mostrada):
 
 | Workspace | `classIndexMs` (wall) | CPU en `consumo/` | CPU en `fuentes/` | CPU en otros `classIndex/` | CPU total |
 |---|---|---|---|---|---|
@@ -43,4 +43,4 @@ Fuera de `classIndex`: `positionAtOffset` de `src/core/types.ts` (línea 95; reg
 
 Del tiempo total de proceso, ~300–450 ms son `(idle)` (espera de E/S al listar y leer archivos), no CPU.
 
-Criterio para cambios: cualquier cambio de regex en `consumo/` o `fuentes/` debe medirse con el mismo método (2 ejecuciones por workspace en la 89) y mostrar ganancia en `classIndexMs`; sin ganancia, no se commitea.
+Criterio para cambios: cualquier cambio de regex en `consumo/` o `fuentes/` debe medirse con el mismo método (2 ejecuciones por workspace en el VPS de pruebas) y mostrar ganancia en `classIndexMs`; sin ganancia, no se commitea.
