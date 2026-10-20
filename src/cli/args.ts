@@ -33,10 +33,15 @@ export function usage(): string {
         '  --output <path>     Escribe salida en archivo; si falta, imprime en stdout',
         '  --config <path>     Carga varsense.config.json',
         '  --files-from <path> Limita los archivos reportados a un manifiesto relativo',
-        '  --index-dir <path>   Persiste el índice entre ejecuciones (cache por rama)',
+        '  --index-dir <path>  Guarda el índice entre ejecuciones en ese directorio',
         '  --timeout <segundos> Límite de tiempo del análisis. 0 lo desactiva. Por defecto: 600',
         '  --help, -h          Muestra esta ayuda',
         '  --version           Muestra la version instalada',
+        '',
+        'Códigos de salida:',
+        '  0  sin errores',
+        '  1  hay hallazgos de severidad error',
+        '  2  uso incorrecto, --config inexistente o tiempo agotado',
     ].join('\n');
 }
 
