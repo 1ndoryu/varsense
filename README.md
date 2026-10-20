@@ -105,6 +105,14 @@ La misma regla acepta la forma del mensaje y las propiedades estructurales: `com
 
 `languages` indica qué identificadores de lenguaje analiza cada familia de regla: `css`, `react` (inline styles en JSX) y `script` (inline styles en TS/JS), más `cssExtensions` (extensiones que alimentan el índice de variables; por defecto `.css`). Una lista vacía desactiva esa familia en ese proyecto. Los defaults son los del core (`LENGUAJES_POR_DEFECTO`).
 
+Proyecto sin React ni convención de botones: VarSense funciona con `{}` (probado en un proyecto HTML/CSS/JS, 2026-10-20), pero aplica los defaults del área, así que `estiloBotonEspecifico` puede avisar de clases tipo botón en `components/` con un mensaje que sugiere `<Button>`. Para ese proyecto, la config mínima es:
+
+```json
+{ "buttonStyleDetection": { "enabled": false }, "languages": { "react": [] } }
+```
+
+Con esa config desaparece `estiloBotonEspecifico` y el resto de reglas (`valorHardcoded`, `variableNoDefinida`, `claseHuerfana`) se reporta igual.
+
 ## Arquitectura
 
 - `src/core/`: indexadores y reglas agnosticos (VariableIndex, ClassIndex, tokenRules) sin imports de VS Code ni de built-ins de Node (`fs`, `path`, `crypto`, `url`…, con o sin `node:`); `check:core` no admite excepciones. Lo que necesita disco o hash entra por puertos inyectados (p. ej. `PersistentIndexAdaptadores`).
