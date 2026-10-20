@@ -1,4 +1,3 @@
-import * as path from 'path';
 import { CoreFinding } from '../types';
 
 export interface VarsenseReportEntry {
@@ -9,7 +8,9 @@ export interface VarsenseReportEntry {
 export interface VarsenseReportInput {
     entries: VarsenseReportEntry[];
     totalArchivos: number;
-    rutaBase: string;
+    /* El adaptador (CLI) resuelve la ruta relativa al workspace: el core no
+     * toca el sistema de archivos. Por defecto solo unifica separadores. */
+    relativizar?: (ruta: string) => string;
     fecha?: Date;
 }
 
@@ -17,9 +18,8 @@ function escapeMarkdown(text: string): string {
     return text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
 }
 
-function relativePath(basePath: string, filePath: string): string {
-    const relative = path.relative(basePath, filePath);
-    return (relative || filePath).replace(/\\/g, '/');
+function rutaPorDefecto(ruta: string): string {
+    return ruta.replace(/\\/g, '/');
 }
 
 function countBySeverity(entries: VarsenseReportEntry[]): Record<string, number> {
@@ -52,8 +52,9 @@ export function generarReporteMarkdown(input: VarsenseReportInput): string {
     lines.push(`- **Hints:** ${counts.hint}`);
     lines.push('');
 
+    const relativizar = input.relativizar ?? rutaPorDefecto;
     for (const entry of input.entries) {
-        lines.push(`## ${relativePath(input.rutaBase, entry.ruta)} (${entry.findings.length} hallazgos)`);
+        lines.push(`## ${relativizar(entry.ruta)} (${entry.findings.length} hallazgos)`);
         lines.push('');
         lines.push('| Regla | Severidad | Linea | Mensaje |');
         lines.push('|---|---|---:|---|');

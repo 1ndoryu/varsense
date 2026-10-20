@@ -1,7 +1,8 @@
 /* Almacén persistente del índice (--index-dir) y estadísticas de caché para la salida. */
 import * as path from 'path';
 import { VarsenseConfigFile } from '@/core/configuracion/config';
-import { FilePersistentIndexStore, PARSER_VERSION, PERSISTENT_INDEX_FILENAME, configHashFor, indexIdentity } from '@/core/indices/persistentIndex';
+import { PARSER_VERSION, PERSISTENT_INDEX_FILENAME } from '@/core/indices/persistentIndex';
+import { FilePersistentIndexStore, configHashFor, indexIdentity } from '@/node/persistentIndexStore';
 import type { ParsedCliArgs } from '../args';
 import { CliAnalysisResult } from '../tipos';
 import { readPackageVersion } from '../version';

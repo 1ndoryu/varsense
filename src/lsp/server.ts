@@ -16,7 +16,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { analyzeVarsenseDocument } from '@/core/analisis/analyzeDocument';
 import { createCoreDocument } from '@/core/types';
-import { NodeDocumentProvider, NodeWorkspaceFileProvider } from '@/core/proveedores/nodeProviders';
+import { NodeDocumentProvider, NodeWorkspaceFileProvider } from '@/node/nodeProviders';
 import { VariableIndexBuilder } from '@/core/indices/variableIndexBuilder';
 import {
     buildAnalysisConfig,
@@ -25,7 +25,7 @@ import {
     DEFAULT_VARIABLE_PATTERNS,
     VarsenseConfigFile,
 } from '@/core/configuracion/config';
-import { cargarVarsenseConfig } from '@/core/configuracion/configArchivo';
+import { cargarVarsenseConfig } from '@/node/configArchivo';
 import { conTiempoLimite, TAMANO_MAXIMO_ARCHIVO_BYTES, TIMEOUT_LSP_MS } from '@/core/analisis/limites';
 import { findingToLspDiagnostic } from './diagnostics';
 import { crearCacheIndice } from './cacheIndice';

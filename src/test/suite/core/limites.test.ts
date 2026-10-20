@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { NodeWorkspaceFileProvider } from '../../../core/proveedores/nodeProviders';
+import { NodeWorkspaceFileProvider } from '../../../node/nodeProviders';
 import { conTiempoLimite, TAMANO_MAXIMO_ARCHIVO_BYTES, TiempoAgotadoError } from '../../../core/analisis/limites';
 
 suite('V7 Límites de tiempo y tamaño', () => {

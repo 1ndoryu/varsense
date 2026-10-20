@@ -1,7 +1,7 @@
 /* Carga de varsense.config.json: desde --config o desde la raíz del workspace. */
 import * as path from 'path';
 import { VarsenseConfigFile } from '@/core/configuracion/config';
-import { cargarVarsenseConfig } from '@/core/configuracion/configArchivo';
+import { cargarVarsenseConfig } from '@/node/configArchivo';
 
 /* [V10] Un --config explícito que no existe es un error de uso (rc 2), no una configuración vacía. */
 export async function readConfig(configPath: string | undefined, workspacePath: string): Promise<VarsenseConfigFile> {

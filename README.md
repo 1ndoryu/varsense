@@ -55,7 +55,7 @@ Requiere Node.js >= 20.19 (la suite de tests usa mocha 12). Instalación limpia 
 
 ```
 npm install          # instala y compila dist/ (script prepare)
-npm run check:core   # falla si src/core importa vscode fuera del adapter
+npm run check:core   # falla si src/core importa vscode o un built-in de Node (fs, path, crypto…)
 npm run smoke:lsp    # levanta el server stdio y verifica publishDiagnostics
 ```
 
@@ -100,7 +100,8 @@ La misma regla acepta la forma del mensaje y las propiedades estructurales: `com
 
 ## Arquitectura
 
-- `src/core/`: indexadores y reglas agnosticos (VariableIndex, ClassIndex, tokenRules) sin imports de VS Code; `check:core` no admite excepciones.
+- `src/core/`: indexadores y reglas agnosticos (VariableIndex, ClassIndex, tokenRules) sin imports de VS Code ni de built-ins de Node (`fs`, `path`, `crypto`, `url`…, con o sin `node:`); `check:core` no admite excepciones. Lo que necesita disco o hash entra por puertos inyectados (p. ej. `PersistentIndexAdaptadores`).
+- `src/node/`: adaptador Node (lectura de archivos y proveedores del workspace, carga de `varsense.config.json`, índice persistente en disco con hash SHA-256). Lo usan la CLI y el LSP; no importa `vscode`.
 - Código que usa la API de VS Code: `src/extension.ts`, `src/providers/`, `src/comandos/`, `src/services/`, `src/utils/` y `src/vscode/vscodeAdapter.ts`. Es la capa de la extensión, no del core; no se usa desde `src/cli/` ni `src/lsp/`.
 - `src/cli/`, `src/lsp/`, `src/extension.ts`: adapters de presentacion sobre el mismo core.
 - `src/test/suite/core/coreContracts*.test.ts` (3 partes): paridad core/CLI/LSP con fixtures versionadas.

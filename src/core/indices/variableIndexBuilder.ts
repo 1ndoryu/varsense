@@ -1,6 +1,6 @@
 import { CssVariable, VariableIndex } from '@/types';
 import { CancellationToken, DocumentProvider, throwIfCancelled, WorkspaceFile, WorkspaceFileProvider } from '../proveedores/workspaceProviders';
-import { PersistentIndexStore, sha256File } from './persistentIndex';
+import { PersistentIndexStore } from './persistentIndex';
 import type { ParserVarsense } from '../puertoParsers';
 
 export interface VariableIndexBuildResult {
@@ -72,7 +72,7 @@ export class VariableIndexBuilder {
         /* [028A-8] Reutiliza la entrada persistente cuando el hash coincide;
          * solo abre y parsea el documento cuando no hay coincidencia. */
         const store = this.persistentStore;
-        const hash = store ? await sha256File(file.fsPath) : null;
+        const hash = store ? await store.hashFile(file.fsPath) : null;
         const stored = hash && store ? store.getEntry(file.fsPath) : undefined;
         let variables: CssVariable[];
         if (store && stored?.hash === hash && stored.variables) {

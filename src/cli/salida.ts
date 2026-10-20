@@ -35,7 +35,7 @@ export function renderOutput(result: CliAnalysisResult, args: ParsedCliArgs, too
     return `${generarReporteMarkdown({
         entries: result.entries,
         totalArchivos: result.totalArchivos,
-        rutaBase: args.workspacePath,
+        relativizar: ruta => (path.relative(args.workspacePath, ruta) || ruta).replace(/\\/g, '/'),
     })}\n`;
 }
 

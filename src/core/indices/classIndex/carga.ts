@@ -1,5 +1,5 @@
 /* [V6] Carga con caché de archivos para el índice de clases: CSS, tokens de consumo y listado. Sin cambio de comportamiento. */
-import { PersistentIndexStore, sha256File } from '../persistentIndex';
+import { PersistentIndexStore } from '../persistentIndex';
 import { extraerUsoVariablesDeTexto } from '../../analisis/usoVariables';
 import { CancellationToken, DocumentProvider, WorkspaceFile, WorkspaceFileProvider, throwIfCancelled } from '../../proveedores/workspaceProviders';
 import { extraerTokensDeTexto } from './consumo/consumidores';
@@ -25,7 +25,7 @@ export interface ContextoCarga {
  * calcula del contenido real en disco antes de abrir/parsear el documento,
  * por lo que un archivo sin cambios nunca se vuelve a parsear. */
 export async function cargarDefinicionesCss(ctx: ContextoCarga, file: WorkspaceFile, token?: CancellationToken): Promise<ClaseCssDefinida[]> {
-    const hash = ctx.persistentStore ? await sha256File(file.fsPath) : null;
+    const hash = ctx.persistentStore ? await ctx.persistentStore.hashFile(file.fsPath) : null;
     const store = ctx.persistentStore;
     const stored = hash ? store?.getEntry(file.fsPath) : undefined;
     if (stored?.hash === hash && stored.classDefinitions) {
@@ -60,7 +60,7 @@ export async function cargarDefinicionesCss(ctx: ContextoCarga, file: WorkspaceF
  * criterio V14: entrada vieja sin los campos se re-parsea). Solo archivos
  * script aportan carriers/llamadas (los carriers son un idioma JS/TS). */
 export async function cargarTokensConsumo(ctx: ContextoCarga, file: WorkspaceFile, prefijos: readonly string[], token?: CancellationToken): Promise<EntradaConsumo> {
-    const hash = ctx.persistentStore ? await sha256File(file.fsPath) : null;
+    const hash = ctx.persistentStore ? await ctx.persistentStore.hashFile(file.fsPath) : null;
     const store = ctx.persistentStore;
     const stored = hash ? store?.getEntry(file.fsPath) : undefined;
     /* [318A-7V14] La familia se exige persistida: una entrada vieja (sin

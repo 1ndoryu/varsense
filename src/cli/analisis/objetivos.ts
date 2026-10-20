@@ -1,7 +1,7 @@
 /* Orquestación del análisis de cada comando (scan, orphan-classes, all) sobre el workspace. */
 import { pathToFileURL } from 'url';
 import { CoreFinding, CoreTextDocument } from '@/core/types';
-import { CachedNodeDocumentProvider, NodeWorkspaceFileProvider } from '@/core/proveedores/nodeProviders';
+import { CachedNodeDocumentProvider, NodeWorkspaceFileProvider } from '@/node/nodeProviders';
 import type { DocumentProvider } from '@/core/proveedores/workspaceProviders';
 import { VariableIndexBuilder } from '@/core/indices/variableIndexBuilder';
 import { buildVariableReverseIndex } from '@/core/indices/persistentIndex';

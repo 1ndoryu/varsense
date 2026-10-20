@@ -5,7 +5,7 @@ import { analyzeVarsenseDocument } from '../../../core/analisis/analyzeDocument'
 import { buildAnalysisConfig } from '../../../core/configuracion/config';
 import { VariableIndexBuilder } from '../../../core/indices/variableIndexBuilder';
 import { ClassIndexBuilder } from '../../../core/indices/classIndexBuilder';
-import { NodeWorkspaceFileProvider } from '../../../core/proveedores/nodeProviders';
+import { NodeWorkspaceFileProvider } from '../../../node/nodeProviders';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';

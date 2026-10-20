@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import { analyzeVarsenseDocument, orphanClassToFinding } from '../../../core/analisis/analyzeDocument';
-import { NodeDocumentProvider, NodeWorkspaceFileProvider } from '../../../core/proveedores/nodeProviders';
+import { NodeDocumentProvider, NodeWorkspaceFileProvider } from '../../../node/nodeProviders';
 import { VariableIndexBuilder } from '../../../core/indices/variableIndexBuilder';
 import { ClassIndexBuilder } from '../../../core/indices/classIndexBuilder';
 import { CoreFinding } from '../../../core/types';
