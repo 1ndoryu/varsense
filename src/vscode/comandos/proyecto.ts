@@ -3,8 +3,8 @@
  */
 
 import * as vscode from 'vscode';
-import { ResultadoEscaneoProyecto } from '@/providers/diagnosticProvider';
-import { VariableScanner } from '@/services/variableScanner';
+import { ResultadoEscaneoProyecto } from '@/vscode/providers/diagnosticProvider';
+import { VariableScanner } from '@/vscode/services/variableScanner';
 import { estado } from './estado';
 
 /*

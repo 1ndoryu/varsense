@@ -6,10 +6,10 @@
 
 import * as vscode from 'vscode';
 import { encontrarVariableEnPosicion } from '@/parsers/cssCursor';
-import { VariableScanner } from '@/services/variableScanner';
-import { obtenerResolver } from '@/services/variableResolver';
+import { VariableScanner } from '@/vscode/services/variableScanner';
+import { obtenerResolver } from '@/vscode/services/variableResolver';
 import { parsearColor, generarMarkdownColor } from '@/utils/color/colorUtils';
-import { obtenerRutaRelativa } from '@/utils/fileUtils';
+import { obtenerRutaRelativa } from '@/vscode/utils/fileUtils';
 import { documentFromVsCode, rangeToVsCodeRange } from '@/vscode/vscodeAdapter';
 
 /*

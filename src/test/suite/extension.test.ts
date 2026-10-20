@@ -223,7 +223,7 @@ suite('Color Utils Tests', () => {
 
 suite('File Utils Tests', () => {
     test('Should get relative path', () => {
-        const {obtenerRutaRelativa} = require('../../utils/fileUtils');
+        const {obtenerRutaRelativa} = require('../../vscode/utils/fileUtils');
 
         /* Este test depende del workspace actual */
         const rutaRelativa = obtenerRutaRelativa('/some/absolute/path/file.css');
@@ -231,7 +231,7 @@ suite('File Utils Tests', () => {
     });
 
     test('Should identify CSS files', () => {
-        const {esCssValido} = require('../../utils/fileUtils');
+        const {esCssValido} = require('../../vscode/utils/fileUtils');
 
         assert.strictEqual(esCssValido('styles.css'), true);
         assert.strictEqual(esCssValido('styles.scss'), true);
@@ -240,7 +240,7 @@ suite('File Utils Tests', () => {
     });
 
     test('Should calculate position from offset', () => {
-        const {offsetAPosicion} = require('../../utils/fileUtils');
+        const {offsetAPosicion} = require('../../vscode/utils/fileUtils');
 
         const texto = 'linea1\nlinea2\nlinea3';
 

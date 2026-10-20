@@ -11,12 +11,12 @@ Mapa de capas de `src/` y de los ficheros de configuración de la raíz. Las reg
 | CLI | `src/cli/` | core, `src/node/`, `src/parsers/`, `src/configuracion/` | `vscode` (verificado: `dist/cli` no contiene `require('vscode')`) |
 | LSP | `src/lsp/` | core, `src/node/`, `src/parsers/`, `src/configuracion/` | `vscode` |
 | Parsers CSS | `src/parsers/` | core, `src/types/`, `src/utils/color/` (utilidades puras de color) | `vscode` |
-| Extensión VS Code | `src/extension.ts`, `src/providers/`, `src/services/`, `src/comandos/`, `src/utils/`, `src/vscode/` | todo lo anterior y `vscode` | — |
+| Extensión VS Code | `src/extension.ts`, `src/vscode/` (providers, services, comandos, utils, adaptador) | todo lo anterior y `vscode` | — |
 
 Notas:
 
-- `src/services/` (`variableScanner`, `classScanner`, `variableResolver`) y `src/comandos/` son la capa de la extensión. La CLI no los usa: `scan`, `orphan-classes` y `all` componen los índices en `src/cli/analisis/objetivos.ts`.
-- `src/utils/` mezcla utilidades de editor (`documentUtils.ts`, `positionUtils.ts`) con utilidades puras; por eso no se considera core.
+- `src/vscode/services/` (`variableScanner`, `classScanner`, `variableResolver`) y `src/vscode/comandos/` son la capa de la extensión. La CLI no los usa: `scan`, `orphan-classes` y `all` componen los índices en `src/cli/analisis/objetivos.ts`.
+- `src/utils/` solo tiene utilidades puras (color, logger, `positionUtils.ts`, `functionUtils.ts`); las de editor (`documentUtils`, `fileOperations`, `pathUtils`, y el barril `fileUtils`) viven en `src/vscode/utils/`.
 - Las pruebas de paridad core/CLI/LSP viven en `src/test/suite/core/coreContracts*.test.ts` y `src/test/suite/integracion/`.
 
 ## Ficheros de configuración de la raíz

@@ -9,15 +9,15 @@
  */
 
 import * as vscode from 'vscode';
-import {VariableScanner} from '@/services/variableScanner';
-import {obtenerConfigService} from '@/services/configService';
-import {esLenguajeSoportado, debounce} from '@/utils/fileUtils';
+import {VariableScanner} from '@/vscode/services/variableScanner';
+import {obtenerConfigService} from '@/vscode/services/configService';
+import {esLenguajeSoportado, debounce} from '@/vscode/utils/fileUtils';
 import { analyzeVarsenseDocument } from '@/core/analisis/analyzeDocument';
 import { configuracionAnalisisDesdeExtension, documentFromVsCode } from '@/vscode/vscodeAdapter';
 import { parserCssVarsense } from '@/parsers';
-import { LENGUAJES_REACT, esDocumentoSoportado, diagnosticoDesdeHallazgo } from '@/providers/puertasYTraduccionDiagnosticos';
-import { escanearTodoElProyecto } from '@/providers/escaneoProyectoDiagnosticos';
-import type { ResultadoEscaneoProyecto } from '@/providers/escaneoProyectoDiagnosticos';
+import { LENGUAJES_REACT, esDocumentoSoportado, diagnosticoDesdeHallazgo } from '@/vscode/providers/puertasYTraduccionDiagnosticos';
+import { escanearTodoElProyecto } from '@/vscode/providers/escaneoProyectoDiagnosticos';
+import type { ResultadoEscaneoProyecto } from '@/vscode/providers/escaneoProyectoDiagnosticos';
 
 /*
  * Nombre de la colección de diagnósticos
@@ -41,7 +41,7 @@ export interface ResumenDiagnosticoArchivo {
 /*
  * Reexport para que los importadores sigan usando este módulo
  */
-export type { ResultadoEscaneoProyecto } from '@/providers/escaneoProyectoDiagnosticos';
+export type { ResultadoEscaneoProyecto } from '@/vscode/providers/escaneoProyectoDiagnosticos';
 
 /*
  * Provider de diagnósticos

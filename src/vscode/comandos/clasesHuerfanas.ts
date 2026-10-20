@@ -3,9 +3,9 @@
  */
 
 import * as vscode from 'vscode';
-import { escanearClasesHuerfanas, ResultadoClasesHuerfanas } from '@/services/classScanner';
+import { escanearClasesHuerfanas, ResultadoClasesHuerfanas } from '@/vscode/services/classScanner';
 import { DiagnosticType } from '@/types';
-import { PREFIJOS_PORTADORES_CONVENCION } from '../configuracion/convencionArea';
+import { PREFIJOS_PORTADORES_CONVENCION } from '@/configuracion/convencionArea';
 import { estado } from './estado';
 
 /*

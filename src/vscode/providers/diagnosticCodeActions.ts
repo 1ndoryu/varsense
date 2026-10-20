@@ -6,9 +6,9 @@
 
 import * as vscode from 'vscode';
 import {DiagnosticType} from '@/types';
-import {VariableScanner} from '@/services/variableScanner';
-import {obtenerResolver} from '@/services/variableResolver';
-import {obtenerMetadataDiagnostico} from '@/providers/diagnosticMetadata';
+import {VariableScanner} from '@/vscode/services/variableScanner';
+import {obtenerResolver} from '@/vscode/services/variableResolver';
+import {obtenerMetadataDiagnostico} from '@/vscode/providers/diagnosticMetadata';
 
 /*
  * Provider de código de acciones (quick fixes)

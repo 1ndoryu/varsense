@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { ExtensionConfig, HardcodedDetectionConfig, InlineDetectionConfig, BannedPropertyConfig, SEVERITY_MAP } from '@/types';
-import { PREFIJOS_PORTADORES_CONVENCION } from '../configuracion/convencionArea';
+import { PREFIJOS_PORTADORES_CONVENCION } from '@/configuracion/convencionArea';
 
 /*
  * Nombre de la sección de configuración en VS Code

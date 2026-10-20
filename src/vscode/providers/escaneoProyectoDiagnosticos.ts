@@ -5,11 +5,11 @@
  */
 
 import * as vscode from 'vscode';
-import {obtenerConfigService} from '@/services/configService';
+import {obtenerConfigService} from '@/vscode/services/configService';
 /* Globs por defecto del core: la extensión no duplica la convención de extensiones. */
 import {DEFAULT_CSS_PATTERNS, DEFAULT_REACT_PATTERNS} from '@/core/configuracion/config';
 /* Import de tipo: evita un ciclo en runtime con diagnosticProvider.ts */
-import type {ResumenDiagnosticoArchivo} from '@/providers/diagnosticProvider';
+import type {ResumenDiagnosticoArchivo} from '@/vscode/providers/diagnosticProvider';
 
 /*
  * Resultado del escaneo global de diagnósticos

@@ -6,11 +6,11 @@
 
 import * as vscode from 'vscode';
 import {DiagnosticType} from '@/types';
-import {obtenerConfigService} from '@/services/configService';
-import {esLenguajeSoportado, coincideConPatron} from '@/utils/fileUtils';
+import {obtenerConfigService} from '@/vscode/services/configService';
+import {esLenguajeSoportado, coincideConPatron} from '@/vscode/utils/fileUtils';
 import { CoreFinding } from '@/core/types';
 import { findingToDiagnostic } from '@/vscode/vscodeAdapter';
-import { registrarMetadataDiagnostico } from '@/providers/diagnosticMetadata';
+import { registrarMetadataDiagnostico } from '@/vscode/providers/diagnosticMetadata';
 
 /*
  * Lenguajes React para detección de inline CSS

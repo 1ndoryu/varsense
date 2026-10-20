@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import { DiagnosticProvider } from '@/providers/diagnosticProvider';
+import { DiagnosticProvider } from '@/vscode/providers/diagnosticProvider';
 
 export interface EstadoExtension {
     diagnosticProvider: DiagnosticProvider | null;

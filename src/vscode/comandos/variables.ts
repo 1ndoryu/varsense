@@ -3,7 +3,7 @@
  */
 
 import * as vscode from 'vscode';
-import { VariableScanner } from '@/services/variableScanner';
+import { VariableScanner } from '@/vscode/services/variableScanner';
 import { CssVariable } from '@/types';
 import { estado } from './estado';
 

@@ -4,7 +4,7 @@
 
 import * as vscode from 'vscode';
 import { DiagnosticType } from '@/types';
-import { VariableScanner } from '@/services/variableScanner';
+import { VariableScanner } from '@/vscode/services/variableScanner';
 import { estado } from './estado';
 import { escribirReporteEnOutput } from './proyecto';
 

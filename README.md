@@ -106,6 +106,6 @@ La misma regla acepta la forma del mensaje y las propiedades estructurales: `com
 
 - `src/core/`: indexadores y reglas agnosticos (VariableIndex, ClassIndex, tokenRules) sin imports de VS Code ni de built-ins de Node (`fs`, `path`, `crypto`, `url`…, con o sin `node:`); `check:core` no admite excepciones. Lo que necesita disco o hash entra por puertos inyectados (p. ej. `PersistentIndexAdaptadores`).
 - `src/node/`: adaptador Node (lectura de archivos y proveedores del workspace, carga de `varsense.config.json`, índice persistente en disco con hash SHA-256). Lo usan la CLI y el LSP; no importa `vscode`.
-- Código que usa la API de VS Code: `src/extension.ts`, `src/providers/`, `src/comandos/`, `src/services/`, `src/utils/` y `src/vscode/vscodeAdapter.ts`. Es la capa de la extensión, no del core; no se usa desde `src/cli/` ni `src/lsp/`.
+- Código que usa la API de VS Code: `src/extension.ts` y `src/vscode/` (providers, services, comandos, utils y `vscodeAdapter.ts`). Es la capa de la extensión, no del core; no se usa desde `src/cli/` ni `src/lsp/`.
 - `src/cli/`, `src/lsp/`, `src/extension.ts`: adapters de presentacion sobre el mismo core.
 - `src/test/suite/core/coreContracts*.test.ts` (3 partes): paridad core/CLI/LSP con fixtures versionadas.

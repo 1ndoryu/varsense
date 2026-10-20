@@ -4,17 +4,17 @@
  */
 
 import * as vscode from 'vscode';
-import { DiagnosticProvider } from '@/providers/diagnosticProvider';
-import { DiagnosticCodeActionProvider } from '@/providers/diagnosticCodeActions';
-import { crearHoverProvider } from '@/providers/hoverProvider';
-import { crearCompletionProvider } from '@/providers/completionProvider';
-import { VariableScanner } from '@/services/variableScanner';
-import { obtenerConfigService, estaExtensionHabilitada } from '@/services/configService';
-import { estado } from './comandos/estado';
-import { escanearVariablesInicial, comandoRefrescarVariables, comandoMostrarVariables, comandoIrADefinicion, comandoLimpiarCache } from './comandos/variables';
-import { comandoEscanearTodoProyecto, comandoExportarReporte } from './comandos/proyecto';
-import { comandoAutoFixTodosLosCss } from './comandos/autoFix';
-import { comandoDetectarClasesHuerfanas } from './comandos/clasesHuerfanas';
+import { DiagnosticProvider } from '@/vscode/providers/diagnosticProvider';
+import { DiagnosticCodeActionProvider } from '@/vscode/providers/diagnosticCodeActions';
+import { crearHoverProvider } from '@/vscode/providers/hoverProvider';
+import { crearCompletionProvider } from '@/vscode/providers/completionProvider';
+import { VariableScanner } from '@/vscode/services/variableScanner';
+import { obtenerConfigService, estaExtensionHabilitada } from '@/vscode/services/configService';
+import { estado } from './vscode/comandos/estado';
+import { escanearVariablesInicial, comandoRefrescarVariables, comandoMostrarVariables, comandoIrADefinicion, comandoLimpiarCache } from './vscode/comandos/variables';
+import { comandoEscanearTodoProyecto, comandoExportarReporte } from './vscode/comandos/proyecto';
+import { comandoAutoFixTodosLosCss } from './vscode/comandos/autoFix';
+import { comandoDetectarClasesHuerfanas } from './vscode/comandos/clasesHuerfanas';
 import { logger } from '@/utils/logger';
 
 /*

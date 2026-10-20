@@ -4,7 +4,7 @@
  */
 
 import { CssVariable, ResolvedVariable } from '@/types';
-import { VariableScanner } from '@/services/variableScanner';
+import { VariableScanner } from '@/vscode/services/variableScanner';
 import { extraerVariablesDeValor } from '@/parsers/valueParser';
 import { esColor, parsearColor } from '@/utils/color/colorUtils';
 import { logger } from '@/utils/logger';

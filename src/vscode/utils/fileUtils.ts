@@ -5,6 +5,6 @@
 
 export { buscarArchivos, leerArchivo, crearFileWatcher } from './fileOperations';
 export { obtenerRutaRelativa, obtenerExtension, esCssValido, coincideConPatron } from './pathUtils';
-export { offsetAPosicion, posicionAOffset, crearRango } from './positionUtils';
+export { offsetAPosicion, posicionAOffset, crearRango } from '@/utils/positionUtils';
 export { esLenguajeSoportado, esReact, obtenerLinea } from './documentUtils';
-export { debounce, throttle, hashString } from './functionUtils';
+export { debounce, throttle, hashString } from '@/utils/functionUtils';

@@ -5,9 +5,9 @@ import * as vscode from 'vscode';
 import { CoreFinding, CoreRange, CoreSeverity, CoreTextDocument, createCoreDocument } from '@/core/types';
 import { VarsenseDocumentAnalysisConfig } from '@/core/analisis/analyzeDocument';
 import { buildAnalysisConfig } from '@/core/configuracion/config';
-import { CONVENCION_AREA } from '../configuracion/convencionArea';
+import { CONVENCION_AREA } from '@/configuracion/convencionArea';
 import { DiagnosticSeverityValue, ExtensionConfig } from '@/types';
-import { buscarArchivos } from '@/utils/fileUtils';
+import { buscarArchivos } from '@/vscode/utils/fileUtils';
 import { DocumentProvider, FileWatcher, FileWatcherCallbacks, FileWatcherProvider, WorkspaceFile, WorkspaceFileProvider } from '@/core/proveedores/workspaceProviders';
 
 export function documentFromVsCode(document: vscode.TextDocument): CoreTextDocument {

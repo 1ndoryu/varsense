@@ -5,7 +5,7 @@
 
 import { ClassIndexBuilder, ResultadoClasesHuerfanas } from '@/core/indices/classIndexBuilder';
 import { VscodeDocumentProvider, VscodeWorkspaceFileProvider } from '@/vscode/vscodeAdapter';
-import { CONVENCION_AREA } from '../configuracion/convencionArea';
+import { CONVENCION_AREA } from '@/configuracion/convencionArea';
 
 export type { ClaseCssDefinida, ResultadoClasesHuerfanas } from '@/core/indices/classIndexBuilder';
 
