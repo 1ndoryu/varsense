@@ -2,7 +2,8 @@
 import { pathToFileURL } from 'url';
 import { CoreFinding, CoreTextDocument } from '@/core/types';
 import { CachedNodeDocumentProvider, NodeWorkspaceFileProvider } from '@/node/nodeProviders';
-import type { DocumentProvider } from '@/core/proveedores/workspaceProviders';
+import type { CancellationToken, DocumentProvider } from '@/core/proveedores/workspaceProviders';
+import { throwIfCancelled } from '@/core/proveedores/workspaceProviders';
 import { VariableIndexBuilder } from '@/core/indices/variableIndexBuilder';
 import { buildVariableReverseIndex } from '@/core/indices/persistentIndex';
 import { ClassIndexBuilder } from '@/core/indices/classIndexBuilder';
@@ -48,7 +49,8 @@ function groupFindingsByFile(findings: Array<{ ruta: string; finding: CoreFindin
         .sort((first, second) => first.ruta.localeCompare(second.ruta));
 }
 
-export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
+/* El token (si llega) se consulta entre archivos: un análisis cancelado por timeout se detiene sin terminar el resto. */
+export async function analyzeScanTarget(args: ParsedCliArgs, token?: CancellationToken): Promise<CliAnalysisResult> {
     const startedAt = Date.now();
     const timer = createPhaseTimer();
     const configFile = await readConfig(args.configPath, args.workspacePath);
@@ -70,6 +72,7 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
     const variableResult = await variableBuilder.build({
         patterns: variablePatterns,
         exclude: excludePatterns,
+        token,
     });
     timer.mark('variableIndexMs');
 
@@ -94,11 +97,12 @@ export async function analyzeScanTarget(args: ParsedCliArgs): Promise<CliAnalysi
         if (!esArchivoCss(file.fsPath, configFile) || variableResult.variablesPorArchivo.has(file.fsPath)) {
             continue;
         }
-        await variableBuilder.addFileToIndex(file, variableResult.indice.variables, variableResult.variablesPorArchivo);
+        await variableBuilder.addFileToIndex(file, variableResult.indice.variables, variableResult.variablesPorArchivo, token);
     }
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
 
     for (const file of includedCandidates) {
+        throwIfCancelled(token);
         const document = await documentProvider.openTextDocument(file);
         const documentFindings = analyzeVarsenseDocument(document, variableResult.indice, analysisConfig, parserCssVarsense);
         for (const documentFinding of documentFindings) {
@@ -161,7 +165,7 @@ async function filtrarClasesSuprimidas<T extends { archivo: string; linea: numbe
     return conservadas;
 }
 
-export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
+export async function analyzeOrphanClassesTarget(args: ParsedCliArgs, token?: CancellationToken): Promise<CliAnalysisResult> {
     const startedAt = Date.now();
     const configFile = await readConfig(args.configPath, args.workspacePath);
     const scopedFiles = await readFilesFromManifest(args);
@@ -176,6 +180,7 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
         excludedClassPatterns: configFile.orphanClassDetection?.excludeClassPatterns ?? [],
         prefijosPortadores: configFile.prefijosPortadores ?? DEFAULT_PREFIJOS_PORTADORES,
         shorthandTailwind: configFile.tokenDetection?.tailwindShorthand ?? true,
+        token,
     });
 
     const clasesHuerfanas = await filtrarClasesSuprimidas(result.clasesHuerfanas, documentProvider);
@@ -196,7 +201,7 @@ export async function analyzeOrphanClassesTarget(args: ParsedCliArgs): Promise<C
     return output;
 }
 
-export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
+export async function analyzeAllTarget(args: ParsedCliArgs, token?: CancellationToken): Promise<CliAnalysisResult> {
     const startedAt = Date.now();
     const timer = createPhaseTimer();
     const configFile = await readConfig(args.configPath, args.workspacePath);
@@ -208,7 +213,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     const variableBuilder = new VariableIndexBuilder(fileProvider, documentProvider, parserCssVarsense, persistentStore);
     const variablePatterns = configFile.scanAllFiles ? DEFAULT_CSS_PATTERNS : (configFile.variableFiles ?? DEFAULT_VARIABLE_PATTERNS);
     timer.mark('configMs');
-    const variableResult = await variableBuilder.build({ patterns: variablePatterns, exclude: excludePatterns });
+    const variableResult = await variableBuilder.build({ patterns: variablePatterns, exclude: excludePatterns, token });
     timer.mark('variableIndexMs');
     const classBuilder = new ClassIndexBuilder(fileProvider, documentProvider, documentProvider, persistentStore);
     const classResult = await classBuilder.scan({
@@ -217,6 +222,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
         excludedClassPatterns: configFile.orphanClassDetection?.excludeClassPatterns ?? [],
         prefijosPortadores: configFile.prefijosPortadores ?? DEFAULT_PREFIJOS_PORTADORES,
         shorthandTailwind: configFile.tokenDetection?.tailwindShorthand ?? true,
+        token,
     });
     timer.mark('classIndexMs');
     const includePatterns = configFile.includePatterns ?? DEFAULT_INCLUDE_PATTERNS;
@@ -235,7 +241,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
         if (!esArchivoCss(file.fsPath, configFile) || variableResult.variablesPorArchivo.has(file.fsPath)) {
             continue;
         }
-        await variableBuilder.addFileToIndex(file, variableResult.indice.variables, variableResult.variablesPorArchivo);
+        await variableBuilder.addFileToIndex(file, variableResult.indice.variables, variableResult.variablesPorArchivo, token);
     }
     const findings: Array<{ ruta: string; finding: CoreFinding }> = [];
     const analysisConfig = buildAnalysisConfig(configFile);
@@ -253,6 +259,7 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     const documents: Array<{ file: string; document: CoreTextDocument }> = [];
     const startedAnalysis = Date.now();
     for (const file of analysisTargets) {
+        throwIfCancelled(token);
         const document = await documentProvider.openTextDocument(file);
         documents.push({ file: file.fsPath, document });
         /* [028A-8 tramo 4] Los hallazgos documentales solo se reportan para el
@@ -308,12 +315,12 @@ export async function analyzeAllTarget(args: ParsedCliArgs): Promise<CliAnalysis
     return result;
 }
 
-export async function analyzeCliTarget(args: ParsedCliArgs): Promise<CliAnalysisResult> {
+export async function analyzeCliTarget(args: ParsedCliArgs, token?: CancellationToken): Promise<CliAnalysisResult> {
     if (args.command === 'scan') {
-        return analyzeScanTarget(args);
+        return analyzeScanTarget(args, token);
     }
     if (args.command === 'orphan-classes') {
-        return analyzeOrphanClassesTarget(args);
+        return analyzeOrphanClassesTarget(args, token);
     }
-    return analyzeAllTarget(args);
+    return analyzeAllTarget(args, token);
 }

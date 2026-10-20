@@ -21,8 +21,8 @@ export async function runCli(rawArgs: string[]): Promise<number> {
         process.stdout.write(`${usage()}\n`);
         return 0;
     }
-    /* [V7] El límite de tiempo acota la espera; el análisis que lo excede se cierra en el punto de entrada. */
-    const result = await conTiempoLimite(analyzeCliTarget(args), args.timeoutMs);
+    /* [V7] El límite cancela el token: el análisis se detiene en su siguiente punto de control. El punto de entrada cierra el proceso si queda algo síncrono. */
+    const result = await conTiempoLimite(token => analyzeCliTarget(args, token), args.timeoutMs);
     avisarOmitidos(result.omitidosPorTamano, args.workspacePath);
     await writeOrPrint(renderOutput(result, args, await readPackageVersion()), args.outputPath);
     return result.hasErrors ? 1 : 0;

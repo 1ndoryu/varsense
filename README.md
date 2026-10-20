@@ -27,7 +27,7 @@ varsense --version
 - `--config <ruta>`: carga un `varsense.config.json` concreto. Si la ruta no existe, sale con código 2.
 - `--files-from <ruta>`: limita los archivos reportados a un manifiesto de rutas relativas.
 - `--index-dir <ruta>`: persiste el índice entre ejecuciones (caché por rama).
-- `--timeout <segundos>`: límite del análisis (por defecto 600; `0` lo desactiva). Al agotarse, sale con código 2 y un mensaje en stderr.
+- `--timeout <segundos>`: límite del análisis (por defecto 600; `0` lo desactiva). Al agotarse, el análisis se cancela en sus puntos de control, sale con código 2 y muestra un mensaje en stderr.
 - `--help` / `-h` y `--version`: muestran la ayuda o la versión y salen con código 0.
 - Archivos de más de 2 MiB se omiten del análisis; el CLI avisa en stderr con sus rutas (hasta 5). La salida no cambia para el resto.
 
@@ -45,7 +45,7 @@ La severidad es independiente y configurable; los tokens se resuelven sobre la c
 
 El binario `varsense-lsp` publica diagnostics desde el mismo core que la extension y el CLI. Para integracion en Zed, usa `zed: install dev extension` y selecciona `integrations/zed`; el adaptador busca el LSP en este orden: variable de entorno `VARSENSE_LSP_PATH`, luego `varsense-lsp` en el PATH, y por último el `dist/` del checkout si Zed se abrió desde él.
 
-Límites: el tope de 2 MiB por archivo (ver CLI) aplica aquí con un aviso informativo; el análisis de un documento dura como máximo 10 s (si no, se publica un error en el documento) y se muestran como máximo 500 diagnósticos por documento. Si el documento cambia durante el análisis, su resultado se descarta.
+Límites: el tope de 2 MiB por archivo (ver CLI) aplica aquí con un aviso informativo; el análisis de un documento dura como máximo 10 s (si no, se cancela y se publica un error en el documento) y se muestran como máximo 500 diagnósticos por documento. Si el documento cambia o se cierra durante el análisis, el análisis en curso se cancela y su resultado se descarta.
 
 ## Instalacion
 

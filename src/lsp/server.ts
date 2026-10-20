@@ -26,7 +26,8 @@ import {
     VarsenseConfigFile,
 } from '@/core/configuracion/config';
 import { cargarVarsenseConfig } from '@/node/configArchivo';
-import { conTiempoLimite, TAMANO_MAXIMO_ARCHIVO_BYTES, TIMEOUT_LSP_MS } from '@/core/analisis/limites';
+import { conTiempoLimite, FuenteCancelacion, TAMANO_MAXIMO_ARCHIVO_BYTES, TIMEOUT_LSP_MS } from '@/core/analisis/limites';
+import { CancellationError, CancellationToken, throwIfCancelled } from '@/core/proveedores/workspaceProviders';
 import { findingToLspDiagnostic } from './diagnostics';
 import { crearCacheIndice } from './cacheIndice';
 import { parserCssVarsense } from '@/parsers';
@@ -42,6 +43,8 @@ const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 let workspaceRoot: string | undefined;
 const pendientes = new Map<string, ReturnType<typeof setTimeout>>();
+/* Análisis en vuelo por documento: una edición o un cierre lo cancela en vez de dejarlo terminar. */
+const enCurso = new Map<string, FuenteCancelacion>();
 
 function fsPathFromUri(uri: string): string {
     try {
@@ -118,13 +121,15 @@ async function construirContexto(rootPath: string): Promise<ContextoAnalisis> {
 
 const cacheContexto = crearCacheIndice({ construir: construirContexto, ttlMs: TTL_INDICE_MS });
 
-async function diagnosticosDelDocumento(document: TextDocument, rootPath: string): Promise<Diagnostic[]> {
+async function diagnosticosDelDocumento(document: TextDocument, rootPath: string, token: CancellationToken): Promise<Diagnostic[]> {
     // Medir en bytes UTF-8: el mismo criterio que el límite de la CLI sobre el archivo en disco.
     if (Buffer.byteLength(document.getText(), 'utf8') > TAMANO_MAXIMO_ARCHIVO_BYTES) {
         return [archivoGrandeDiagnostic()];
     }
 
     const { config, indice } = await cacheContexto.obtener(rootPath);
+    // La caché puede tardar: si el análisis ya no hace falta, no se llega a recorrer el documento.
+    throwIfCancelled(token);
     const findings = analyzeVarsenseDocument(
         coreDocumentFromLsp(document),
         indice,
@@ -145,15 +150,24 @@ async function validateTextDocument(document: TextDocument): Promise<void> {
     // Un análisis lento puede acabar después de una edición más reciente: su resultado ya no describe el texto.
     const esObsoleto = () => documents.get(document.uri)?.version !== version;
 
+    // Un análisis nuevo sustituye al que sigue en vuelo para el mismo documento.
+    enCurso.get(document.uri)?.cancelar();
+    const fuente = new FuenteCancelacion();
+    enCurso.set(document.uri, fuente);
+
     try {
-        const diagnostics = await conTiempoLimite(diagnosticosDelDocumento(document, rootPath), TIMEOUT_LSP_MS);
+        const diagnostics = await conTiempoLimite(
+            token => diagnosticosDelDocumento(document, rootPath, token),
+            TIMEOUT_LSP_MS,
+            fuente
+        );
         if (esObsoleto()) {
             return;
         }
 
         connection.sendDiagnostics({ uri: document.uri, diagnostics });
     } catch (error) {
-        if (esObsoleto()) {
+        if (esObsoleto() || error instanceof CancellationError) {
             return;
         }
 
@@ -177,6 +191,8 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 });
 
 function programarValidacion(uri: string): void {
+    // Tecleo sobre un análisis en vuelo: su resultado ya describe un texto anterior, se corta en el siguiente punto de control.
+    enCurso.get(uri)?.cancelar();
     clearTimeout(pendientes.get(uri));
     pendientes.set(uri, setTimeout(() => {
         pendientes.delete(uri);
@@ -201,6 +217,8 @@ documents.onDidSave(() => {
 });
 
 documents.onDidClose(event => {
+    enCurso.get(event.document.uri)?.cancelar();
+    enCurso.delete(event.document.uri);
     clearTimeout(pendientes.get(event.document.uri));
     pendientes.delete(event.document.uri);
     connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });

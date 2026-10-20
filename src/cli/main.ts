@@ -16,7 +16,7 @@ if (require.main === module) {
 `;
             process.exitCode = 2;
             if (error instanceof TiempoAgotadoError) {
-                /* El análisis que excedió el tiempo sigue en curso y mantendría vivo el proceso. */
+                /* El análisis se cancela en sus puntos de control, pero un parseo síncrono en curso no se interrumpe: salir es la red de seguridad. */
                 process.stderr.write(mensaje, () => process.exit(2));
                 return;
             }
