@@ -10,6 +10,7 @@ import { ClassIndexBuilder } from '@/core/indices/classIndexBuilder';
 import { analyzeVarsenseDocument, orphanClassToFinding, parsearLineasSuprimidas } from '@/core/analisis/analyzeDocument';
 import { analyzeCrossFileDuplicates, analyzeTokenRules } from '@/core/analisis/tokenRules';
 import { VarsenseReportEntry } from '@/core/analisis/report';
+import { limitarHallazgos } from '@/core/analisis/limitarHallazgos';
 import {
     DEFAULT_CSS_PATTERNS,
     DEFAULT_EXCLUDE_PATTERNS,
@@ -315,12 +316,14 @@ export async function analyzeAllTarget(args: ParsedCliArgs, token?: Cancellation
     return result;
 }
 
+/* [O2] El tope se aplica al final: `hasErrors` y los conteos ya se calcularon sobre el análisis completo. */
 export async function analyzeCliTarget(args: ParsedCliArgs, token?: CancellationToken): Promise<CliAnalysisResult> {
-    if (args.command === 'scan') {
-        return analyzeScanTarget(args, token);
-    }
     if (args.command === 'orphan-classes') {
         return analyzeOrphanClassesTarget(args, token);
     }
-    return analyzeAllTarget(args, token);
+    const result = args.command === 'scan'
+        ? await analyzeScanTarget(args, token)
+        : await analyzeAllTarget(args, token);
+    const { entries, truncado } = limitarHallazgos(result.entries, args.maxHallazgos ?? 0);
+    return truncado ? { ...result, entries, truncado } : result;
 }

@@ -27,6 +27,7 @@ varsense --version
 - `--config <ruta>`: carga un `varsense.config.json` concreto. Si la ruta no existe, sale con código 2.
 - `--files-from <ruta>`: limita los archivos reportados a un manifiesto de rutas relativas.
 - `--index-dir <ruta>`: persiste el índice entre ejecuciones (caché por rama).
+- `--max-hallazgos <n>` (`scan` y `all`): muestra como máximo `n` hallazgos; `0` (por defecto) no limita. Si recorta, el JSON añade `truncado` (con `hallazgosTotal` y `hallazgosOmitidos`) y el Markdown lo indica; los conteos siguen siendo los del análisis completo.
 - `--timeout <segundos>`: límite del análisis (por defecto 600; `0` lo desactiva). Al agotarse, el análisis se cancela en sus puntos de control, sale con código 2 y muestra un mensaje en stderr.
 - `--help` / `-h` y `--version`: muestran la ayuda o la versión y salen con código 0.
 - Archivos de más de 2 MiB se omiten del análisis; el CLI avisa en stderr con sus rutas (hasta 5). La salida no cambia para el resto.

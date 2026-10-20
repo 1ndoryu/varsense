@@ -1,10 +1,13 @@
 /* Tipos y constantes públicas del resultado de la CLI (contrato del JSON). */
 import { VarsenseReportEntry } from '@/core/analisis/report';
+import type { TruncadoHallazgos } from '@/core/analisis/report';
 
 export interface CliAnalysisResult {
     entries: VarsenseReportEntry[];
     totalArchivos: number;
     hasErrors: boolean;
+    /* [O2] Presente solo si --max-hallazgos recortó la salida; `hasErrors` sigue calculado sobre el total. */
+    truncado?: TruncadoHallazgos;
     /* [V7] Archivos que superaron el tamaño máximo; se informan en stderr y no cambian la salida. */
     omitidosPorTamano?: string[];
     durationMs: number;

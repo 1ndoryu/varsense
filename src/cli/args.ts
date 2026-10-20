@@ -15,6 +15,8 @@ export interface ParsedCliArgs {
     indexDir?: string;
     /* [V7] Límite de tiempo del análisis en milisegundos; 0 lo desactiva. */
     timeoutMs: number;
+    /* [O2] Tope de hallazgos mostrados en scan/all; 0 no limita. */
+    maxHallazgos?: number;
     /* [V10] --help en cualquier posición: se pide la ayuda, no es un error de uso. */
     ayuda?: boolean;
 }
@@ -34,6 +36,7 @@ export function usage(): string {
         '  --config <path>     Carga varsense.config.json',
         '  --files-from <path> Limita los archivos reportados a un manifiesto relativo',
         '  --index-dir <path>  Guarda el índice entre ejecuciones en ese directorio',
+        '  --max-hallazgos <n> Muestra como máximo n hallazgos (scan/all). 0 no limita. Por defecto: 0',
         '  --timeout <segundos> Límite de tiempo del análisis. 0 lo desactiva. Por defecto: 600',
         '  --help, -h          Muestra esta ayuda',
         '  --version           Muestra la version instalada',
@@ -100,6 +103,15 @@ export function parseCliArgs(args: string[]): ParsedCliArgs {
                 parsed.indexDir = takeValue(args, index, arg);
                 index++;
                 break;
+            case '--max-hallazgos': {
+                const limite = Number(takeValue(args, index, arg));
+                if (!Number.isInteger(limite) || limite < 0) {
+                    throw new Error('--max-hallazgos debe ser un entero >= 0 (0 no limita)');
+                }
+                parsed.maxHallazgos = limite;
+                index++;
+                break;
+            }
             case '--timeout': {
                 const segundos = Number(takeValue(args, index, arg));
                 if (!Number.isInteger(segundos) || segundos < 0) {

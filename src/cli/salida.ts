@@ -1,17 +1,14 @@
 /* Render y escritura de la salida (markdown/JSON) y avisos de archivos omitidos. */
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { generarReporteMarkdown } from '@/core/analisis/report';
+import { countBySeverity, generarReporteMarkdown } from '@/core/analisis/report';
 import { TAMANO_MAXIMO_ARCHIVO_BYTES } from '@/core/analisis/limites';
 import type { ParsedCliArgs } from './args';
 import { CliAnalysisResult, VARSENSE_JSON_SCHEMA_VERSION } from './tipos';
 
+/* [O2] Con recorte, los conteos son los del análisis completo (no solo los hallazgos mostrados). */
 export function severityCounts(result: CliAnalysisResult): Record<string, number> {
-    const counts: Record<string, number> = { error: 0, warning: 0, information: 0, hint: 0 };
-    for (const finding of result.entries.flatMap(entry => entry.findings)) {
-        counts[finding.severity] = (counts[finding.severity] ?? 0) + 1;
-    }
-    return counts;
+    return result.truncado?.severityCounts ?? countBySeverity(result.entries);
 }
 
 export function renderOutput(result: CliAnalysisResult, args: ParsedCliArgs, toolVersion: string): string {
@@ -24,7 +21,9 @@ export function renderOutput(result: CliAnalysisResult, args: ParsedCliArgs, too
             durationMs: result.durationMs,
             severityCounts: severityCounts(result),
             totalArchivos: result.totalArchivos,
-            totalArchivosConHallazgos: result.entries.length,
+            totalArchivosConHallazgos: result.truncado?.archivosConHallazgos ?? result.entries.length,
+            /* [O2] Campo aditivo: null cuando no hubo recorte por --max-hallazgos. */
+            truncado: result.truncado ?? null,
             cache: result.cache ?? null,
             metrics: result.metrics ?? null,
             phaseDurationMs: result.phaseDurationMs ?? null,
@@ -35,6 +34,7 @@ export function renderOutput(result: CliAnalysisResult, args: ParsedCliArgs, too
     return `${generarReporteMarkdown({
         entries: result.entries,
         totalArchivos: result.totalArchivos,
+        truncado: result.truncado,
         relativizar: ruta => (path.relative(args.workspacePath, ruta) || ruta).replace(/\\/g, '/'),
     })}\n`;
 }

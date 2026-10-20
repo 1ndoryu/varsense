@@ -5,9 +5,19 @@ export interface VarsenseReportEntry {
     findings: CoreFinding[];
 }
 
+/* [O2] Recorte por --max-hallazgos: los totales describen el análisis completo, no lo mostrado. */
+export interface TruncadoHallazgos {
+    limite: number;
+    hallazgosTotal: number;
+    hallazgosOmitidos: number;
+    archivosConHallazgos: number;
+    severityCounts: Record<string, number>;
+}
+
 export interface VarsenseReportInput {
     entries: VarsenseReportEntry[];
     totalArchivos: number;
+    truncado?: TruncadoHallazgos;
     /* El adaptador (CLI) resuelve la ruta relativa al workspace: el core no
      * toca el sistema de archivos. Por defecto solo unifica separadores. */
     relativizar?: (ruta: string) => string;
@@ -22,7 +32,7 @@ function rutaPorDefecto(ruta: string): string {
     return ruta.replace(/\\/g, '/');
 }
 
-function countBySeverity(entries: VarsenseReportEntry[]): Record<string, number> {
+export function countBySeverity(entries: VarsenseReportEntry[]): Record<string, number> {
     const counts = { error: 0, warning: 0, information: 0, hint: 0 };
 
     for (const entry of entries) {
@@ -36,21 +46,26 @@ function countBySeverity(entries: VarsenseReportEntry[]): Record<string, number>
 
 export function generarReporteMarkdown(input: VarsenseReportInput): string {
     const fecha = input.fecha ?? new Date();
-    const counts = countBySeverity(input.entries);
-    const totalFindings = input.entries.reduce((total, entry) => total + entry.findings.length, 0);
+    const counts = input.truncado?.severityCounts ?? countBySeverity(input.entries);
+    const totalFindings = input.truncado?.hallazgosTotal ?? input.entries.reduce((total, entry) => total + entry.findings.length, 0);
     const lines: string[] = [];
 
     lines.push('# VarSense Report');
     lines.push('');
     lines.push(`- **Fecha:** ${fecha.toISOString()}`);
     lines.push(`- **Archivos analizados:** ${input.totalArchivos}`);
-    lines.push(`- **Archivos con hallazgos:** ${input.entries.length}`);
+    lines.push(`- **Archivos con hallazgos:** ${input.truncado?.archivosConHallazgos ?? input.entries.length}`);
     lines.push(`- **Total hallazgos:** ${totalFindings}`);
     lines.push(`- **Errores:** ${counts.error}`);
     lines.push(`- **Warnings:** ${counts.warning}`);
     lines.push(`- **Information:** ${counts.information}`);
     lines.push(`- **Hints:** ${counts.hint}`);
     lines.push('');
+    if (input.truncado) {
+        const { limite, hallazgosOmitidos } = input.truncado;
+        lines.push(`> Informe recortado: se muestran ${limite} de ${totalFindings} hallazgos (--max-hallazgos). Omitidos: ${hallazgosOmitidos}.`);
+        lines.push('');
+    }
 
     const relativizar = input.relativizar ?? rutaPorDefecto;
     for (const entry of input.entries) {
