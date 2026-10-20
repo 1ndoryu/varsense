@@ -5,23 +5,19 @@
  * - Valores hardcodeados (warning)
  * - Fallbacks hardcodeados (warning)
  * Los quick fixes viven en diagnosticCodeActions.ts
+ * Puertas, traducción y escaneo global viven en sus módulos hermanos de providers/
  */
 
 import * as vscode from 'vscode';
-import {DiagnosticType} from '@/types';
 import {VariableScanner} from '@/services/variableScanner';
 import {obtenerConfigService} from '@/services/configService';
-import {esLenguajeSoportado, debounce, coincideConPatron} from '@/utils/fileUtils';
+import {esLenguajeSoportado, debounce} from '@/utils/fileUtils';
 import { analyzeVarsenseDocument } from '@/core/analisis/analyzeDocument';
-import { CoreFinding } from '@/core/types';
-import { configuracionAnalisisDesdeExtension, documentFromVsCode, findingToDiagnostic } from '@/vscode/vscodeAdapter';
+import { configuracionAnalisisDesdeExtension, documentFromVsCode } from '@/vscode/vscodeAdapter';
 import { parserCssVarsense } from '@/parsers';
-import { registrarMetadataDiagnostico } from '@/providers/diagnosticMetadata';
-
-/*
- * Lenguajes React para detección de inline CSS
- */
-const LENGUAJES_REACT = ['typescriptreact', 'javascriptreact'];
+import { LENGUAJES_REACT, esDocumentoSoportado, diagnosticoDesdeHallazgo } from '@/providers/puertasYTraduccionDiagnosticos';
+import { escanearTodoElProyecto } from '@/providers/escaneoProyectoDiagnosticos';
+import type { ResultadoEscaneoProyecto } from '@/providers/escaneoProyectoDiagnosticos';
 
 /*
  * Nombre de la colección de diagnósticos
@@ -43,14 +39,9 @@ export interface ResumenDiagnosticoArchivo {
 }
 
 /*
- * Resultado del escaneo global de diagnósticos
+ * Reexport para que los importadores sigan usando este módulo
  */
-export interface ResultadoEscaneoProyecto {
-    totalDiagnosticos: number;
-    totalArchivosAnalizados: number;
-    totalArchivosConProblemas: number;
-    archivosConProblemas: ResumenDiagnosticoArchivo[];
-}
+export type { ResultadoEscaneoProyecto } from '@/providers/escaneoProyectoDiagnosticos';
 
 /*
  * Provider de diagnósticos
@@ -65,39 +56,13 @@ export class DiagnosticProvider {
     }
 
     /*
-     * Verifica si el documento es soportado (CSS o React)
-     */
-    private esDocumentoSoportado(doc: vscode.TextDocument): boolean {
-        const lenguajeSoportado = esLenguajeSoportado(doc) || LENGUAJES_REACT.includes(doc.languageId);
-
-        if (!lenguajeSoportado) {
-            return false;
-        }
-
-        const configService = obtenerConfigService();
-        const ruta = doc.uri.fsPath;
-        const incluidos = configService.obtenerPatronesIncluidos();
-        const excluidos = configService.obtenerPatronesExcluidos();
-
-        if (incluidos.length > 0 && !coincideConPatron(ruta, incluidos)) {
-            return false;
-        }
-
-        if (coincideConPatron(ruta, excluidos)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    /*
      * Configura los listeners para actualizar diagnósticos
      */
     private configurarListeners(): void {
         /* Actualizar diagnósticos cuando se abre un documento */
         this._disposables.push(
             vscode.workspace.onDidOpenTextDocument(doc => {
-                if (this.esDocumentoSoportado(doc)) {
+                if (esDocumentoSoportado(doc)) {
                     void this.actualizarDiagnosticos(doc);
                 }
             })
@@ -106,7 +71,7 @@ export class DiagnosticProvider {
         /* Actualizar diagnósticos cuando se edita un documento (con debounce) */
         const actualizarDebounced = debounce((...args: unknown[]) => {
             const doc = args[0] as vscode.TextDocument;
-            if (this.esDocumentoSoportado(doc)) {
+            if (esDocumentoSoportado(doc)) {
                 void this.actualizarDiagnosticos(doc);
             }
         }, 500);
@@ -154,7 +119,7 @@ export class DiagnosticProvider {
     public async actualizarDiagnosticos(documento: vscode.TextDocument): Promise<void> {
         const configService = obtenerConfigService();
 
-        if (!this.esDocumentoSoportado(documento)) {
+        if (!esDocumentoSoportado(documento)) {
             this._coleccion.delete(documento.uri);
             return;
         }
@@ -177,26 +142,7 @@ export class DiagnosticProvider {
             configuracionAnalisisDesdeExtension(configService.obtenerConfig()), parserCssVarsense
         );
 
-        this._coleccion.set(documento.uri, hallazgos.map(hallazgo => this.diagnosticoDesdeHallazgo(hallazgo)));
-    }
-
-    /*
-     * Convierte un hallazgo del core en diagnóstico de VS Code. La fuente debe ser
-     * 'CSS Vars Validator': el quick fix filtra por ella.
-     */
-    private diagnosticoDesdeHallazgo(hallazgo: CoreFinding): vscode.Diagnostic {
-        const diagnostic = findingToDiagnostic(hallazgo);
-        diagnostic.source = 'CSS Vars Validator';
-
-        /* El quick fix de valores hardcodeados necesita propiedad y valor */
-        if (hallazgo.ruleId === DiagnosticType.ValorHardcoded) {
-            registrarMetadataDiagnostico(diagnostic, {
-                propiedad: String(hallazgo.metadata?.property ?? ''),
-                valor: String(hallazgo.metadata?.value ?? ''),
-            });
-        }
-
-        return diagnostic;
+        this._coleccion.set(documento.uri, hallazgos.map(hallazgo => diagnosticoDesdeHallazgo(hallazgo)));
     }
 
     /*
@@ -213,117 +159,17 @@ export class DiagnosticProvider {
     }
 
     /*
-     * Escanea TODOS los archivos CSS del proyecto, no solo los abiertos
-     * Retorna el total de diagnósticos encontrados
+     * Escanea TODOS los archivos del proyecto (ver escaneoProyectoDiagnosticos.ts).
+     * Se pasa la colección y un callback para que el escaneo use este mismo provider.
      */
     public async escanearTodoElProyecto(
         onProgress?: (actual: number, total: number, rutaArchivo: string) => void
     ): Promise<ResultadoEscaneoProyecto> {
-        const configService = obtenerConfigService();
-        const excluidos = configService.obtenerPatronesExcluidos();
-        const patronExclusion = excluidos.length > 0 ? `{${excluidos.join(',')}}` : '**/node_modules/**';
-
-        /* Buscar archivos CSS */
-        const patronesCss = ['**/*.css', '**/*.scss', '**/*.less'];
-        const patronesReact = ['**/*.tsx', '**/*.jsx'];
-        const todosPatrones = [...patronesCss, ...patronesReact];
-
-        let totalDiagnosticos = 0;
-        const archivosVisitados = new Set<string>();
-        const resumenPorArchivo = new Map<string, ResumenDiagnosticoArchivo>();
-
-        const urisUnicos = new Map<string, vscode.Uri>();
-
-        for (const patron of todosPatrones) {
-            const archivos = await vscode.workspace.findFiles(patron, patronExclusion);
-            for (const uri of archivos) {
-                urisUnicos.set(uri.fsPath, uri);
-            }
-        }
-
-        const archivosPorProcesar = Array.from(urisUnicos.values());
-        const totalArchivos = archivosPorProcesar.length;
-        let archivosProcesados = 0;
-
-        for (const uri of archivosPorProcesar) {
-            const ruta = uri.fsPath;
-
-            if (archivosVisitados.has(ruta)) {
-                continue;
-            }
-
-            archivosVisitados.add(ruta);
-
-            try {
-                const doc = await vscode.workspace.openTextDocument(uri);
-                await this.actualizarDiagnosticos(doc);
-                const diags = this._coleccion.get(doc.uri);
-                if (diags) {
-                    totalDiagnosticos += diags.length;
-
-                    if (diags.length > 0) {
-                        let errores = 0;
-                        let warnings = 0;
-                        let informacion = 0;
-                        let hints = 0;
-
-                        for (const diag of diags) {
-                            switch (diag.severity) {
-                                case vscode.DiagnosticSeverity.Error:
-                                    errores++;
-                                    break;
-                                case vscode.DiagnosticSeverity.Warning:
-                                    warnings++;
-                                    break;
-                                case vscode.DiagnosticSeverity.Information:
-                                    informacion++;
-                                    break;
-                                case vscode.DiagnosticSeverity.Hint:
-                                    hints++;
-                                    break;
-                            }
-                        }
-
-                        const ejemplos = diags
-                            .slice(0, 3)
-                            .map(diag => `L${diag.range.start.line + 1}: ${diag.message}`);
-
-                        resumenPorArchivo.set(ruta, {
-                            uri: doc.uri,
-                            ruta,
-                            total: diags.length,
-                            errores,
-                            warnings,
-                            informacion,
-                            hints,
-                            ejemplos
-                        });
-                    }
-                }
-            } catch {
-                /* Ignorar archivos que no se pueden abrir */
-            } finally {
-                archivosProcesados++;
-                if (onProgress) {
-                    onProgress(archivosProcesados, totalArchivos, ruta);
-                }
-            }
-        }
-
-        const archivosConProblemas = Array.from(resumenPorArchivo.values()).sort((a, b) => {
-            if (b.errores !== a.errores) {
-                return b.errores - a.errores;
-            }
-
-            return b.total - a.total;
-        });
-
-        return {
-            totalDiagnosticos,
-            totalArchivosAnalizados: archivosVisitados.size,
-            totalArchivosConProblemas: archivosConProblemas.length,
-            archivosConProblemas
-        };
+        return escanearTodoElProyecto(
+            this._coleccion,
+            documento => this.actualizarDiagnosticos(documento),
+            onProgress
+        );
     }
 
     /*
