@@ -100,6 +100,7 @@ La misma regla acepta la forma del mensaje y las propiedades estructurales: `com
 
 ## Arquitectura
 
-- `src/core/`: indexadores y reglas agnosticos (VariableIndex, ClassIndex, tokenRules) sin imports de VS Code. El adaptador a VS Code vive en `src/vscode/`, fuera del core; `check:core` no admite excepciones.
+- `src/core/`: indexadores y reglas agnosticos (VariableIndex, ClassIndex, tokenRules) sin imports de VS Code; `check:core` no admite excepciones.
+- Código que usa la API de VS Code: `src/extension.ts`, `src/providers/`, `src/comandos/`, `src/services/`, `src/utils/` y `src/vscode/vscodeAdapter.ts`. Es la capa de la extensión, no del core; no se usa desde `src/cli/` ni `src/lsp/`.
 - `src/cli/`, `src/lsp/`, `src/extension.ts`: adapters de presentacion sobre el mismo core.
 - `src/test/suite/core/coreContracts*.test.ts` (3 partes): paridad core/CLI/LSP con fixtures versionadas.
