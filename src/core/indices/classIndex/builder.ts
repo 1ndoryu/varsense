@@ -8,6 +8,7 @@ import { CarrierCallSite } from './fuentes/carriers';
 import { MAX_TOKENS } from './fuentes/cssClases';
 import { crearCacheArchivos } from '../../cacheAcotada';
 import { ClaseCssDefinida, ClassIndexScanOptions, ClassScanProgress, EntradaConsumo, ResultadoClasesHuerfanas } from './tipos';
+import { calcularLlamadasCrossCarrier } from './uniones';
 
 /* [085A-2] Escanea clases huerfanas desde providers core, sin vscode.workspace.
  * Gotcha: los adaptadores deciden como abrir archivos; aqui solo se cruzan tokens y selectores. */
@@ -78,31 +79,8 @@ export class ClassIndexBuilder {
             prefijos,
             options.token
         );
-        /* [318A-7V24] Unión global de carriers: fn → posiciones portadoras en
-         * CUALQUIER archivo (la definición vive en un módulo y la llamada en
-         * otro). Los literales de call-sites en esas posiciones son clases que
-         * el runtime aplica: literal → archivos donde se llama. */
-        const carriersUnion = new Map<string, Set<number>>();
-        for (const carriers of filesCarriers.values()) {
-            for (const [fn, posiciones] of carriers) {
-                const union = carriersUnion.get(fn) ?? new Set<number>();
-                for (const pos of posiciones) {union.add(pos);}
-                carriersUnion.set(fn, union);
-            }
-        }
-        const llamadasCrossCarrier = new Map<string, Set<string>>();
-        for (const [fsPath, llamadas] of filesLlamadas) {
-            for (const { fn, pos, literal } of llamadas) {
-                if (!carriersUnion.get(fn)?.has(pos)) {continue;}
-                for (const clase of literal.split(/\s+/)) {
-                    if (clase.length > 1 && /^[a-zA-Z_][\w-]*$/.test(clase)) {
-                        const archivos = llamadasCrossCarrier.get(clase) ?? new Set<string>();
-                        archivos.add(fsPath);
-                        llamadasCrossCarrier.set(clase, archivos);
-                    }
-                }
-            }
-        }
+        /* [318A-7V24] Carriers globales entre archivos: ver uniones.ts. */
+        const llamadasCrossCarrier = calcularLlamadasCrossCarrier(filesCarriers, filesLlamadas);
         /* [299A-13 F3b] Unión global de mapas de clases exportados (nombre →
          * valores con forma de clase de TodoS los archivos que lo exportan) y
          * resolución post-hoc de referencias: un archivo que referencia por
