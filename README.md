@@ -26,7 +26,7 @@ varsense --version
 - Códigos de salida: `0` sin errores; `1` si hay hallazgos de severidad `error`; `2` por uso incorrecto, `--config` inexistente o agotamiento del tiempo.
 - `--config <ruta>`: carga un `varsense.config.json` concreto. Si la ruta no existe, sale con código 2.
 - `--files-from <ruta>`: limita los archivos reportados a un manifiesto de rutas relativas.
-- `--index-dir <ruta>`: persiste el índice entre ejecuciones (caché por rama).
+- `--index-dir <ruta>`: guarda el índice entre ejecuciones en ese directorio.
 - `--max-hallazgos <n>` (`scan` y `all`): muestra como máximo `n` hallazgos; `0` (por defecto) no limita. Si recorta, el JSON añade `truncado` (con `hallazgosTotal` y `hallazgosOmitidos`) y el Markdown lo indica; los conteos siguen siendo los del análisis completo.
 - `--timeout <segundos>`: límite del análisis (por defecto 600; `0` lo desactiva). Al agotarse, el análisis se cancela en sus puntos de control, sale con código 2 y muestra un mensaje en stderr.
 - `--help` / `-h` y `--version`: muestran la ayuda o la versión y salen con código 0.
@@ -56,7 +56,7 @@ Requiere Node.js >= 20.19 (la suite de tests usa mocha 12). Instalación limpia 
 
 ```
 npm install                                    # instala y compila dist/ (script prepare)
-npm run cli -- all --workspace . --format json # ejecuta la CLI desde dist/
+npm run -s cli -- all --workspace . --format json # ejecuta la CLI desde dist/ (-s: stdout solo JSON)
 npm run check:core                             # falla si src/core importa vscode o un built-in de Node (fs, path, crypto…)
 npm run smoke:lsp                              # levanta el server stdio y verifica publishDiagnostics
 ```
@@ -67,7 +67,7 @@ Otros scripts: `npm run compile:tests` (compila `dist/` y los tests), `npm run t
 Gate completo, igual que el CI: `xvfb-run -a npm run quality:check` (en Linux; `xvfb-run` aporta el servidor gráfico que necesitan los tests de VS Code). Ver [CONTRIBUTING](CONTRIBUTING.md).
 
 Tras cambiar código, `npm run compile` regenera `dist/`. Los scripts `cli` y `lsp` no compilan: ejecutan `dist/` tal cual.
-Opcional: para escribir `varsense` en lugar de `npm run cli --`, ejecuta `npm link`. Si tras enlazar `varsense` no se encuentra, el directorio de binarios globales de npm (`npm prefix -g` + `/bin`, o `\bin` en Windows) no está en el PATH: añádelo o sigue usando `npm run cli --`.
+Opcional: para escribir `varsense` en lugar de `npm run -s cli --`, ejecuta `npm link`. Si tras enlazar `varsense` no se encuentra, el directorio de binarios globales de npm (`npm prefix -g` + `/bin`, o `\bin` en Windows) no está en el PATH: añádelo o sigue usando `npm run -s cli --`. Sin `-s`, npm imprime su cabecera (`> varsense@… cli`) en stdout y rompe el JSON.
 Durante `npm install` pueden aparecer avisos `npm warn install-scripts` y avisos de dependencias obsoletas (`deprecated`); no impiden la instalación.
 
 Extensión de VS Code (aparte del CLI): para instalar un `.vsix` ya empaquetado, `code --install-extension <ruta>.vsix`. El `.vsix` lo genera el mantenedor con `npm run package` (`vsce package`).
