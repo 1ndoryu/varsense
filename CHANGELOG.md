@@ -5,10 +5,52 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Sin publicar]
+## [2.2.10] - 2026-10-20
 
 ### Agregado
+- Cancelación cooperativa del análisis en CLI y LSP (O3).
+- `--max-hallazgos` en `scan` y `all`: con recorte, el JSON añade `truncado` y el Markdown lo indica (O2).
+- Configurables: regla de botón (`buttonStyleDetection`), namespaces de tema (`tokenDetection.themeNamespaces`), `tokenDetection.tailwindShorthand` para `bg-(--x)`, lenguajes y extensiones CSS, y prefijos de nombres portadores de clase.
+- Validación de `varsense.config.json` en un módulo propio; sus errores nombran el fichero, `--config` incluido, y la clave.
+- Límites de tamaño y tiempo en CLI y LSP (V7); el índice de la LSP tiene su propio límite de tiempo (A3c).
+- Caché de índice y debounce en la LSP; CLI y LSP leen la misma configuración (R1).
+- Cachés de índice, documentos, resolver y LSP con tope LRU (O1); el índice persistente queda sin tope a propósito.
 - `tokenDetection.duplicate.excludeTokens` (`[321A-1]`): declara los alias
+  deliberados del design system. Un tema tipo shadcn reparte el mismo valor
+  entre varios roles (--card y --popover valen lo mismo que --background)
+  para poder re-tematizar cada rol por separado, asi que la repeticion es la
+  estructura del tema, no un descuido. El token excluido no participa en la
+  agrupacion ni como canonico ni como duplicado. Acepta el nombre con o sin
+  prefijo `--`. Evidencia: RESTAURANTE token-duplicate 41 -> 0 sin tocar las
+  demas reglas; 4 tests en `src/test/suite/tokenRules.test.ts`.
+
+### Cambiado
+- Instalación en una vía: `npm install` compila `dist/` con `prepare`; `engines` es `node >=20.19`.
+- Gate único: `quality:check` lo ejecutan CI (Node 20.19 y 22) y el autogate.
+- Arquitectura: el código de VS Code vive en `src/vscode/` (A2b) y `src/core` no usa built-ins de Node (A1); la extensión delega en el core (V4.2).
+- Módulos grandes partidos por responsabilidad: `cssParser`, `diagnosticProvider`, `classIndexBuilder`, `index.ts` de la CLI y `extension.ts` en `comandos/`.
+- La LSP compone el índice de variables con la misma función que la CLI (A3b).
+- CLI: `-h` y `--help` con códigos de salida 0/1/2; comando desconocido en una línea con rc 2.
+- Logger centralizado (`a14fa4f`); `roadmap.md` y `Agente/completados/` dejan de versionarse.
+- Artefactos sueltos retirados del repo.
+
+### Corregido
+- Falsos positivos de `variableNoDefinida`, `valorHardcoded` y `claseHuerfana` (V1 y revisión de terceros).
+- `token-unused` reconoce `getPropertyValue`, usos fuera de CSS y utilidades Tailwind `@theme`.
+- `cssInlineReact` no marca `style={style}` reenviado ni el estilo dentro de comentarios.
+- `claseHuerfana` respeta los marcadores y resuelve las clases cross-file; escalares exportados como fuente de clases.
+- `compile:tests` limpia `dist/test` antes de compilar; el runner de tests limpia su temporal también ante fallo.
+- Rendimiento: cada archivo se lee una vez en `scan`, `orphan-classes` y `all`; el estado de cadena se calcula una vez por fuente.
+
+### Seguridad
+- `@vscode/vsce` a `^4.0.0` (devDependency de empaquetado); `npm audit` pasa de 6 vulnerabilidades a 0.
+
+### Documentación
+- README con un único camino de instalación, `npm run -s` para JSON limpio, `DISPLAY` para `test:vscode` en Linux y la capa de VS Code.
+- Nuevos `CONTRIBUTING.md` y `SECURITY.md`; `docs/mapa-modulos.md` (capas y configuración de la raíz); contrato del artifact con la fuente única de estado.
+- Nombres de otros proyectos fuera de código, tests y docs (G2).
+
+## [2.2.9] - 2026-10-01 (`[321A-1]`): declara los alias
   deliberados del design system. Un tema tipo shadcn reparte el mismo valor
   entre varios roles (--card y --popover valen lo mismo que --background)
   para poder re-tematizar cada rol por separado, asi que la repeticion es la
