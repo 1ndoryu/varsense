@@ -343,7 +343,7 @@
         "compile": "node esbuild.config.mjs --minify",
         "cli": "node ./dist/cli/index.js",
         "lsp": "node ./dist/lsp/server.js --stdio",
-        "compile:tests": "tsc -p ./tsconfig.json && node esbuild.config.mjs --minify",
+        "compile:tests": "node -e \"require('fs').rmSync('dist/test',{recursive:true,force:true})\" && tsc -p ./tsconfig.json && node esbuild.config.mjs --minify",
         "watch": "node esbuild.config.mjs --watch",
         "check:core": "node scripts/check-core-no-vscode.mjs",
         "check:zed": "cargo check --manifest-path integrations/zed/Cargo.toml --target wasm32-wasip2",
