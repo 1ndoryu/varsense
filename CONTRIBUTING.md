@@ -15,10 +15,10 @@ npm install
 ## Antes de abrir un cambio
 
 ```
-npm run quality:check
+xvfb-run -a npm run quality:check
 ```
 
-Compila los tests, pasa ESLint, verifica que `src/core` no importe `vscode` ni built-ins de Node, ejecuta el smoke de LSP y los tests unitarios. Los tests de VS Code van con `npm test`; en Linux sin servidor gráfico, prefija con `xvfb-run -a`.
+Es el único gate, y el CI ejecuta el mismo comando en Node 20.19 y 22. Compila los tests, pasa ESLint, verifica la frontera de `src/core` (`check:core`), ejecuta los smoke de LSP, CLI e índice persistente, los tests unitarios, los tests de VS Code y `check:zed`. `xvfb-run` hace falta en Linux sin servidor gráfico. `check:zed` requiere el target de Rust: `rustup target add wasm32-wasip2`.
 
 ## Reglas del código
 

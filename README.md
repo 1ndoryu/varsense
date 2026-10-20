@@ -62,8 +62,8 @@ npm run smoke:lsp                              # levanta el server stdio y verif
 
 Este es el único camino de instalación del CLI y del LSP. Los pasos siguientes son opcionales y no forman parte de él.
 
-Otros scripts: `npm run compile:tests` (compila `dist/` y los tests), `npm run test:unit` (tests sin VS Code, con mocha; `npm test` ejecuta los de VS Code y descarga VS Code la primera vez), `npm run lint` (ESLint sobre `src`), `npm run check:zed` (cargo check del adaptador Zed, requiere el target `wasm32-wasip2`), `npm run smoke:persistent-index` y `npm run smoke:tramo4` (comprobaciones de índice persistente y del tramo 4).
-En Linux, `npm test` necesita un servidor gráfico: `xvfb-run -a npm test` (igual que el CI, `.github/workflows/ci.yml`).
+Otros scripts: `npm run compile:tests` (compila `dist/` y los tests), `npm run test:unit` (tests sin VS Code, con mocha), `npm run test:vscode` (tests dentro de VS Code; la primera vez descarga VS Code), `npm test` (compila los tests y ejecuta `test:vscode`), `npm run lint` (ESLint sobre `src`), `npm run check:zed` (cargo check del adaptador Zed, requiere el target `wasm32-wasip2`), `npm run smoke:cli`, `npm run smoke:persistent-index` y `npm run smoke:tramo4`.
+Gate completo, igual que el CI: `xvfb-run -a npm run quality:check` (en Linux; `xvfb-run` aporta el servidor gráfico que necesitan los tests de VS Code). Ver [CONTRIBUTING](CONTRIBUTING.md).
 
 Tras cambiar código, `npm run compile` regenera `dist/`. Los scripts `cli` y `lsp` no compilan: ejecutan `dist/` tal cual.
 Opcional: para escribir `varsense` en lugar de `npm run cli --`, ejecuta `npm link`. Si tras enlazar `varsense` no se encuentra, el directorio de binarios globales de npm (`npm prefix -g` + `/bin`, o `\bin` en Windows) no está en el PATH: añádelo o sigue usando `npm run cli --`.
