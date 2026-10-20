@@ -39,12 +39,13 @@ desde source queda como **modo de desarrollo explícito**.
 
 ## Verificación en el consumidor
 
-- `quality:setup` descarga/verifica el artifact (SHA-256) antes de fijar el
-  pin; el doctor reporta `cliVersion`/`commit` contra `quality-tools.json` y
-  `sentinel.lock.json`. Estas piezas viven en el repo consumidor, no en VarSense.
+- En el repo consumidor (no en VarSense, y todavía sin implementar), un paso
+  tipo `quality:setup` descargaría y verificaría el artifact (SHA-256) antes de
+  fijar el pin; el doctor de Sentinel reporta `cliVersion`/`commit` contra
+  `quality-tools.json` y `sentinel.lock.json`.
 - El índice persistente se invalida por **versión de la herramienta, versión
   del parser y hash de la configuración** (`indexIdentity`,
-  `src/core/indices/persistentIndex.ts`). No incluye plataforma ni dependencias: el
+  `src/node/persistentIndexStore.ts`). No incluye plataforma ni dependencias: el
   índice se regenera en cada máquina.
 
 ## Retención y rollback
