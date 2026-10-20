@@ -131,6 +131,16 @@ async function construirContexto(rootPath: string): Promise<ContextoAnalisis> {
 
 const cacheContexto = crearCacheIndice({ construir: construirContexto, ttlMs: TTL_INDICE_MS });
 
+/* Un timeout del índice debe decir que es el índice: si no, el documento muestra un «Tiempo agotado» genérico. */
+async function obtenerContexto(rootPath: string): Promise<ContextoAnalisis> {
+    try {
+        return await conTiempoLimite(() => cacheContexto.obtener(rootPath), TIMEOUT_INDICE_LSP_MS);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`índice de contexto: ${message}`);
+    }
+}
+
 /* El contexto llega ya resuelto: el índice se espera fuera del presupuesto de este documento. */
 async function diagnosticosDelDocumento(document: TextDocument, contexto: ContextoAnalisis, token: CancellationToken): Promise<Diagnostic[]> {
     const { config, indice } = contexto;
@@ -167,7 +177,7 @@ async function validateTextDocument(document: TextDocument): Promise<void> {
 
     try {
         // Primero el índice (límite propio) y después el análisis del documento (TIMEOUT_LSP_MS).
-        const contexto = await conTiempoLimite(() => cacheContexto.obtener(rootPath), TIMEOUT_INDICE_LSP_MS);
+        const contexto = await obtenerContexto(rootPath);
         const diagnostics = await conTiempoLimite(
             token => diagnosticosDelDocumento(document, contexto, token),
             TIMEOUT_LSP_MS,
