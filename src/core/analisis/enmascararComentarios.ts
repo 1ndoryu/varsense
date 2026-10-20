@@ -4,10 +4,10 @@
  *
  * [por que] `cssInlineReact` aplicaba `style\s*=\s*\{` sobre `document.getText()`
  * crudo, asi que un `style={}` escrito **dentro de un comentario** contaba como
- * CSS inline. Medido el 2026-10-17: los dos hallazgos de NAKOMI
+ * CSS inline. Medido el 2026-10-17: los dos hallazgos de un proyecto real
  * (`CarruselShowcase.tsx:73`, `SeccionGaleriaServicio.tsx:29`) son la misma
  * frase de un comentario de bloque explicando el propio detector; el de
- * RESTAURANTE si es un `style={{...}}` real. `cssInlineScript` recorria el texto
+ * un proyecto real si es un `style={{...}}` real. `cssInlineScript` recorria el texto
  * igual, con el mismo defecto.
  *
  * La ruta CSS ya tenia su `eliminarComentarios`, pero solo cubre `/* *\/` y vive

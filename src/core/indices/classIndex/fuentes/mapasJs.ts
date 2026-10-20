@@ -18,7 +18,7 @@ import { finTemplateLiteral } from '../plantillas/plantillas';
  * arranca a profundidad 0 y solo corta en el ';' tras `});`; la declaración
  * INTERNA `clases` arranca a profundidad 1 y corta en su propio ';' sin ser
  * tragada. Antes, el salto tras el corte ocultaba las declaraciones anidadas
- * y su familia de clases (boton--, 20 FPs en Boton.tsx de PT). */
+ * y su familia de clases (boton--, 20 FPs en Boton.tsx de un proyecto real). */
 /* Estado de brackets y comillas en cada posición de la última fuente pedida.
  * escanearDeclaraciones llama a estadoScanning una vez por declaración sobre
  * la misma fuente: sin memo, cada llamada recorría la fuente desde 0. */
@@ -172,7 +172,7 @@ export function finObjetoLiteral(source: string, apertura: number): number {
 
 /* [299A-13 F3b] Mapas de clases exportados de UN archivo: `export const
  * PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = { pendiente:
- * 'pagoEstado--pendiente', ... }` (api/payments.ts:133 de NAKOMI). Solo
+ * 'pagoEstado--pendiente', ... }` (api/payments.ts:133 de un proyecto real). Solo
  * exportados (importables cross-file; los locales ya los cubre M1 vía
  * variables); solo valores con forma de clase; la anotación de tipo no
  * puede contener llaves (fail-closed). [11AA-2] También escalares exportados

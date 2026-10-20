@@ -161,16 +161,16 @@ export class NodeWorkspaceFileProvider implements WorkspaceFileProvider {
             const relativeForDirectory = entry.isDirectory() ? `${relativePath}/` : relativePath;
 
             /* [318A-7V17] Repos anidados fuera del alcance: un directorio cuyo
-             * `.git` es un ARCHIVO es un submódulo/worktree git (glory-rs en
+             * `.git` es un ARCHIVO es un submódulo/worktree git (un proyecto real en
              * los consumidores). El código de otro repo se arregla en su propio
              * repo, no desde el consumidor; analizarlo duplicaba hallazgos
-             * (claseHuerfana de glory-rs en PT). Internals `.git` tampoco se
+             * (claseHuerfana de un proyecto real). Internals `.git` tampoco se
              * recorren: nunca son código analizable. El repo raíz tiene `.git`
              * directorio y no se ve afectado.
              *
              * [318A-7V21] La forma DIRECTORIO de `.git` también es un repo
              * anidado: un consumidor con el submódulo clonado completo (p. ej.
-             * AGAPE, `glory-rs/.git` como directorio) escapaba al filtro y sus
+             * un proyecto real, `submodulo-ejemplo/.git` como directorio) escapaba al filtro y sus
              * hallazgos se atribuían al consumidor. Ambas formas se excluyen. */
             if (entry.name === '.git') {
                 continue;

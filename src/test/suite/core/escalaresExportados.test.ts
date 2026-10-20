@@ -42,7 +42,7 @@ suite('VarSense escalares exportados como fuente de clases', () => {
     assert.deepStrictEqual(mapas, { CLASE_TEXTO: ['texto-publica'], CLASE_ACTIVO: ['activoPublica'] });
   });
 
-  /* [11AA-2] Caso real de MN-Inmobiliaria (`disenno.ts`): constante escalar
+  /* [11AA-2] Caso real de un proyecto (`disenno.ts`): constante escalar
    * importada y consumida como `${CLASE_TEXTO}` en un className template. La
    * clase consumida no es huérfana; la no usada sí. */
   test('detects orphan classes consumed through an imported exported scalar', async () => {

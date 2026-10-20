@@ -66,7 +66,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
    * removeComments sin estado regex trataba la comilla interna como apertura
    * y todo el texto posterior quedaba "dentro de string", haciendo que los
    * `html +=` con clases reales se saltaran por isCodeMatch
-   * (useScratchpad.ts:28/41 en PT, scratchpadVistaPrevia* seguían huérfanas).
+   * (useScratchpad.ts:28/41 en un proyecto real, scratchpadVistaPrevia* seguían huérfanas).
    * Aquí el archivo tiene helpers con regex de comillas ANTES de la
    * construcción HTML; la clase runtime debe resolverse igual. */
   test('regex literals containing quotes do not corrupt string state (html += after)', async () => {
@@ -302,7 +302,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
 
   /* [15A-25][T4] Un array de fragmentos compone clases en runtime: los
    * elementos que son un subindice sobre un mapa local (o una variable local)
-   * no son literales y quedaban fuera del set. Caso KAMPLES: `const clases =
+   * no son literales y quedaban fuera del set. Caso real de un proyecto: `const clases =
    * ['badge', mapaVariante[variante], mapaTamano[tamano], ...]` en Badge.tsx,
    * Avatar.tsx, BotonBase.tsx, Modal.tsx y Notificacion.tsx (24 hallazgos). */
   test('array de fragmentos resuelve subindices sobre mapas locales', async () => {
@@ -441,7 +441,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
 
   /* [15A-25][T5] Plantilla anidada en una expresion de clase: el regex plano
    * se corta en la interpolacion y la familia no se registraba.
-   * Caso KAMPLES: BadgesMetadata.tsx:109
+   * Caso real de un proyecto: BadgesMetadata.tsx:109
    * `className={on ? `tarjetaMetaBadgeClickable${claseExtra}` : undefined}`. */
   test('familia de un template dentro de una expresion de clase', async () => {
     const provider = new MemoryWorkspaceProvider({
@@ -527,7 +527,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
   /* [15A-25][T1] Un `style={{ '--x': v }}` define el token en runtime. El
    * parser de CSS reconocia `setProperty` pero no el atributo `style`, asi que
    * todo `var(--x)` cuyo unico origen era el TSX salia como variableNoDefinida
-   * (112 hallazgos en KAMPLES, todos de esta forma). */
+   * (112 hallazgos en un proyecto real, todos de esta forma). */
   test('style={{ --x }} del TSX define la variable que consume la hoja', async () => {
     const archivos = {
       '/workspace/src/panel.css': {
@@ -755,7 +755,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
   });
 
   /* [299A-13 F2] Props que TERMINAN en ClassName (panelClassName en
-   * ChatBell.tsx:90 / NotificationBell.tsx:71 de NAKOMI: reenvío tal cual al
+   * ChatBell.tsx:90 / NotificationBell.tsx:71 de un proyecto real: reenvío tal cual al
    * className del dropdown). Los tres formularios de valor las cubren igual
    * que className. */
   test('suffix *ClassName props (panelClassName) register their tokens', async () => {
@@ -782,7 +782,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
   });
 
   /* [299A-13 F5] Declaración portadora fuera de atributo
-   * (`const claseVariante = `boton${...}`` en Button.tsx:19 de NAKOMI):
+   * (`const claseVariante = `boton${...}`` en Button.tsx:19 de un proyecto real):
    * registra su familia con contexto de clase aunque el template no viva en
    * un atributo; sin esto el guard de prosa rechazaba `boton` y
    * botonPrimario se reportaba huérfana (FP). La muerta vive FUERA de la
@@ -831,7 +831,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
   });
 
   /* [299A-13 F4] Helper rest+join (`function combinarClases(...clases) {
-   * return clases.filter(Boolean).join(' ')}` en Modal.tsx:12 de NAKOMI): el
+   * return clases.filter(Boolean).join(' ')}` en Modal.tsx:12 de un proyecto real): el
    * `return <expr con .join(`> es texto de sink, la función es carrier y el
    * literal del call-site (`modalPruebaContenedor`) se consume cross-file. */
   test('rest+join helper is a carrier via its return statement', async () => {
@@ -893,7 +893,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
   });
 
   /* [299A-13 F3b] Mapa importado por subíndice (`className={
-   * STATUS_CLASS[order.status]}` en UsuariosFila.tsx:80 de NAKOMI, exportado
+   * STATUS_CLASS[order.status]}` en UsuariosFila.tsx:80 de un proyecto real, exportado
    * por api/admin-users.ts:79): la referencia se une post-hoc con los valores
    * del archivo que lo exporta; la muerta real sigue reportada. */
   test('imported class map subscript resolves through the exporting file', async () => {
@@ -935,7 +935,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
   });
 
   /* [299A-13 F3b-2] Subíndice con fallback literal (`MAPA[x] || ''` en
-   * UsuariosFila.tsx:80 / HostingDetalle.tsx:155 de NAKOMI): el `|| ''`
+   * UsuariosFila.tsx:80 / HostingDetalle.tsx:155 de un proyecto real): el `|| ''`
    * rompía el match exacto y statusActivo/Baneado/Suspendido quedaban
    * huérfanas pese al import relativo. */
   test('imported class map subscript with literal fallback resolves', async () => {
@@ -977,7 +977,7 @@ suite('VarSense editor-agnostic core contracts (parte 3)', () => {
 
   /* [299A-13 F3b-2] Helper que envuelve un mapa importado (`return ...
    * PAYMENT_STATUS_CLASS[payment.status]` + `PAYMENT_STATUS_CLASS.released`
-   * en paymentStatusClass de SeccionPagos.parts.tsx:15-16 de NAKOMI,
+   * en paymentStatusClass de SeccionPagos.parts.tsx:15-16 de un proyecto real,
    * invocado como ${paymentStatusClass(payment)} en :76): el cuerpo no tiene
    * literales, así que el camino return-literal no veía nada y los 5
    * pagoEstado--* quedaban huérfanos. */

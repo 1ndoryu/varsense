@@ -136,7 +136,7 @@ export function analyzeCrossFileDuplicates(
     return hallazgos;
 }
 
-/* [MN-token] Tailwind v4 genera utilidades desde `@theme`: `--color-primary` se
+/* [TK] Tailwind v4 genera utilidades desde `@theme`: `--color-primary` se
  * consume como `bg-primary`, nunca como `var(--color-primary)`. Sin esto cada
  * puente de tema sale como token sin uso. Solo aplica si hay `@theme` en el
  * alcance analizado. */
@@ -200,7 +200,7 @@ export function analyzeTokenRules(
          * acoplaría archivos y semánticas ajenas. La clave agrupa por
          * archivo+valor para que canonical y duplicados vivan en el mismo
          * archivo; sin esto se perdían los pares intra-archivo cuando el
-         * canonical caía en otro archivo. Auditoría FN en PT (186→181):
+         * canonical caía en otro archivo. Auditoría FN en un proyecto real (186→181):
          * 5 hallazgos eliminados, todos cross-file verificados a mano
          * (--space-xs/--scrollbarAncho, --space-sm/--espacioTactil,
          * --arbol-color/--pixel-editor-iconoActivo,
@@ -270,7 +270,7 @@ export function analyzeTokenRules(
         const excluidos = new Set((config.tokens.unused.excluirTokens ?? []).map(nombreToken));
         const allText = variableUsageIndex ? null : documents.map(item => item.document.getText()).join('\n');
         let usedNames: Set<string> | undefined;
-        /* [MN-token] Con índice scoped, `documents` solo cubre el alcance: una
+        /* [TK] Con índice scoped, `documents` solo cubre el alcance: una
          * utilidad usada fuera de él no se ve (puede salir como hint). */
         let utilidadesTema: Set<string> | undefined;
         const namespaces = config.tokens.temaNamespaces;

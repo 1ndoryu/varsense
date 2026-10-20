@@ -88,7 +88,7 @@ export function cuerpoDeFuncionEn(source: string, nombre: string): string | null
 }
 
 /* [299A-13 F3b-2] `MAPA[x] || ''` (UsuariosFila.tsx:80,
- * HostingDetalle.tsx:155 de NAKOMI): el fallback literal rompía el match
+ * HostingDetalle.tsx:155 de un proyecto real): el fallback literal rompía el match
  * exacto del subíndice y el mapa importado nunca se registraba. Solo se
  * despoja un fallback de literal único (`||`/`??` + string); cualquier otra
  * forma conserva el fail-closed previo. */
@@ -118,7 +118,7 @@ export function sinStringsClase(cuerpo: string): string {
 }
 
 /* [299A-13 F3b-2] Acceso por punto sobre un mapa (`PAYMENT_STATUS_CLASS.
- * released` en SeccionPagos.parts.tsx:16 de NAKOMI): misma regla que el
+ * released` en SeccionPagos.parts.tsx:16 de un proyecto real): misma regla que el
  * subíndice — set local o referencia al mapa importado para la fase 2.
  * Solo `Nombre.prop` simple (sin `(` detrás: no llamadas); las cadenas con
  * más puntos pertenecen al camino switch preexistente. */
@@ -169,7 +169,7 @@ export function resolverLlamadaMapper(body: string, source: string, tokens: Set<
     }
     /* [299A-13 F3b-2] Helper que envuelve un mapa importado (`return ...
      * PAYMENT_STATUS_CLASS[payment.status]` / `PAYMENT_STATUS_CLASS.released`
-     * en paymentStatusClass de SeccionPagos.parts.tsx:15-16 de NAKOMI,
+     * en paymentStatusClass de SeccionPagos.parts.tsx:15-16 de un proyecto real,
      * invocado como ${paymentStatusClass(payment)} en :76): el cuerpo no
      * aporta literales y el return-literal de arriba no ve nada. Se registra
      * la referencia al mapa importado para la fase 2 (unión post-hoc). Solo

@@ -139,7 +139,7 @@ export async function analyzeScanTarget(args: ParsedCliArgs, token?: Cancellatio
  * analyzeVarsenseDocument. Se filtran aqui, con el MISMO parser y leyendo cada
  * hoja una sola vez, para que un marcador sobre la linea de definicion de una
  * clase calle el hallazgo igual que en cualquier otra regla. Sin esto el
- * marcador existia y no hacia nada (KAMPLES: `.prose` y compania).
+ * marcador existia y no hacia nada (un proyecto real: `.prose` y compania).
  * `clase.linea` y el set del parser son ambos 0-based: se comparan tal cual
  * (restar 1 hacia que el marcador callara tambien la linea siguiente). */
 async function filtrarClasesSuprimidas<T extends { archivo: string; linea: number }>(

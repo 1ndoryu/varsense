@@ -16,7 +16,7 @@ export const DEFAULT_CONSUMER_PATTERNS = [
 export const DEFAULT_MIN_LENGTH = 3;
 export const REGEX_CLASS_FACTORY = /createContainer\s*\(\s*['"]([^'"]+)['"]/g;
 export const REGEX_EXTERNAL_LINK_CLASS = /createExternalLink\s*\([^,]+,[^,]+,\s*['"]([^'"]+)['"]/g;
-/* [J-8] createElement(tag, 'clase') posicional: Glory-Laminal pasa la clase
+/* [J-8] createElement(tag, 'clase') posicional: un proyecto real pasa la clase
  * como segundo argumento (helper createElement(tag, className, text)). */
 export const REGEX_CREATE_ELEMENT_CLASS = /createElement\s*\(\s*['"][^'"]+['"]\s*,\s*([^)]*)\)/g;
 /* [318A-7V23] Apertura de la factoría DOM posicional el(tag, cls): el
@@ -30,7 +30,7 @@ export const REGEX_EL_FACTORY = /\bel\s*\(/g;
 /* [J-8] classList.add/toggle/remove: toggle('clase', cond) y remove('clase')
  * son usos reales igual que add.
  * [318A-7V23] contains/replace: classList.contains('sel') es una lectura que
- * exige la clase en runtime igual que add (glory-harness sidebarCeldas); sin
+ * exige la clase en runtime igual que add (un proyecto real sidebarCeldas); sin
  * esta rama la clase solo se veía si otro sink la tocaba. */
 export const REGEX_CLASS_LIST = /classList\.(?:add|toggle|remove|contains|replace)\s*\(([^)]*)\)/g;
 /* [318A-7V23] Apertura de setAttribute('class', ...): el 2º argumento se

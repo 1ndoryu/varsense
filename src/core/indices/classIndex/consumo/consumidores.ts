@@ -19,7 +19,7 @@ export function removeComments(texto: string): string {
     let inClass = false;
     let prevSig = '';
     /* [318A-7V22][M5] Un regex literal puede contener comillas o backticks
-     * (`/[&<>"]/g`, `/`([^`]+)`/g` en useScratchpad.ts de PT): sin estado
+     * (`/[&<>"]/g`, `/`([^`]+)`/g` en useScratchpad.ts de un proyecto real): sin estado
      * regex, removeComments trataba esa comilla como apertura de string y
      * Todo el texto posterior del archivo quedaba "dentro de string" →
      * escanearDeclaraciones/escanearAsignacionesCompuestas saltaban los
@@ -104,7 +104,7 @@ export function removeComments(texto: string): string {
          * array/objeto, asignación, coma, dos puntos, operadores. Un blacklist
          * era insuficiente: en TSX real el '/' de self-closing `<Tag "x" />`
          * va tras una comilla de cierre y disparaba un falso regex que se
-         * tragaba el resto del archivo (medición PT 156→419). NUNCA es regex
+         * tragaba el resto del archivo (medición de un proyecto real 156→419). NUNCA es regex
          * tras cierre de string/comilla (`"foo" / 2` = división), `) ] }`,
          * identificador, número, `<` (cierre etiqueta JSX) ni `>`. */
         if (current === '/' && /[=(,:;!?&|[+*%~^{]/.test(prevSig)) {
@@ -419,7 +419,7 @@ export function extraerTokensDeTexto(texto: string, tokens: Set<string>, familyP
      * ensamblan markup (`html += '<h${n} class="...">...'`, innerHTML,
      * createElement con html). El literal `class="..."` dentro de un template
      * ES una cadena de clases por construcción, aunque no sea un atributo de
-     * componente React. Cubre (useScratchpad.ts:82/94 de PT):
+     * componente React. Cubre (useScratchpad.ts:82/94 de un proyecto real):
      *   `<h${nivel} class="scratchpadVistaPreviaTitulo scratchpadVistaPreviaTitulo--h${nivel}">`
      *   `<li><span class="scratchpadVistaPreviaChecklist">${marcado}</span>`
      * El segmento estático se tokeniza entero (base + clase literal), y la

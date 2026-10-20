@@ -4,7 +4,7 @@
  * Vivía dentro de `core/analyzeDocument.ts`, que lo usaba para decidir si un
  * `style={{}}` es estilo inline o definicion runtime de tokens. El parser de
  * CSS necesita la MISMA respuesta para indexar esas claves como variables: en
- * KAMPLES casi todos los `variableNoDefinida` (`--top`, `--notaTop`,
+ * un proyecto real casi todos los `variableNoDefinida` (`--top`, `--notaTop`,
  * `--tecladoAncho`, `--porcentaje`...) se definen en el TSX y los consume la
  * hoja. Una sola implementacion para que el indice y el veredicto no puedan
  * divergir.

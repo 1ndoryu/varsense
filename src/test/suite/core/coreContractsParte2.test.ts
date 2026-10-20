@@ -76,7 +76,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
    * coincidencia de valor entre archivos distintos (p.ej. un offset runtime
    * de pull-to-refresh = '0' vs un radio de dashboard = '0') es una
    * coincidencia entre dominios independientes y NO debe reportarse.
-   * Caso real de PT: --ptr-translateY (pullToRefresh.css) marcado como
+   * Caso real de un proyecto: --ptr-translateY (pullToRefresh.css) marcado como
    * duplicado de --dashboard-radioMinimo (variables.css). */
   test('token-duplicate no cruza archivos: coincidencia de valor entre dominios distintos', async () => {
     const provider = new MemoryWorkspaceProvider({
@@ -747,15 +747,15 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
   });
 
   /* [318A-7V21] RC-url: el nombre de archivo dentro de `url(...)` no es un
-   * selector. `url('/logo-agape.png')` casaba con regexClase y producía la
-   * clase fantasma 'png' (AgapeLanding.css:43-44 en AGAPE): el `.png` del
+   * selector. `url('/logo-ejemplo.png')` casaba con regexClase y producía la
+   * clase fantasma 'png' (landing real de un proyecto, CSS:43-44): el `.png` del
    * nombre se reportaba huérfana pese a ser solo un asset de imagen. */
   test('url() assets no generan clases fantasma desde el nombre de archivo', async () => {
     const provider = new MemoryWorkspaceProvider({
       '/workspace/src/styles.css': {
         languageId: 'css',
         content: [
-          ".fotoPrincipal { background-image: url('/logo-agape.png'); color: red; }",
+          ".fotoPrincipal { background-image: url('/logo-ejemplo.png'); color: red; }",
           ".fotoSecundaria { background: url(\"img/x.png\") no-repeat center; color: blue; }",
           '.tarjetaViva { color: green; }',
         ].join('\n'),
@@ -775,7 +775,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
   /* [318A-7V21] RC-clave: la regla de props *clase en objetos solo casaba
    * claves clase/clase-prefijo; un carrier camelCase terminado en Class
    * (imageClass) quedaba fuera y sus literales se reportaban huérfanos pese
-   * a interpolarse en className (AGAPE AgapeLanding.tsx:20/27/34 + :125).
+   * a interpolarse en className (un proyecto real, landing .tsx:20/27/34 + :125).
    * Las claves finales en Class son carriers por convención de nombre;
    * classification/classList no casan (no terminan en Class). */
   test('object keys ending in Class are class carriers (imageClass)', async () => {
@@ -815,7 +815,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
   });
 
   /* [318A-7V21] RC-4: `clases.push('...')` sobre un array portador + consumo
-   * por propiedad objeto `className: clases.join(' ')` (WANDORIUS
+   * por propiedad objeto `className: clases.join(' ')` (un proyecto real
    * notifications-popover.ts:80-83). El literal del push jamás llegaba al
    * índice y la vía objeto con VARIABLE no resolvía indirección; ambos
    * quedaban huérfanos pese al uso real. */
@@ -853,7 +853,7 @@ suite('VarSense editor-agnostic core contracts (parte 2)', () => {
 
   /* [318A-7V22][M4] Construcción de HTML en runtime: template que ensambla
    * markup con atributos `class="..."` literales (useScratchpad.ts:82/94 de
-   * PT: `html += \`<h${n} class="scratchpadVistaPreviaTitulo
+   * Un proyecto real: `html += \`<h${n} class="scratchpadVistaPreviaTitulo
    * scratchpadVistaPreviaTitulo--h${n}">...\`` y `<li><span
    * class="scratchpadVistaPreviaChecklist">`). El literal de clase dentro de
    * un template HTML ES una cadena de clases por construcción; una clase

@@ -19,7 +19,7 @@ export function parsearSoloDefinicionesCss(documento: CoreTextDocument, texto: s
     /* [FIX-fantasma] Buscar definiciones sobre el texto sin comentarios
      * (offsets preservados por relleno con espacios): `.boton--primario:hover`
      * en prosa casa `--primario` + `:` y el valor se extendia hasta el `;`
-     * siguiente fuera del comentario -> token-unused fantasma (caso TASKS
+     * siguiente fuera del comentario -> token-unused fantasma (caso real de un proyecto:
      * --primario en modalCreacionRapida.css:92 y accionesItem.css:29). */
     const ambitos = mapearAmbitosBloques(texto);
 
@@ -60,7 +60,7 @@ export function parsearSoloDefinicionesCss(documento: CoreTextDocument, texto: s
  * exista en el índice.
  *
  * [15A-25] Cubre ademas las claves de un `style={{...}}` de JSX, que es la
- * otra forma de definir tokens en runtime y la dominante en KAMPLES: los
+ * otra forma de definir tokens en runtime y la dominante en un proyecto real: los
  * `--top`, `--notaTop`, `--tecladoAncho` de las hojas se declaran asi en el
  * TSX. Sin indexarlas, cada `var()` que las consume salia como
  * `variableNoDefinida`. Se indexa la clave aunque el objeto mezcle

@@ -1,7 +1,7 @@
 /*
  * [17AA-3] `cssInlineReact` y `cssInlineScript` recorrian `document.getText()`
  * crudo, asi que un `style={}` escrito dentro de un comentario contaba como CSS
- * inline. Medido el 2026-10-17: los dos hallazgos de NAKOMI
+ * inline. Medido el 2026-10-17: los dos hallazgos de un proyecto real
  * (`CarruselShowcase.tsx:73`, `SeccionGaleriaServicio.tsx:29`) son la misma
  * frase de un comentario de bloque que explica el propio detector.
  *

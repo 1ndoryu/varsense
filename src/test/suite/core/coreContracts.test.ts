@@ -557,7 +557,7 @@ suite('VarSense editor-agnostic core contracts', () => {
   });
 
   /* [318A-7V14] El prefijo pegado también aplica en la forma object factory
-   * (createEl('div', { className: `panel--${x}` }) de Glory-Laminal) y en
+   * (createEl('div', { className: `panel--${x}` }) de un proyecto real) y en
    * declaraciones de variables con template interpolado. */
   test('glued template prefix works in object factories and variable declarations', async () => {
     const provider = new MemoryWorkspaceProvider({
@@ -686,7 +686,7 @@ suite('VarSense editor-agnostic core contracts', () => {
   /* [318A-7V17] Componentes con closure (React.forwardRef): el regex no-greedy
    * anterior cortaba en el primer ';' (el de la declaración INTERNA
    * `const clases = [...]`) y se tragaba el literal, dejando la familia
-   * `boton--` como FP huérfana (Boton.tsx de PT, 20 hallazgos). El escaneo
+   * `boton--` como FP huérfana (Boton.tsx de un proyecto real, 20 hallazgos). El escaneo
    * balanceado debe indexar la familia del template dentro del closure. */
   test('indexa familias de clases declaradas dentro del closure de un forwardRef', async () => {
     const provider = new MemoryWorkspaceProvider({
@@ -725,10 +725,10 @@ suite('VarSense editor-agnostic core contracts', () => {
   });
 
   /* [318A-7V17] El walker no debe descender a repos anidados (submódulos/worktrees:
-   * su `.git` es un ARCHIVO, p. ej. glory-rs en los consumidores) ni a internals
+   * su `.git` es un ARCHIVO, p. ej. un submódulo en los consumidores) ni a internals
    * de git (`.git/modules/...`). El código de otro repo se arregla en su propio
    * repo; analizarlo desde el consumidor duplica hallazgos (8 claseHuerfana de
-   * glory-rs en PT). El `.git` directorio raíz también se salta. */
+   * un submódulo en un proyecto real). El `.git` directorio raíz también se salta. */
   test('walker excluye submódulos (.git archivo) y directorios .git', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'varsense-submodulo-'));
     try {
@@ -738,11 +738,11 @@ suite('VarSense editor-agnostic core contracts', () => {
         fs.writeFileSync(completo, contenido);
       };
       escribir('src/estilos.css', '.huerfanaRaiz { color: red; }');
-      escribir('glory-rs/frontend/otro.css', '.huerfanaSubmodulo { color: blue; }');
-      escribir('.git/modules/glory-rs/config', 'dummy');
-      escribir('.git/modules/glory-rs/refs/heads/main', 'dummy');
+      escribir('submodulo-ejemplo/frontend/otro.css', '.huerfanaSubmodulo { color: blue; }');
+      escribir('.git/modules/submodulo-ejemplo/config', 'dummy');
+      escribir('.git/modules/submodulo-ejemplo/refs/heads/main', 'dummy');
       /* Marcador git de submódulo: .git es archivo (no directorio). */
-      fs.writeFileSync(path.join(root, 'glory-rs', '.git'), 'gitdir: ../.git/modules/glory-rs\n');
+      fs.writeFileSync(path.join(root, 'submodulo-ejemplo', '.git'), 'gitdir: ../.git/modules/submodulo-ejemplo\n');
 
       const provider = new NodeWorkspaceFileProvider(root);
       const archivos = await provider.findFiles(['**/*.css'], []);
@@ -755,9 +755,9 @@ suite('VarSense editor-agnostic core contracts', () => {
   });
 
   /* [318A-7V21] Un consumidor puede tener el submódulo clonado COMPLETO
-   * (glory-rs en AGAPE: `.git` es DIRECTORIO, no archivo). El filtro V17
+   * (un proyecto real: `.git` es DIRECTORIO, no archivo). El filtro V17
    * solo cubría la forma archivo y los hallazgos del submódulo se atribuían
-   * al consumidor (12 claseHuerfana de AGAPE vivían en glory-rs/tools).
+   * al consumidor (12 claseHuerfana de un proyecto real vivían en submodulo-ejemplo/tools).
    * Ambas formas de `.git` marcan un repo anidado y se excluyen. */
   test('walker excluye repos anidados con .git directorio (clon completo)', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'varsense-repoanidado-'));
@@ -768,11 +768,11 @@ suite('VarSense editor-agnostic core contracts', () => {
         fs.writeFileSync(completo, contenido);
       };
       escribir('src/estilos.css', '.huerfanaRaiz { color: red; }');
-      escribir('glory-rs/frontend/otro.css', '.huerfanaSubmodulo { color: blue; }');
+      escribir('submodulo-ejemplo/frontend/otro.css', '.huerfanaSubmodulo { color: blue; }');
       escribir('tools/varsense/core/x.css', '.huerfanaHerramienta { color: green; }');
       /* Clon completo: .git es directorio real (con internals). */
-      escribir('glory-rs/.git/HEAD', 'ref: refs/heads/main\n');
-      escribir('glory-rs/.git/config', '[core]\n\trepositoryformatversion = 0\n');
+      escribir('submodulo-ejemplo/.git/HEAD', 'ref: refs/heads/main\n');
+      escribir('submodulo-ejemplo/.git/config', '[core]\n\trepositoryformatversion = 0\n');
       escribir('tools/varsense/.git/HEAD', 'ref: refs/heads/main\n');
 
       const provider = new NodeWorkspaceFileProvider(root);
@@ -816,7 +816,7 @@ suite('VarSense editor-agnostic core contracts', () => {
   });
 
   /* [318A-7V3] Array de clases con ternarios, join() y className={ident}:
-   * patrón real de VistaCelda.tsx en PT. */
+   * patrón real de VistaCelda.tsx en un proyecto real. */
   test('array de clases con join() y ternarios resuelve por indirección', async () => {
     const provider = new MemoryWorkspaceProvider({
       '/workspace/src/styles.css': {
@@ -850,7 +850,7 @@ suite('VarSense editor-agnostic core contracts', () => {
 
   /* [318A-7V3] Objetos que devuelven la prop portadora en forma de clave:
    * return { clase: 'badgePremium' } — el consumidor concatena el valor al
-   * className. Patrón real: FilaUsuario/ResumenAdmin/EncabezadoEstado de PT. */
+   * className. Patrón real: FilaUsuario/ResumenAdmin/EncabezadoEstado de un proyecto real. */
   test('clave objeto clase/*clase registra su valor como clase usada', async () => {
     const provider = new MemoryWorkspaceProvider({
       '/workspace/src/styles.css': {
@@ -910,7 +910,7 @@ suite('VarSense editor-agnostic core contracts', () => {
 
   /* [318A-7V4] El core del CLI debe honrar los comentarios de supresion igual
    * que el provider (paridad de conteo entre el editor y el CLI). El codigo de
-   * PT ya declara excepciones con `sentinel-disable inline-style-prohibido`
+   * Un proyecto real ya declara excepciones con `sentinel-disable inline-style-prohibido`
    * inline en la misma linea del style={{}} — el CLI no debe contarlas. */
   test('sentinel-disable inline suprime cssInlineReact en la misma linea', async () => {
     const documento = createCoreDocument({

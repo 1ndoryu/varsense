@@ -1,4 +1,4 @@
-/* [G1] Convención del design system del área (NAKOMI). Vive fuera de core: la raíz (CLI, LSP,
+/* [G1] Convención del design system del área de trabajo. Vive fuera de core: la raíz (CLI, LSP,
  * extensión) la inyecta en core. Otro proyecto la cambia en varsense.config.json, no aquí. */
 import type { VarsenseEstiloBotonConfig } from '../core/analisis/reglasBotonCss';
 

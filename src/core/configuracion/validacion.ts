@@ -20,7 +20,7 @@ const NESTED_KEYS: Record<string, Set<string>> = {
     bannedProperties: new Set(['enabled', 'severity', 'properties']),
     orphanClassDetection: new Set(['minClassLength', 'excludeClassPatterns', 'severity']),
     todoProseDetection: new Set(['enabled', 'severity']),
-    /* [MN-token] 'crossFile' estaba tipada y mapeada pero ausente aquí: un
+    /* [TK] 'crossFile' estaba tipada y mapeada pero ausente aquí: un
      * varsense.config.json con esa sección era rechazado por clave desconocida. */
     tokenDetection: new Set(['duplicate', 'unused', 'crossFile', 'themeNamespaces', 'tailwindShorthand']),
     buttonStyleDetection: new Set([

@@ -15,7 +15,7 @@ import type {OpcionesParserCss} from '@/core/puertoParsers';
  * mismo valor salia exento en `color: transparent` y reportado en
  * `border-top: 3px solid var(--colorInsert, transparent)`, y `height: 120px`
  * (layout, fuera de `properties`) se colaba solo cuando venia como respaldo de
- * un var(). En KAMPLES eran 17 hallazgos, todos de esta forma y ninguno
+ * un var(). En un proyecto real eran 17 hallazgos, todos de esta forma y ninguno
  * accionable: el remedio que la regla prescribe —usar una variable— ya esta
  * aplicado en la propia declaracion.
  */

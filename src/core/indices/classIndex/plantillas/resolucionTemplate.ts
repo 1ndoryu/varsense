@@ -14,7 +14,7 @@ import { descomponerTemplate, extraerLiterales, registrarPrefijosFamilia } from 
 export const REGEX_SWITCH_SUBJECT = /\bswitch\s*\(\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\)/g;
 export const REGEX_SWITCH_CASE = /\bcase\s*['"]([A-Za-z_][\w-]*)['"]\s*:/g;
 /* [318A-7V3] Resuelve interpolaciones de template className={\`... ${x.y} ...\`}:
- * 1) identificador puro → mapa de declaraciones (VistaResizeHandle de PT);
+ * 1) identificador puro → mapa de declaraciones (VistaResizeHandle de un proyecto real);
  * 2) cadenas con punto que también son sujeto de un switch en el MISMO
  * archivo → los literales de sus case son los valores que en runtime se
  * interpolan como clases (CabeceraArbitraje: switch (viabilidad.estado) +
@@ -48,7 +48,7 @@ export function addTemplateClassTokens(value: string, variables: Map<string, Set
             }
             /* [11AA-2] Escalar importado interpolado (`${CLASE_TEXTO}` con
              * `export const CLASE_TEXTO = 'texto-publica'` en otro archivo, caso
-             * MN-Inmobiliaria/disenno.ts). Se registra como referencia para la
+             * de un proyecto real (`disenno.ts`). Se registra como referencia para la
              * unión post-hoc; los nombres no importados se ignoran. */
             else if (importsPropios?.has(trimmed)) {
                 referenciasMapa?.add(trimmed);
@@ -72,7 +72,7 @@ export function addTemplateClassTokens(value: string, variables: Map<string, Set
                 }
             }
             /* [299A-13 F3b] Mapa importado (`STATUS_CLASS[order.status]` en
-             * SeccionUsuarios/UsuariosFila.tsx de NAKOMI: el Record vive en
+             * SeccionUsuarios/UsuariosFila.tsx de un proyecto real: el Record vive en
              * api/admin-users.ts y las variables locales no lo conocen). El
              * nombre traído por import relativo se registra como referencia
              * para la unión post-hoc (fase 2 del scan); la fase 2 añade los

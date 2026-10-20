@@ -142,7 +142,7 @@ export function extraerReturnsDeIIFE(valor: string, tokens: Set<string>, familyP
  * agrupación anterior (['"`]([^'"`$]+)['"`]) falla con literales vacíos
  * seguidos de más texto: `: ''\n , estaX ? 'claseReal'` toma la comilla de
  * cierre del vacío como apertura y se traga la clase real, emitiendo en su
- * lugar el identificador (VistaCelda.tsx de PT). El escaneo respeta pares,
+ * lugar el identificador (VistaCelda.tsx de un proyecto real). El escaneo respeta pares,
  * escapes y el contenido de templates con ${...}. */
 export function extraerLiterales(value: string): string[] {
     const literales: string[] = [];
@@ -325,7 +325,7 @@ export function registrarPrefijosFamilia(value: string, familyPrefixes: Set<stri
  * claseTamano, clases...). Convención del design system del área (ver bloque V2): una
  * declaración con este nombre contiene clases por construcción, así que sus
  * templates registran familia con contextoAttr=true aunque vivan fuera de un
- * atributo (`const claseVariante = `boton${...}`` en Button.tsx:19 de NAKOMI,
+ * atributo (`const claseVariante = `boton${...}`` en Button.tsx:19 de un proyecto real,
  * consumido luego en className: sin esto, `boton` nunca era familia y
  * botonPrimario/botonMediano se reportaban). Fuente única para los tres
  * gates de emisión (declaraciones, compuestos, push). Exportada para tests. */

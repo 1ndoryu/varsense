@@ -20,9 +20,9 @@ export function extraerClasesDeTexto(texto: string, rutaArchivo: string): ClaseC
             continue;
         }
 
-        /* [318A-7V21] `url('/logo-agape.png')` no es un selector: el `.png`
+        /* [318A-7V21] `url('/logo-ejemplo.png')` no es un selector: el `.png`
          * del nombre de archivo casaba con regexClase y producía la clase
-         * fantasma 'png' (AgapeLanding.css:43-44 en AGAPE). Se neutraliza
+         * fantasma 'png' (landing real de un proyecto, CSS:43-44). Se neutraliza
          * el segmento url(...) (con o sin comillas) antes del escaneo. */
         const lineaEscaneable = linea.replace(/url\(\s*(['"])(?:(?!\1).)*\1\s*\)|url\(\s*[^)'"]+\s*\)/gi, ' ');
 

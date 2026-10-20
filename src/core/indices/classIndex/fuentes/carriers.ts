@@ -57,7 +57,7 @@ export function escanearAsignacionesCompuestas(source: string): Array<{ nombre: 
 }
 
 /* [318A-7V21] RC-4: `clases.push('literal')` sobre un array ya portador
- * (WANDORIUS notifications-popover.ts:80-82: `const clases = ['...__item'];
+ * (un proyecto real notifications-popover.ts:80-82: `const clases = ['...__item'];
  * ...; clases.push('...--leida')`). Hermano directo de la asignación compuesta
  * RC-1 (V20): el literal empujado compone el set de clases del runtime y jamás
  * llegaba al índice. Solo cuenta push sobre identificadores ya declarados como
@@ -225,7 +225,7 @@ export function textosSinkDeCuerpo(cuerpo: string): string[] {
         if (args && args.length >= 2) {textos.push(args[1]);}
     }
     /* [299A-13 F4] Helpers rest+join (`function combinarClases(...clases) {
-     * return clases.filter(Boolean).join(' ')}` en Modal.tsx:12 de NAKOMI): el
+     * return clases.filter(Boolean).join(' ')}` en Modal.tsx:12 de un proyecto real): el
      * parámetro fluye al string de clases vía return, no vía sink clásico, así
      * que la función nunca era carrier y el literal del call-site
      * (`combinarClases('modalBaseContenedor', ...)`) se perdía. El

@@ -7,7 +7,7 @@ import { CoreFinding, CoreSeverity, CoreTextDocument, createCoreRange } from '..
 /* Regla CSS plana: .clase { ... } — no anidada */
 const REGEX_REGLA = /(\.[a-zA-Z][a-zA-Z0-9_-]*)(?:[^{,]*?)\{([^}]*)\}/g;
 
-/* [por que] Convención del design system del área (NAKOMI): son defaults, no reglas del
+/* [por que] Convención del design system del área de trabajo: son defaults, no reglas del
  * core. Otro proyecto los cambia en `buttonStyleDetection` de varsense.config.json. */
 export interface VarsenseEstiloBotonConfig {
     habilitado: boolean;
