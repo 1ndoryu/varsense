@@ -4,18 +4,26 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = 'C:/tmp/varsense-persistent-index';
-const cli = path.join(root, 'dist/cli/index.js');
-const fixture = path.join(os.tmpdir(), 'varsense-tramo4-smoke');
+// Raíz del repo a partir de este archivo: la ruta de la CLI no depende de dónde se clone.
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const cli = path.join(root, 'dist', 'cli', 'index.js');
+// Fixture por proceso: dos ejecuciones a la vez no comparten carpeta ni índice.
+const fixture = path.join(os.tmpdir(), `varsense-tramo4-smoke-${process.pid}`);
 const indexDir = path.join(fixture, 'index');
 const manifestPath = path.join(fixture, 'scope.txt');
+// Un cuelgue del CLI no debe bloquear el gate.
+const TIMEOUT_CLI_MS = 120_000;
 
 function clean() {
   fs.rmSync(fixture, { recursive: true, force: true });
 }
 function runCli(args) {
-  const res = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', cwd: fixture });
+  const res = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', cwd: fixture, timeout: TIMEOUT_CLI_MS });
+  if (res.error) {
+    throw new Error(`no se pudo ejecutar la CLI (${res.error.message})`);
+  }
   if (res.status !== 0) {
     throw new Error(`CLI exit ${res.status}: ${res.stdout}\n${res.stderr}`);
   }
@@ -23,6 +31,12 @@ function runCli(args) {
 }
 function assert(cond, msg) {
   if (!cond) throw new Error(`ASSERT: ${msg}`);
+}
+
+// Este smoke corre sobre el artefacto compilado: sin build no hay nada que probar.
+if (!fs.existsSync(cli)) {
+  console.error('[smoke-tramo4] falta dist/cli/index.js: ejecuta npm run compile');
+  process.exit(2);
 }
 
 try {

@@ -1,6 +1,8 @@
 // Autogate: VarSense se analiza a sí mismo. Falla si hay más archivos con hallazgos que el umbral versionado.
 // Uso: node scripts/autogate.mjs
 // Lo usa quality:check (y por tanto la CI): así hay una sola definición del autogate.
+// [VQ-1] Se ejecuta `all` (scan + orphan-classes + tokenDetection) y no solo `scan`: el autogate
+// debe cubrir todas las reglas que el producto aplica, no una parte.
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -31,7 +33,7 @@ function analizarSelf(dir) {
   const reporte = join(dir, 'reporte.json');
   const analisis = spawnSync(
     process.execPath,
-    ['dist/cli/index.js', 'scan', '--workspace', '.', '--format', 'json', '--output', reporte],
+    ['dist/cli/index.js', 'all', '--workspace', '.', '--format', 'json', '--output', reporte],
     { encoding: 'utf8', timeout: TIMEOUT_ANALISIS_MS },
   );
   if (analisis.error) throw new Error(`no se pudo lanzar el análisis (${analisis.error.message})`);
@@ -40,6 +42,9 @@ function analizarSelf(dir) {
   }
   const datos = JSON.parse(readFileSync(reporte, 'utf8'));
   if (!Number.isInteger(datos.totalArchivosConHallazgos)) throw new Error('el reporte no trae totalArchivosConHallazgos');
+  // Un "0 hallazgos" solo vale si de verdad se analizó algo: sin testigo positivo el gate sería vacuo.
+  if (datos.command !== 'all') throw new Error(`el reporte no corresponde a 'all' (command: ${datos.command})`);
+  if (!Number.isInteger(datos.totalArchivos) || datos.totalArchivos === 0) throw new Error('el análisis no reportó archivos analizados');
   return datos;
 }
 

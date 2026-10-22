@@ -358,7 +358,7 @@
         "test:vscode": "node ./dist/test/runTest.js",
         "test": "npm run compile:tests && npm run test:vscode",
         "autogate": "node scripts/autogate.mjs",
-        "quality:check": "npm run compile:tests && npm run lint && npm run check:core && npm run smoke:lsp && npm run smoke:lsp-paridad && npm run smoke:cli && npm run smoke:persistent-index && npm run test:unit && npm run test:vscode && npm run check:zed && npm run autogate",
+        "quality:check": "npm run compile:tests && npm run lint && npm run check:core && npm run smoke:lsp && npm run smoke:lsp-paridad && npm run smoke:cli && npm run smoke:persistent-index && npm run smoke:tramo4 && npm run test:unit && npm run test:vscode && npm run check:zed && npm run autogate",
         "package": "vsce package"
     },
     "devDependencies": {
