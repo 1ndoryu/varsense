@@ -36,8 +36,7 @@ build/
 
 # Trabajo interno (no se publica)
 roadmap.md
-Agente/completados/
-Agente/planes/
+Agente/
 
 # Artefactos de herramientas de calidad y runtime local
 target/
