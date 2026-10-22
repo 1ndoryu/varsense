@@ -49,7 +49,7 @@ export function usage(): string {
 }
 
 /* Todo error de uso indica cómo ver la ayuda, sin volcarla entera. */
-function errorUso(mensaje: string): Error {
+export function errorUso(mensaje: string): Error {
     return new Error(`${mensaje}. Ejecuta con --help para ver el uso.`);
 }
 

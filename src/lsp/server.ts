@@ -31,14 +31,12 @@ import {
 } from '@/core/configuracion/config';
 import { CONVENCION_AREA } from '../configuracion/convencionArea';
 import { cargarVarsenseConfig } from '@/node/configArchivo';
-import { conTiempoLimite, FuenteCancelacion, TAMANO_MAXIMO_ARCHIVO_BYTES, TIMEOUT_INDICE_LSP_MS, TIMEOUT_LSP_MS } from '@/core/analisis/limites';
+import { conTiempoLimite, FuenteCancelacion, MAX_DIAGNOSTICOS_LSP, TAMANO_MAXIMO_ARCHIVO_BYTES, TIMEOUT_INDICE_LSP_MS, TIMEOUT_LSP_MS } from '@/core/analisis/limites';
 import { CancellationError, CancellationToken, throwIfCancelled } from '@/core/proveedores/workspaceProviders';
 import { findingToLspDiagnostic } from './diagnostics';
 import { crearCacheIndice } from './cacheIndice';
 import { parserCssVarsense } from '@/parsers';
 
-/* Un editor con miles de avisos se vuelve lento de pintar: se muestran los primeros. */
-const MAX_DIAGNOSTICOS = 500;
 /* Tecleo seguido: se valida al pausar, no en cada pulsación. */
 const DEBOUNCE_VALIDACION_MS = 150;
 /* Cambios fuera del editor (checkout, otra herramienta) se detectan al caducar la caché. */
@@ -151,11 +149,11 @@ async function diagnosticosDelDocumento(document: TextDocument, contexto: Contex
         buildAnalysisConfig(config, CONVENCION_AREA.estiloBoton), parserCssVarsense
     );
 
-    if (findings.length > MAX_DIAGNOSTICOS) {
-        connection.sendNotification('window/logMessage', { type: MessageType.Warning, message: `[VarSense LSP] ${document.uri}: ${findings.length} hallazgos; se muestran ${MAX_DIAGNOSTICOS}` });
+    if (findings.length > MAX_DIAGNOSTICOS_LSP) {
+        connection.sendNotification('window/logMessage', { type: MessageType.Warning, message: `[VarSense LSP] ${document.uri}: ${findings.length} hallazgos; se muestran ${MAX_DIAGNOSTICOS_LSP}` });
     }
 
-    return findings.slice(0, MAX_DIAGNOSTICOS).map(findingToLspDiagnostic);
+    return findings.slice(0, MAX_DIAGNOSTICOS_LSP).map(findingToLspDiagnostic);
 }
 
 async function validateTextDocument(document: TextDocument): Promise<void> {

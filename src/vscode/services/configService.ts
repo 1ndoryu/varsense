@@ -4,8 +4,17 @@
  */
 
 import * as vscode from 'vscode';
-import { ExtensionConfig, HardcodedDetectionConfig, InlineDetectionConfig, BannedPropertyConfig, SEVERITY_MAP } from '@/types';
+import { ExtensionConfig, HardcodedDetectionConfig, InlineDetectionConfig, BannedPropertyConfig, DiagnosticSeverityValue } from '@/types';
 import { PREFIJOS_PORTADORES_CONVENCION } from '@/configuracion/convencionArea';
+
+/* [VQ-2] El nombre de severidad de los ajustes se traduce a DiagnosticSeverity aqui, en la capa
+ * VS Code; el core y los tipos compartidos solo conocen el valor numerico. */
+const SEVERIDAD_VSCODE: Record<string, DiagnosticSeverityValue> = {
+    error: vscode.DiagnosticSeverity.Error,
+    warning: vscode.DiagnosticSeverity.Warning,
+    information: vscode.DiagnosticSeverity.Information,
+    hint: vscode.DiagnosticSeverity.Hint
+};
 
 /*
  * Nombre de la sección de configuración en VS Code
@@ -238,7 +247,7 @@ class ConfigService {
      */
     private cargarConfigHardcoded(config: vscode.WorkspaceConfiguration): HardcodedDetectionConfig {
         const severidadStr = config.get<string>('hardcodedDetection.severity', 'warning');
-        const severidad = SEVERITY_MAP[severidadStr] ?? vscode.DiagnosticSeverity.Warning;
+        const severidad = SEVERIDAD_VSCODE[severidadStr] ?? vscode.DiagnosticSeverity.Warning;
         
         return {
             habilitado: config.get<boolean>(
@@ -262,7 +271,7 @@ class ConfigService {
      */
     private cargarConfigInline(config: vscode.WorkspaceConfiguration): InlineDetectionConfig {
         const severidadStr = config.get<string>('inlineDetection.severity', 'error');
-        const severidad = SEVERITY_MAP[severidadStr] ?? vscode.DiagnosticSeverity.Error;
+        const severidad = SEVERIDAD_VSCODE[severidadStr] ?? vscode.DiagnosticSeverity.Error;
 
         return {
             habilitado: config.get<boolean>(
@@ -278,7 +287,7 @@ class ConfigService {
      */
     private cargarConfigProhibidas(config: vscode.WorkspaceConfiguration): BannedPropertyConfig {
         const severidadStr = config.get<string>('bannedProperties.severity', 'warning');
-        const severidad = SEVERITY_MAP[severidadStr] ?? vscode.DiagnosticSeverity.Warning;
+        const severidad = SEVERIDAD_VSCODE[severidadStr] ?? vscode.DiagnosticSeverity.Warning;
 
         return {
             habilitado: config.get<boolean>(

@@ -2,7 +2,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { CoreFinding } from '@/core/types';
-import type { ParsedCliArgs } from '../args';
+import { errorUso, type ParsedCliArgs } from '../args';
 
 export function pathKey(filePath: string): string {
     const normalized = path.normalize(filePath);
@@ -23,7 +23,7 @@ export async function readFilesFromManifest(args: ParsedCliArgs): Promise<Set<st
     const workspaceRealPath = await fs.realpath(args.workspacePath);
     const manifestRealPath = await fs.realpath(manifestPath);
     if (!isPathInside(workspaceRealPath, manifestRealPath)) {
-        throw new Error('--files-from debe estar dentro del workspace');
+        throw errorUso('--files-from debe estar dentro del workspace');
     }
 
     const raw = await fs.readFile(manifestPath, 'utf8');
@@ -34,24 +34,24 @@ export async function readFilesFromManifest(args: ParsedCliArgs): Promise<Set<st
             continue;
         }
         if (path.isAbsolute(line) || /^[A-Za-z]:\//.test(line)) {
-            throw new Error('Ruta absoluta no permitida en --files-from: ' + line);
+            throw errorUso('Ruta absoluta no permitida en --files-from: ' + line);
         }
         const resolved = path.resolve(args.workspacePath, line);
         if (!isPathInside(args.workspacePath, resolved)) {
-            throw new Error('Ruta fuera del workspace en --files-from: ' + line);
+            throw errorUso('Ruta fuera del workspace en --files-from: ' + line);
         }
         const key = pathKey(resolved);
         if (files.has(key)) {
-            throw new Error('Ruta duplicada en --files-from: ' + line);
+            throw errorUso('Ruta duplicada en --files-from: ' + line);
         }
         try {
             const stats = await fs.stat(resolved);
             if (stats.isDirectory()) {
-                throw new Error('Ruta directorio no permitida en --files-from: ' + line);
+                throw errorUso('Ruta directorio no permitida en --files-from: ' + line);
             }
             const realPath = await fs.realpath(resolved);
             if (!isPathInside(workspaceRealPath, realPath)) {
-                throw new Error('Ruta fuera del workspace en --files-from: ' + line);
+                throw errorUso('Ruta fuera del workspace en --files-from: ' + line);
             }
         } catch (error) {
             if (error instanceof Error && error.message.includes('directorio no permitida')) {

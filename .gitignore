@@ -39,9 +39,9 @@ roadmap.md
 Agente/completados/
 Agente/planes/
 
-# Herramientas de calidad y runtime local (alta en el taller)
+# Artefactos de herramientas de calidad y runtime local
 target/
 .quality-reports/
 .runtime/
-# Evidencia local de release (quality-setup); igual que en workspace-manager
+# Evidencia local de release
 .sentinel/

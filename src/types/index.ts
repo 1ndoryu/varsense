@@ -6,15 +6,9 @@
 import { CoreRange } from '@/core/types';
 
 /* [085A-1] Los tipos compartidos usan CoreRange y severidad numerica compatible con VS Code.
- * Gotcha: los providers convierten CoreRange a vscode.Range justo antes de publicar diagnostics. */
+ * [VQ-2] El core solo conoce el valor numerico: el mapeo a DiagnosticSeverity y sus constantes
+ * viven en la capa VS Code (src/vscode/), no en el modulo de tipos compartido. */
 export type DiagnosticSeverityValue = 0 | 1 | 2 | 3;
-
-export const DIAGNOSTIC_SEVERITY = {
-    Error: 0,
-    Warning: 1,
-    Information: 2,
-    Hint: 3
-} as const satisfies Record<string, DiagnosticSeverityValue>;
 
 /*
  * Representa una variable CSS definida en el proyecto
@@ -344,16 +338,6 @@ export interface ScannerStatistics {
     archivosEscaneados: number;
     ultimaActualizacion: Date;
 }
-
-/*
- * Mapeo de severidades de string a DiagnosticSeverity
- */
-export const SEVERITY_MAP: Record<string, DiagnosticSeverityValue> = {
-    error: DIAGNOSTIC_SEVERITY.Error,
-    warning: DIAGNOSTIC_SEVERITY.Warning,
-    information: DIAGNOSTIC_SEVERITY.Information,
-    hint: DIAGNOSTIC_SEVERITY.Hint
-};
 
 /*
  * Uso de una propiedad CSS prohibida detectado

@@ -12,6 +12,9 @@ export const TIMEOUT_CLI_POR_DEFECTO_MS = 10 * 60 * 1000;
 /* El LSP responde en pocos segundos o no responde: un análisis lento se reporta como error en el documento. */
 export const TIMEOUT_LSP_MS = 10 * 1000;
 
+/* [VQ-5] Diagnosticos publicados como maximo por documento: un editor con miles de avisos se vuelve lento de pintar. */
+export const MAX_DIAGNOSTICOS_LSP = 500;
+
 /* El índice de contexto se construye una vez por raíz y puede tardar más que un documento (workspaces de decenas de miles de archivos).
  * Tiene su propio límite para no consumir el presupuesto de cada documento. */
 export const TIMEOUT_INDICE_LSP_MS = 60 * 1000;
