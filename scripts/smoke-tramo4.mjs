@@ -1,5 +1,5 @@
 // Smoke 028A-8 tramo 4: análisis scoped vía índice inverso + métricas Fase 0.
-// Autónomo: crea fixture temporal en C:/tmp, corre el CLI, verifica y limpia.
+// Autónomo: crea un fixture temporal, corre la CLI compilada del repo, verifica y limpia.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';

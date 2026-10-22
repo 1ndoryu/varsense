@@ -3,7 +3,7 @@ import { ClaseCssDefinida } from '../tipos';
 
 /* [J-8] El cap evita que un workspace enorme agote memoria, pero 10000 deja
  * sin escanear archivos posteriores (MapaV2.tsx etc.) en proyectos medianos.
- * 50k cubre la práctica real con RSS holgado (70MB en workspace-manager). */
+ * 50k cubre la práctica real con RSS holgado (unos 70 MB en un monorepo grande). */
 export const MAX_TOKENS = 50000;
 
 export function extraerClasesDeTexto(texto: string, rutaArchivo: string): ClaseCssDefinida[] {

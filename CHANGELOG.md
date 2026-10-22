@@ -5,6 +5,15 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [No publicado]
+
+### Cambiado
+- El autogate analiza con `all` (scan, clases huérfanas y tokens) y exige archivos analizados; antes solo cubría `scan`.
+- `smoke:tramo4` ya no depende de una ruta fija, usa un fixture por proceso, acota la CLI con timeout y forma parte de `quality:check`.
+- Los límites compartidos (tamaño, timeouts, topes de diagnósticos y de caché) viven en `src/core/analisis/limites.ts`; el mapeo a `DiagnosticSeverity` queda en la capa VS Code.
+- Los errores de `--files-from` indican `--help`, como el resto de errores de uso.
+- README: acentos normalizados, sección de documentación y prerequisitos del gate completo (servidor X y Rust con `wasm32-wasip2`).
+
 ## [2.2.10] - 2026-10-20
 
 ### Agregado
